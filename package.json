@@ -1,0 +1,16 @@
+{
+  "name": "vesha",
+  "version": "1.0.0",
+  "description": "Vesha web app",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "node --watch main.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
