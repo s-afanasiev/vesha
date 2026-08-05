@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Эксперименты — Vesha</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="page-experiments">
+  <main class="experiments">
+    <header class="experiments__header">
+      <a class="back-link" href="/">← Vesha</a>
+      <h1>Эксперименты</h1>
+      <p>Произвольные песочницы. Каждая плитка — отдельный проект.</p>
+    </header>
+    <div id="grid" class="tiles" aria-live="polite"></div>
+    <p id="status" class="experiments__status" hidden></p>
+  </main>
+  <script>
+    const grid = document.getElementById('grid');
+    const statusEl = document.getElementById('status');
+
+    function showStatus(message) {
+      statusEl.hidden = false;
+      statusEl.textContent = message;
+    }
+
+    function renderTiles(experiments) {
+      if (!experiments.length) {
+        showStatus('Пока нет экспериментов.');
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+
+      for (const exp of experiments) {
+        const tile = document.createElement('a');
+        tile.className = 'tile';
+        tile.href = exp.href;
+        tile.dataset.status = exp.status || 'wip';
+
+        const title = document.createElement('h2');
+        title.className = 'tile__title';
+        title.textContent = exp.title;
+
+        const desc = document.createElement('p');
+        desc.className = 'tile__desc';
+        desc.textContent = exp.description || '';
+
+        const meta = document.createElement('div');
+        meta.className = 'tile__meta';
+
+        const badge = document.createElement('span');
+        badge.className = 'tile__status';
+        badge.textContent = exp.status || 'wip';
+        meta.appendChild(badge);
+
+        if (Array.isArray(exp.tech) && exp.tech.length) {
+          const tech = document.createElement('span');
+          tech.className = 'tile__tech';
+          tech.textContent = exp.tech.join(' · ');
+          meta.appendChild(tech);
+        }
+
+        tile.append(title, desc, meta);
+        frag.appendChild(tile);
+      }
+
+      grid.appendChild(frag);
+    }
+
+    fetch('/experiments/registry.json')
+      .then((res) => {
+        if (!res.ok) throw new Error('registry ' + res.status);
+        return res.json();
+      })
+      .then((data) => {
+        renderTiles(Array.isArray(data.experiments) ? data.experiments : []);
+      })
+      .catch(() => {
+        showStatus('Не удалось загрузить каталог экспериментов.');
+      });
+  </script>
+</body>
+</html>
