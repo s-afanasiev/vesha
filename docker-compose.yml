@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: vesha
+    ports:
+      - "5434:5432"
+    volumes:
+      - vesha_pg:/var/lib/postgresql/data
+
+volumes:
+  vesha_pg:

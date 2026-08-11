@@ -1,48 +1,136 @@
 <html>
+<style>
+  .roc-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 8px 0 12px; font: 14px/1.3 sans-serif; }
+  .roc-controls label { display: flex; flex-direction: column; gap: 4px; }
+  .roc-controls input { width: 72px; padding: 4px 6px; }
+  .roc-controls button { padding: 6px 12px; cursor: pointer; }
+  .roc-controls .meta { color: #666; padding-bottom: 6px; }
+</style>
 
-<p>Before canvas.</p>
+<p class="roc-controls">
+  <label>PIX <input type="number" id="param-pix" value="10" min="4" max="40" step="1"></label>
+  <label>MATR_H <input type="number" id="param-matr-h" value="20" min="3" max="80" step="1"></label>
+  <label>MATR_W <input type="number" id="param-matr-w" value="19" min="3" max="80" step="1"></label>
+  <label>Выходы <input type="number" id="param-max-aims" value="14" min="2" max="80" step="2"></label>
+  <label>Точки <input type="number" id="param-dots" value="14" min="1" max="80" step="1"></label>
+  <button type="button" id="new-layout-btn">новая раскладка</button>
+  <span class="meta" id="layout-meta"></span>
+</p>
 <canvas width="1200" height="800"></canvas>
-<p>After canvas.</p>
 
-<script src="./roc.js"></script>
+<script src="./roc.js?v=3"></script>
 <script>
-  var cx = document.querySelector("canvas").getContext("2d");
   var canvas = document.querySelector("canvas");
-  //Constants
-    const PIX = 10;
-    const MATR_H = 20, MATR_W = 19;
-    const CW = 100*PIX, CH = 52*PIX;
-    const LMAR = 1*PIX,
-		MMAR = 1*PIX,
-		GRID_W = 50*PIX;
-    const VLMAR = Math.round(LMAR/2);
-    const POOL_W = 23*PIX,
-        POOL_H = CH-(LMAR*2) ;
-    const POOL_L_X = LMAR,
-		POOL_R_X = (LMAR+POOL_W+MMAR+GRID_W+MMAR),
-		POOL_Y = LMAR;
-  //const XY0 = [LMAR+POOL_W+MMAR-VLMAR, LMAR-VLMAR];
-  const XY0 = [LMAR+POOL_W, 0];
-  console.log("XY0 = "+XY0);
-  const AIM_HC = 2, AIM_H = AIM_HC * PIX ;
-  //const MAX_AIMS = Math.floor((POOL_H-VLMAR*2)/(AIM_H+LMAR));
-  //const MAX_AIMS = (Math.floor( MATR_H/(AIM_HC+1) ))*2 ;
-  const MAX_AIMS = (MATR_H % (AIM_HC+1) == 2) ? ((Math.floor(MATR_H/(AIM_HC+1)))*2 + 2) : ((Math.floor(MATR_H/(AIM_HC+1)))*2) ;
-  console.log("MAX_AIMS = "+MAX_AIMS);
+  var cx = canvas.getContext("2d");
+
+  // Layout params — recomputed from PIX / MATR_H / MATR_W / exits
+  let PIX, MATR_H, MATR_W, CW, CH;
+  let LMAR, MMAR, GRID_W, GRID_H, VLMAR;
+  let POOL_W, POOL_H, POOL_L_X, POOL_R_X, POOL_Y;
+  let GRID_OX, GRID_OY, XY0;
+  let AIM_HC, AIM_H, MAX_AIMS, DOTS_N, EXITS_CAP;
+
+  function computeMaxAimsCapacity(matr_h, aim_hc) {
+    const period = aim_hc + 1;
+    const base = Math.floor(matr_h / period) * 2;
+    return (matr_h % period === aim_hc) ? base + 2 : base;
+  }
+
+  function syncExitDefaults() {
+    const h = Math.max(3, Number(document.getElementById("param-matr-h").value) || 20);
+    const cap = computeMaxAimsCapacity(h, 2);
+    const aimsInput = document.getElementById("param-max-aims");
+    const dotsInput = document.getElementById("param-dots");
+    aimsInput.max = String(cap);
+    dotsInput.max = String(cap);
+    // When grid height changes, snap exits/dots up to capacity if they were at old default/over cap
+    let aims = Number(aimsInput.value) || cap;
+    if (aims > cap) aims = cap;
+    if (aims < 2) aims = Math.min(2, cap);
+    if (aims % 2 === 1) aims -= 1;
+    if (aims < 2 && cap >= 2) aims = 2;
+    aimsInput.value = String(aims);
+    let dots = Number(dotsInput.value) || aims;
+    if (dots > aims) dots = aims;
+    if (dots < 1) dots = 1;
+    dotsInput.value = String(dots);
+  }
+
+  function applyLayout(pix, matr_h, matr_w, max_aims, dots_n) {
+    PIX = Math.max(4, pix|0);
+    MATR_H = Math.max(3, matr_h|0);
+    MATR_W = Math.max(3, matr_w|0);
+    AIM_HC = 2;
+    AIM_H = AIM_HC * PIX;
+    EXITS_CAP = computeMaxAimsCapacity(MATR_H, AIM_HC);
+    MAX_AIMS = Math.max(2, Math.min(max_aims|0, EXITS_CAP));
+    if (MAX_AIMS % 2 === 1) MAX_AIMS -= 1;
+    if (MAX_AIMS < 2) MAX_AIMS = Math.min(2, EXITS_CAP);
+    DOTS_N = Math.max(1, Math.min(dots_n|0, MAX_AIMS));
+
+    LMAR = PIX;
+    MMAR = PIX;
+    VLMAR = Math.round(LMAR / 2);
+    GRID_W = MATR_W * PIX;
+    GRID_H = MATR_H * PIX;
+
+    // Side pockets scale with cell size; width stays readable for aim slots
+    const pool_cells = Math.max(6, Math.min(12, Math.ceil(MATR_W / 3)));
+    POOL_W = pool_cells * PIX;
+
+    const aims_per_side = MAX_AIMS / 2;
+    const aims_stack_h = aims_per_side > 0
+      ? ((aims_per_side - 1) * (AIM_H + LMAR) + AIM_H)
+      : 0;
+    POOL_H = Math.max(GRID_H, aims_stack_h);
+
+    CW = LMAR + POOL_W + MMAR + GRID_W + MMAR + POOL_W + LMAR;
+    CH = LMAR + POOL_H + LMAR;
+
+    POOL_L_X = LMAR;
+    POOL_R_X = LMAR + POOL_W + MMAR + GRID_W + MMAR;
+    POOL_Y = LMAR;
+
+    // Top-left of cell (0,0)
+    GRID_OX = LMAR + POOL_W + MMAR;
+    GRID_OY = LMAR;
+    // Legacy origin used by some path debug draws (cell inset)
+    XY0 = [GRID_OX - PIX, GRID_OY - PIX];
+
+    canvas.width = CW;
+    canvas.height = CH;
+  }
+
+  function readParams() {
+    syncExitDefaults();
+    return {
+      pix: Number(document.getElementById("param-pix").value) || 10,
+      matr_h: Number(document.getElementById("param-matr-h").value) || 20,
+      matr_w: Number(document.getElementById("param-matr-w").value) || 19,
+      max_aims: Number(document.getElementById("param-max-aims").value) || 14,
+      dots: Number(document.getElementById("param-dots").value) || 14,
+    };
+  }
 
 	// -----------------------------------
 	// --- I M P L E M E N T A T I O N ---
 	// -----------------------------------
-    replay(1);
+    document.getElementById("new-layout-btn").addEventListener("click", new_layout);
+    document.getElementById("param-matr-h").addEventListener("change", syncExitDefaults);
+    document.getElementById("param-max-aims").addEventListener("change", function() {
+      const aims = Number(this.value) || 2;
+      const dotsInput = document.getElementById("param-dots");
+      dotsInput.max = String(aims);
+      if (Number(dotsInput.value) > aims) dotsInput.value = String(aims);
+    });
+    syncExitDefaults();
+    new_layout();
 
-    function replay(count) {
-
-        for (let i=0; i<count; i++) {
-            setTimeout(()=>{
-                cx.clearRect(0, 0, CW, CH);
-                start_here();
-            }, 1000 * i);
-        }
+    function new_layout() {
+        const p = readParams();
+        applyLayout(p.pix, p.matr_h, p.matr_w, p.max_aims, p.dots);
+        cx.clearRect(0, 0, CW, CH);
+        start_here();
     }
 
     function start_here(){
@@ -51,12 +139,40 @@
 
         //draw_linear();
         // * --- fast_exit algorithm ---
-        //let fe_data = main(MATR_H, MATR_W, MAX_AIMS);
-        let fe_data = main({handle: false, matr_h: MATR_H, matr_w: MATR_W, max_aims:MAX_AIMS });
+        let fe_data = main({
+            handle: false,
+            matr_h: MATR_H,
+            matr_w: MATR_W,
+            max_aims: MAX_AIMS,
+            dots: DOTS_N,
+        });
             if (fe_data.error) { console.log(fe_data.error); }
             else {
                 draw_dots_3(fe_data);
                 draw_dot_paths(fe_data);
+                const meta = document.getElementById("layout-meta");
+                if (meta) {
+                    const left = (fe_data.id_l && fe_data.id_l.length) || 0;
+                    const right = (fe_data.id_r && fe_data.id_r.length) || 0;
+                    let arrived = 0, total = 0, toEdge = 0;
+                    const paths = (fe_data.paths_kit && fe_data.paths_kit.paths) || {};
+                    for (let r = 0; r < fe_data.arr2d.length; r++) {
+                        for (let c = 0; c < fe_data.arr2d[r].length; c++) {
+                            const cell = fe_data.arr2d[r][c];
+                            if (!cell.ord) continue;
+                            total++;
+                            if (cell.arrived) arrived++;
+                            if (routeReachesEdge(paths[cell.ord] || [], cell)) toEdge++;
+                        }
+                    }
+                    meta.textContent =
+                        "точки " + total + "/" + MAX_AIMS +
+                        " · выходы " + MAX_AIMS + " (по " + (MAX_AIMS / 2) + " на сторону, cap " + EXITS_CAP + ")" +
+                        " · L/R " + left + "/" + right +
+                        " · маршруты " + arrived + "/" + total +
+                        " · до края " + toEdge + "/" + total +
+                        " · canvas " + CW + "×" + CH;
+                }
             }
     }
 
@@ -64,87 +180,80 @@
 	//------------------------------------
 	//------------------------------------
 	//------------------------------------
+    function cellCenter(col, row) {
+        return [GRID_OX + col * PIX + PIX / 2, GRID_OY + row * PIX + PIX / 2];
+    }
+
+    function routeReachesEdge(route, dot) {
+        const edge_x = (dot.side === "left") ? 0 : (MATR_W - 1);
+        if (dot.xc === edge_x) return true;
+        if (!route || !route.length) return false;
+        const last = route[route.length - 1];
+        return last && Number(last[0]) === edge_x;
+    }
+
     function draw_dot_paths(data)
     {
-        // * data ={arr2d: [[{}],[{}]], id_l: [], paths_kit: {paths_matr: [[],[]], paths: {"0":[[x1,y1],[x2,y2]],} } }
-        const PATHS = data.paths_kit.paths;
-        cx.lineWidth = 3;
-        cx.strokeStyle = "#9f9";
-        let colors = ["#9f9", "#99f", "#f99"];
-        cx.fillStyle = "#ada";
+        // Draw a route for EVERY dot (not only PATHS keys) so none are skipped
+        const PATHS = (data.paths_kit && data.paths_kit.paths) || {};
+        const dots = [];
+        for (let row = 0; row < data.arr2d.length; row++) {
+            for (let col = 0; col < data.arr2d[row].length; col++) {
+                const cell = data.arr2d[row][col];
+                if (cell.ord) dots.push(cell);
+            }
+        }
 
-//        cx.beginPath();
-//        cx.moveTo(XY0[0], XY0[1]);
-//        cx.lineTo(XY0[0]*2, XY0[0]*2);
-//        cx.stroke();
-
-        for (let i in PATHS)
+        for (let i = 0; i < dots.length; i++)
         {
-            //console.log("PATHS[",i,"]", PATHS[i]);
-
-            let x_, y_;
-            if (PATHS[i].length > 0){
-                let x_ = XY0[0] + PIX + (PATHS[i][0][0])*PIX;
-                let y_ = XY0[1] + PIX + 5 + (PATHS[i][0][1])*PIX;
-                //console.log("x_=", x_, ", y_=", y_);
-
-                // * draw line from XY0 to dot
-                cx.lineWidth = 1;
-                cx.strokeStyle = colors[1];
-                cx.beginPath();
-                //console.log("x0=", XY0[0], ", y0=", XY0[1]);
-                cx.moveTo(XY0[0], XY0[1]);
-                cx.lineTo(x_, y_);
-                cx.stroke();
-                // * ------------------
-
-                // * draw path for one dot
-                cx.lineWidth = 4;
-                cx.strokeStyle = colors[0];
-                //cx.beginPath();
-                //cx.moveTo(x_, y_);
-                for (let j=0; j < PATHS[i].length; j++) {
-                    cx.fillStyle = "#ada";
-//                    let x2 = XY0[0] + PIX + (PATHS[i][j][0])*PIX;
-//                    let y2 = XY0[1] + PIX + (PATHS[i][j][1])*PIX;
-//                    console.log("x2=", x2-XY0[0]-PIX, ", y2=", y2-PIX);
-//                    cx.lineTo(x2, y2);
-                    point(PATHS[i][j][0]+1,PATHS[i][j][1]+1, i);
+            const dot = dots[i];
+            let route = PATHS[dot.ord] ? PATHS[dot.ord].slice() : [];
+            // If solver left a dead/incomplete route — synthesize L-path to edge for display+data
+            if (!routeReachesEdge(route, dot) && typeof force_l_path_to_edge === "function") {
+                let grid = data.paths_kit.paths_matr;
+                if (!grid || !grid.length || grid[0].length !== MATR_W) {
+                    grid = [];
+                    for (let r = 0; r < MATR_H; r++) {
+                        const line = [];
+                        for (let c = 0; c < MATR_W; c++) line.push(0);
+                        grid.push(line);
+                    }
                 }
-                //cx.stroke();
-                // * ------------------
+                const forced = force_l_path_to_edge(dot, grid, { aims_: {} });
+                route = forced.path || [];
+                PATHS[dot.ord] = route;
+                dot.arrived = true;
+            }
+            const color = (dot.side === "left") ? "#e66" : "#66e";
 
-
-
+            // soft fill on path cells (under the stroke)
+            for (let j = 0; j < route.length; j++) {
+                cx.fillStyle = (dot.side === "left") ? "rgba(240,160,160,0.45)" : "rgba(160,160,240,0.45)";
+                const x = GRID_OX + Number(route[j][0]) * PIX;
+                const y = GRID_OY + Number(route[j][1]) * PIX;
+                cx.fillRect(x, y, Math.max(1, PIX - 1), Math.max(1, PIX - 1));
             }
 
-            //cx.moveTo(x_, y_);
-            /*
-            for (let j=1; j < PATHS[i].length; j++) {
-                cx.lineWidth = 4;
-                cx.beginPath();
-                console.log("COLOR=",colors[j%3]);
-                cx.strokeStyle = colors[j%3];
-                let x2 = XY0[0] + (PATHS[i][j][0])*PIX;
-                let y2 = XY0[1] + 5 + (PATHS[i][j][1])*PIX;
-                cx.moveTo(x2, y2);
-                console.log("x2=", x2-XY0[0], ", y2=", y2-5);
-                console.log("j+1=", j+1);
-                let x3, y3;
-                if (j+1 == PATHS[i].length){
-                    x3 = XY0[0] + PIX + (PATHS[i][j][0])*PIX ;
-                    y3 = XY0[1] + 5 + (PATHS[i][j][1])*PIX ;
-                } else {
-                    x3 = XY0[0] + (PATHS[i][j+1][0])*PIX ;
-                    y3 = XY0[1] + 5 + (PATHS[i][j+1][1])*PIX ;
-                }
-                console.log("x3=", x3-XY0[0], ", y3=", y3-5);
-
-                cx.lineTo(x3, y3);
-                cx.stroke();
+            // polyline: dot -> path cells -> pocket stub
+            cx.lineWidth = Math.max(2, Math.floor(PIX / 3));
+            cx.strokeStyle = color;
+            cx.beginPath();
+            let p0 = cellCenter(dot.xc, dot.yc);
+            cx.moveTo(p0[0], p0[1]);
+            for (let j = 0; j < route.length; j++) {
+                let p = cellCenter(Number(route[j][0]), Number(route[j][1]));
+                cx.lineTo(p[0], p[1]);
             }
-            */
-            //cx.stroke();
+            const last = (route.length > 0)
+                ? [Number(route[route.length - 1][0]), Number(route[route.length - 1][1])]
+                : [dot.xc, dot.yc];
+            const exitY = GRID_OY + last[1] * PIX + PIX / 2;
+            if (dot.side === "left") {
+                cx.lineTo(POOL_L_X + POOL_W / 2, exitY);
+            } else {
+                cx.lineTo(POOL_R_X + POOL_W / 2, exitY);
+            }
+            cx.stroke();
         }
     }
 
@@ -170,7 +279,7 @@
                         cx.fillStyle = "#99f";
                     }
 
-					point(Number(col)+1,Number(row)+1, dist);
+					point(Number(col), Number(row), dist);
 				}
 			}
 		}
@@ -193,7 +302,7 @@
 						cx.fillStyle = "#f99";
 					} else { cx.fillStyle = "#99f"; }
 					console.log("ID=",data.arr2d[row][col].id);
-					point(Number(col)+1,Number(row)+1, data.arr2d[row][col].id);
+					point(Number(col), Number(row), data.arr2d[row][col].id);
 				}
 			}
 		}
@@ -268,7 +377,7 @@
 		for (let row=0; row < MATR.length; row++) {
 			for (let col=0; col < (AVG_X+shift-1); col++) {
 				if (MATR[row][col] == 1){
-					point(Number(col)+1,Number(row)+1);
+					point(Number(col), Number(row));
 					counter_left++;		}		}
 		}
 
@@ -276,55 +385,43 @@
 		for (let row=0; row < MATR.length; row++) {
 			for (let col=(AVG_X+shift-1); col < MATR[row].length; col++) {
 				if (MATR[row][col] == 1){
-					point(Number(col)+1,Number(row)+1);
+					point(Number(col), Number(row));
 					counter_right++;		}		}
 		}
 		return [counter_left, counter_right];
 	}
 
-	// ------- draw point
-	function point(x, y, text){
-		cx.fillRect(XY0[0]+x*10, XY0[1]+y*10,9,9);
-        cx.fillStyle = "#111";
-        cx.fillText(text, XY0[0]+x*10, XY0[1]+(y+1)*10);
-
+	// ------- draw point at cell (col, row), 0-based
+	function point(col, row, text){
+		const x = GRID_OX + col * PIX;
+		const y = GRID_OY + row * PIX;
+		const size = Math.max(1, PIX - 1);
+		cx.fillRect(x, y, size, size);
+		if (text !== undefined && text !== "") {
+			cx.fillStyle = "#111";
+			const fontPx = Math.max(6, Math.min(11, PIX - 1));
+			cx.font = "italic " + fontPx + "pt Arial";
+			cx.fillText(text, x, y + PIX);
+		}
 	}
 
 	function line(AVG_X, color) {
 		cx.lineWidth = 1;
 		cx.strokeStyle = color;
 		cx.beginPath();
-		let x_ = LMAR+POOL_W+MMAR+AVG_X*10;
-		cx.moveTo(x_, LMAR);
-		cx.lineTo(x_, LMAR+(MATR_H*10));
+		let x_ = GRID_OX + AVG_X * PIX;
+		cx.moveTo(x_, GRID_OY);
+		cx.lineTo(x_, GRID_OY + GRID_H);
 		cx.stroke();
 	}
 
 
-function init_picture(MATR_H, MATR_W)
+function init_picture(matr_h, matr_w)
 {
-    point(0,0,"");
-    point(50,50,"");
-    // set Font settings
-    //cx.strokeStyle = "#F00";
     cx.fillStyle = "#111";
-    cx.font = "italic 6pt Arial";
-    //cx.fillText("Fill text", 20, 50);
+    cx.font = "italic " + Math.max(6, Math.min(9, PIX - 2)) + "pt Arial";
 
-    if (MATR_H && MATR_W)
-    {
-        const KOEFF = 10;
-        cx.beginPath();
-        // horizontal line
-        cx.moveTo(LMAR+POOL_W+MMAR, LMAR+(MATR_H*KOEFF));
-        cx.lineTo(LMAR+POOL_W+MMAR+(MATR_W*KOEFF) , LMAR+(MATR_H*KOEFF));
-        // vertical line
-        cx.lineTo(LMAR+POOL_W+MMAR+(MATR_W*KOEFF), LMAR);
-
-        cx.stroke();
-    }
-
-	// рамка холста
+    // рамка холста
 	cx.strokeStyle = '#dde';
 	cx.strokeRect(0, 0, CW, CH);
 
@@ -346,34 +443,36 @@ function init_picture(MATR_H, MATR_W)
 		cx.strokeRect(pos_rx, pos_y, AIM_W, AIM_H);
 	}
 
-	// оси координат
+	// оси координат (по реальному размеру матрицы)
 	cx.lineWidth = 1;
 	cx.strokeStyle = 'blue';
 	cx.beginPath();
-	cx.moveTo(LMAR+POOL_W+MMAR, GRID_W+LMAR);
-	cx.lineTo(LMAR+POOL_W+MMAR, LMAR);
-	cx.lineTo(LMAR+POOL_W+MMAR+GRID_W, LMAR);
+	cx.moveTo(GRID_OX, GRID_OY + GRID_H);
+	cx.lineTo(GRID_OX, GRID_OY);
+	cx.lineTo(GRID_OX + GRID_W, GRID_OY);
 	cx.stroke();
 
-	// координатная сетка
+	// координатная сетка MATR_W × MATR_H
 	cx.strokeStyle = '#ddd';
 	cx.beginPath();
-	for (var cell = LMAR; cell <= GRID_W; cell += LMAR) {
-		// horizontals
-		cx.moveTo(LMAR+POOL_W+MMAR, cell+LMAR);
-		cx.lineTo(LMAR+POOL_W+MMAR+GRID_W , cell+LMAR);
-		// verticals
-		cx.moveTo(LMAR+POOL_W+MMAR+cell, LMAR);
-		cx.lineTo(LMAR+POOL_W+MMAR+cell, GRID_W+LMAR);
+	for (let row = 0; row <= matr_h; row++) {
+		const y = GRID_OY + row * PIX;
+		cx.moveTo(GRID_OX, y);
+		cx.lineTo(GRID_OX + GRID_W, y);
+	}
+	for (let col = 0; col <= matr_w; col++) {
+		const x = GRID_OX + col * PIX;
+		cx.moveTo(x, GRID_OY);
+		cx.lineTo(x, GRID_OY + GRID_H);
 	}
 	cx.stroke();
 
-    // grid middle width
-    //line(MATR_W/2, "black");
-    for (let i = 0; i < MATR_W; i++) { cx.fillText(i, LMAR+POOL_W+MMAR + (i*PIX), LMAR); }
-    for (let i = 0; i < MATR_H; i++) { cx.fillText(i, LMAR+POOL_W, LMAR + LMAR + (i*PIX)); }
-    //for (let i = 0; i < MATR_W/2; i++){ cx.fillText(i+1, LMAR+POOL_W+MMAR + (i*PIX), LMAR); }
-    //for (let i = MATR_W/2; i < MATR_W; i++){ cx.fillText(MATR_W-i, LMAR+POOL_W+MMAR + (i*PIX), LMAR); }
+	// жирная рамка матрицы
+	cx.strokeStyle = '#888';
+	cx.strokeRect(GRID_OX, GRID_OY, GRID_W, GRID_H);
+
+    for (let i = 0; i < matr_w; i++) { cx.fillText(i, GRID_OX + i * PIX, GRID_OY); }
+    for (let i = 0; i < matr_h; i++) { cx.fillText(i, GRID_OX - LMAR, GRID_OY + PIX + i * PIX); }
 }
 
 	function draw_linear()

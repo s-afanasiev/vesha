@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Подборка одежды — Vesha</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./podborka.css" />
+</head>
+<body class="page-podborka">
+  <main class="podborka">
+    <header class="podborka__header">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <h1>Подборка одежды</h1>
+      <p>Загрузите фото вещи — найдём похожие предложения на WB, Ozon и в Яндексе.</p>
+    </header>
+
+    <section class="podborka__auth" id="auth-panel">
+      <div class="podborka__usage" id="usage">Загрузка…</div>
+      <div class="podborka__auth-forms" id="auth-forms">
+        <form id="login-form" class="podborka__form">
+          <h2>Вход</h2>
+          <label>Email <input type="email" name="email" required autocomplete="email" /></label>
+          <label>Пароль <input type="password" name="password" required minlength="8" autocomplete="current-password" /></label>
+          <button type="submit">Войти</button>
+        </form>
+        <form id="register-form" class="podborka__form">
+          <h2>Регистрация</h2>
+          <label>Имя <input type="text" name="displayName" autocomplete="name" /></label>
+          <label>Email <input type="email" name="email" required autocomplete="email" /></label>
+          <label>Пароль <input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
+          <button type="submit">Создать аккаунт</button>
+        </form>
+        <div class="podborka__oauth">
+          <a id="google-btn" class="podborka__google" href="/api/auth/google" hidden>Войти через Google</a>
+          <button type="button" id="logout-btn" class="podborka__logout" hidden>Выйти</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="podborka__upload">
+      <form id="upload-form" class="podborka__drop">
+        <label class="podborka__file-label">
+          <span>Выберите изображение одежды</span>
+          <input type="file" id="image-input" name="image" accept="image/*" required />
+        </label>
+        <div id="preview-wrap" class="podborka__preview" hidden>
+          <img id="preview" alt="Превью" />
+        </div>
+        <button type="submit" id="upload-btn">Найти где купить</button>
+      </form>
+      <p id="status" class="podborka__status" role="status"></p>
+    </section>
+
+    <section class="podborka__result" id="result" hidden>
+      <div class="podborka__meta" id="result-meta"></div>
+      <div class="podborka__offers" id="offers"></div>
+    </section>
+  </main>
+  <script src="./podborka.js"></script>
+</body>
+</html>

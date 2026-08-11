@@ -7,6 +7,14 @@
       "href": "/experiments/roc/",
       "status": "wip",
       "tech": ["canvas"]
+    },
+    {
+      "id": "podborka",
+      "title": "Подборка одежды",
+      "description": "Загрузи фото вещи — найдём где купить (WB, Ozon, Яндекс)",
+      "href": "/experiments/podborka/",
+      "status": "wip",
+      "tech": ["js", "vision", "postgres"]
     }
   ]
 }
