@@ -35,6 +35,14 @@ app.use((err, _req, res, _next) => {
 async function start() {
   try {
     await migrate();
+    const {
+      backfillImageHashes,
+      cleanupDuplicateLooks,
+    } = require('./server/services/imageHash');
+    const hashed = await backfillImageHashes();
+    if (hashed) console.log('Backfilled image hashes:', hashed);
+    const removed = await cleanupDuplicateLooks();
+    if (removed) console.log('Removed duplicate looks:', removed);
   } catch (err) {
     console.warn('DB migrate skipped/failed:', err.message);
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');

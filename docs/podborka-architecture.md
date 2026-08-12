@@ -35,7 +35,7 @@ flowchart LR
 
 | Роль | Провайдер / модель | Зачем |
 |------|-------------------|--------|
-| Основной vision | **Google Gemini 2.5 Flash** (fallback: 2.0 Flash) | Дешёвый мультимодал: описание одежды + строгий JSON |
+| Основной vision | **Google Gemini 3.5 Flash** (fallback: 3.5 Flash-Lite / flash-latest) | Дешёвый мультимодал: описание одежды + строгий JSON |
 | Fallback vision | **OpenAI gpt-4o** | Если Gemini недоступен / слабый ответ |
 | Текстовый реранк (позже) | Gemini Flash или gpt-4o-mini | Сверка офферов с исходным описанием |
 
@@ -43,7 +43,7 @@ flowchart LR
 
 Обратный image-search (Yandex Images / Lens) — не в MVP; добавляем после текстового поиска по атрибутам.
 
-Поиск MVP: **SerpAPI** (Yandex). Прямые неофициальные API WB/Ozon не берём в основу — хрупко для продукта.
+Поиск MVP: **прямой WB search** (публичный `search.wb.ru`, детальные query) + fallback SerpAPI Yandex (Ozon/web) при пустой выдаче. Ozon прямым API пока не трогаем.
 
 ## Auth
 
