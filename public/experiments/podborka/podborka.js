@@ -1,29 +1,14 @@
 (function () {
   const usageEl = document.getElementById('usage');
-  const authForms = document.getElementById('auth-forms');
-  const loginForm = document.getElementById('login-form');
-  const registerForm = document.getElementById('register-form');
-  const tabLogin = document.getElementById('tab-login');
-  const tabRegister = document.getElementById('tab-register');
-  const googleBtn = document.getElementById('google-btn');
+  const guestLoginPrompt = document.getElementById('guest-login-prompt');
   const logoutBtn = document.getElementById('logout-btn');
 
-  function setAuthTab(name) {
-    const isLogin = name === 'login';
-    tabLogin.classList.toggle('is-active', isLogin);
-    tabRegister.classList.toggle('is-active', !isLogin);
-    tabLogin.setAttribute('aria-selected', isLogin ? 'true' : 'false');
-    tabRegister.setAttribute('aria-selected', isLogin ? 'false' : 'true');
-    loginForm.hidden = !isLogin;
-    registerForm.hidden = isLogin;
-  }
-
-  tabLogin.addEventListener('click', () => setAuthTab('login'));
-  tabRegister.addEventListener('click', () => setAuthTab('register'));
   const uploadForm = document.getElementById('upload-form');
+  const dropLabel = document.getElementById('drop-label');
   const imageInput = document.getElementById('image-input');
   const previewWrap = document.getElementById('preview-wrap');
   const preview = document.getElementById('preview');
+  const previewClear = document.getElementById('preview-clear');
   const uploadBtn = document.getElementById('upload-btn');
   const statusEl = document.getElementById('status');
   const resultEl = document.getElementById('result');
@@ -31,8 +16,6 @@
   const recalcBtn = document.getElementById('recalc-btn');
   const dedupeNote = document.getElementById('dedupe-note');
   const colorsPanel = document.getElementById('colors-panel');
-  const UPLOAD_BTN_LABEL = 'Найти где купить';
-  const UPLOAD_BTN_BUSY = 'Ищем…';
   const colorSwatches = document.getElementById('color-swatches');
   const attrsPanel = document.getElementById('attrs-panel');
   const attrsRoot = document.getElementById('attrs-root');
@@ -54,8 +37,11 @@
   const colorModal = document.getElementById('color-modal');
   const colorModalSwatch = document.getElementById('color-modal-swatch');
   const colorModalRows = document.getElementById('color-modal-rows');
+
   let activeLookId = null;
 
+  const UPLOAD_BTN_LABEL = 'Найти где купить';
+  const UPLOAD_BTN_BUSY = 'Ищем…';
   const COPY_ICON = './copy-icon.svg';
 
   function copyBtn(value) {
@@ -175,25 +161,24 @@
   }
 
   function renderCopyList(items) {
-    const ul = document.createElement('ul');
-    ul.className = 'podborka__copy-list';
+    const wrap = document.createElement('div');
+    wrap.className = 'podborka__swatches';
     if (!items.length) {
-      const li = document.createElement('li');
-      li.className = 'podborka__copy-text';
-      li.textContent = '—';
-      ul.appendChild(li);
-      return ul;
+      const span = document.createElement('span');
+      span.className = 'podborka__block-hint';
+      span.textContent = '—';
+      wrap.appendChild(span);
+      return wrap;
     }
     for (const item of items) {
-      const li = document.createElement('li');
-      li.appendChild(copyBtn(item));
+      const chip = document.createElement('div');
+      chip.className = 'podborka__swatch';
       const span = document.createElement('span');
-      span.className = 'podborka__copy-text';
       span.textContent = item;
-      li.appendChild(span);
-      ul.appendChild(li);
+      chip.append(span, copyBtn(item));
+      wrap.appendChild(chip);
     }
-    return ul;
+    return wrap;
   }
 
   function renderAttrsView(attrs, actualQueries) {
@@ -212,26 +197,33 @@
       'cutout',
       'cutout_error',
     ]);
-    const table = document.createElement('table');
-    table.className = 'podborka__attrs-table';
-    const tbody = document.createElement('tbody');
+
+    const grid = document.createElement('div');
+    grid.className = 'podborka__attrs-grid';
+
     const rootKeys = Object.keys(attrs).filter((k) => !skip.has(k));
     for (const key of rootKeys) {
-      const tr = document.createElement('tr');
-      const th = document.createElement('th');
-      th.textContent = key;
-      const td = document.createElement('td');
-      td.textContent = formatCellValue(attrs[key]);
-      tr.append(th, td);
-      tbody.appendChild(tr);
+      const item = document.createElement('div');
+      item.className = 'podborka__attr-item';
+
+      const label = document.createElement('div');
+      label.className = 'podborka__attr-label';
+      label.textContent = key;
+
+      const val = document.createElement('div');
+      val.className = 'podborka__attr-val';
+      val.textContent = formatCellValue(attrs[key]);
+
+      item.append(label, val);
+      grid.appendChild(item);
     }
-    table.appendChild(tbody);
-    attrsRoot.appendChild(table);
+    attrsRoot.appendChild(grid);
 
     function section(title, node) {
       const wrap = document.createElement('div');
-      wrap.className = 'podborka__attrs-section';
-      const h = document.createElement('h3');
+      wrap.style.marginTop = '1rem';
+      const h = document.createElement('div');
+      h.className = 'podborka__attr-label';
       h.textContent = title;
       wrap.append(h, node);
       attrsRoot.appendChild(wrap);
@@ -243,41 +235,18 @@
       : [];
     const modelQueries = Array.isArray(attrs.search_queries) ? attrs.search_queries : [];
 
-    const ulKey = document.createElement('ul');
-    ulKey.className = 'podborka__attrs-list';
-    if (!keyFeatures.length) {
-      const li = document.createElement('li');
-      li.textContent = '—';
-      ulKey.appendChild(li);
-    } else {
-      keyFeatures.forEach((f) => {
-        const li = document.createElement('li');
-        li.textContent = f;
-        ulKey.appendChild(li);
-      });
+    if (keyFeatures.length) {
+      section('Ключевые особенности', renderCopyList(keyFeatures));
     }
-    section('key_features', ulKey);
-
-    const ulDist = document.createElement('ul');
-    ulDist.className = 'podborka__attrs-list';
-    if (!distinctive.length) {
-      const li = document.createElement('li');
-      li.textContent = '—';
-      ulDist.appendChild(li);
-    } else {
-      distinctive.forEach((f) => {
-        const li = document.createElement('li');
-        li.textContent = f;
-        ulDist.appendChild(li);
-      });
+    if (distinctive.length) {
+      section('Отличительные черты', renderCopyList(distinctive));
     }
-    section('distinctive_features', ulDist);
-
-    section('search_queries', renderCopyList(modelQueries.filter(Boolean)));
-    section(
-      'search_queries_sent',
-      renderCopyList((actualQueries || []).filter(Boolean))
-    );
+    if (modelQueries.length) {
+      section('Поисковые запросы AI', renderCopyList(modelQueries.filter(Boolean)));
+    }
+    if (actualQueries && actualQueries.length) {
+      section('Отправленные запросы', renderCopyList(actualQueries.filter(Boolean)));
+    }
   }
 
   function openColorModal(color) {
@@ -287,14 +256,11 @@
     const rows = [
       ['HEX', f.hex],
       ['RGB', f.rgb],
-      ['RGB', f.rgbValues],
+      ['R,G,B', f.rgbValues],
       ['HSB', f.hsbValues],
       ['HSL', f.hslValues],
       ['CMYK', f.cmykValues],
     ];
-    // Avoid duplicate RGB label confusion — first RGB formatted, second values
-    rows[1][0] = 'RGB';
-    rows[2][0] = 'R,G,B';
 
     for (const [label, value] of rows) {
       const row = document.createElement('div');
@@ -303,7 +269,7 @@
       lab.className = 'podborka-modal__row-label';
       lab.textContent = label;
       const val = document.createElement('div');
-      val.className = 'podborka-modal__row-value';
+      val.className = 'podborka-modal__row-val';
       val.textContent = value;
       row.append(lab, val, copyBtn(value));
       colorModalRows.appendChild(row);
@@ -339,7 +305,7 @@
       colorSwatches.innerHTML = '';
       if (!colors.length) {
         colorSwatches.innerHTML =
-          '<span class="podborka__block-hint">Не удалось выделить цвета в bbox</span>';
+          '<span class="podborka__block-hint">Не удалось выделить цвета</span>';
         return;
       }
       for (const c of colors) {
@@ -350,10 +316,13 @@
         const circle = document.createElement('span');
         circle.className = 'podborka__swatch-circle';
         circle.style.background = c.formats.hex;
+        const hexSpan = document.createElement('span');
+        hexSpan.className = 'podborka__swatch-hex';
+        hexSpan.textContent = c.formats.hex;
         const pct = document.createElement('span');
-        pct.className = 'podborka__swatch-pct';
+        pct.style.color = '#888';
         pct.textContent = c.percent + '%';
-        btn.append(circle, pct);
+        btn.append(circle, hexSpan, pct);
         btn.addEventListener('click', () => openColorModal(c));
         colorSwatches.appendChild(btn);
       }
@@ -365,8 +334,7 @@
 
   function setStatus(text, kind) {
     statusEl.textContent = text || '';
-    if (kind) statusEl.dataset.kind = kind;
-    else delete statusEl.dataset.kind;
+    statusEl.className = 'podborka__status' + (kind ? ' is-' + kind : '');
   }
 
   async function api(url, options) {
@@ -384,35 +352,46 @@
   function formatPrice(cents, currency) {
     if (cents == null) return '';
     const value = (cents / 100).toLocaleString('ru-RU');
-    return value + ' ' + (currency || 'RUB');
+    return value + ' ' + (currency || '₽');
   }
 
   function renderUsage(me) {
     const u = me.usage || {};
-    const who = me.user
-      ? 'Вы вошли как ' + (me.user.displayName || me.user.email)
-      : 'Гостевой режим (ограниченные возможности)';
+    const loggedIn = Boolean(me.user);
+    const who = loggedIn
+      ? (me.user.displayName || me.user.email)
+      : 'Гостевой режим';
+
     usageEl.textContent =
       who +
-      ' · загрузок сегодня: ' +
+      ' · Загрузок сегодня: ' +
       (u.uploadsUsed ?? 0) +
       ' / ' +
       (u.uploadsLimit ?? '—') +
-      ' · офферов в выдаче: до ' +
+      ' · Офферов: до ' +
       (u.offerLimit ?? '—');
 
-    const loggedIn = Boolean(me.user);
-    authForms.hidden = loggedIn;
-    logoutBtn.hidden = !loggedIn;
-    googleBtn.hidden = loggedIn || !me.googleEnabled;
-    if (!loggedIn && loginForm.hidden && registerForm.hidden) {
-      setAuthTab('login');
-    }
+    if (guestLoginPrompt) guestLoginPrompt.hidden = loggedIn;
+    if (logoutBtn) logoutBtn.hidden = !loggedIn;
+  }
+
+  if (guestLoginPrompt) {
+    guestLoginPrompt.addEventListener('click', () => {
+      if (window.VeshaAuth) window.VeshaAuth.openModal('login');
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      if (window.VeshaAuth) await window.VeshaAuth.logout();
+      else await api('/api/auth/logout', { method: 'POST' });
+    });
   }
 
   function setUploadBusy(busy) {
     uploadBtn.disabled = Boolean(busy);
-    uploadBtn.textContent = busy ? UPLOAD_BTN_BUSY : UPLOAD_BTN_LABEL;
+    const span = uploadBtn.querySelector('span') || uploadBtn;
+    span.textContent = busy ? UPLOAD_BTN_BUSY : UPLOAD_BTN_LABEL;
     uploadBtn.setAttribute('aria-busy', busy ? 'true' : 'false');
   }
 
@@ -444,6 +423,14 @@
 
   recalcBtn.addEventListener('click', () => reprocessActiveLook());
 
+  function getShopKind(shopName) {
+    const s = String(shopName || '').toLowerCase();
+    if (s.includes('wb') || s.includes('wildberries')) return 'wb';
+    if (s.includes('ozon')) return 'ozon';
+    if (s.includes('yandex') || s.includes('маркет') || s.includes('market')) return 'yandex';
+    return 'other';
+  }
+
   function renderOffers(bundle) {
     resultEl.hidden = false;
     const look = bundle.look || {};
@@ -451,6 +438,7 @@
     const attrs = extraction && extraction.attributes ? extraction.attributes : null;
     recalcBtn.hidden = !look.id;
     if (!bundle.deduplicated) dedupeNote.hidden = true;
+
     const actualQueries = Array.isArray(bundle.searchQueries)
       ? bundle.searchQueries
       : Array.isArray(bundle.searchJobs)
@@ -462,15 +450,15 @@
     const notClothing = attrs && attrs.is_clothing === false;
     resultMeta.innerHTML =
       '<strong>' +
-      escapeHtml(look.title || 'Результат') +
+      escapeHtml(look.title || 'Результат анализа') +
       '</strong> · статус: ' +
       escapeHtml(look.status || '—') +
       (extraction && extraction.provider
-        ? ' · ' + escapeHtml(extraction.provider + (extraction.model ? ' / ' + extraction.model : ''))
+        ? ' · AI: ' + escapeHtml(extraction.provider + (extraction.model ? ' (' + extraction.model + ')' : ''))
         : '') +
       (attrs && attrs.category ? ' · ' + escapeHtml(attrs.category) : '') +
       (notClothing
-        ? '<br><span style="color:#b44545">На фото не найдена одежда' +
+        ? '<br><span style="color:#f87171">На фото не найдена одежда' +
           (attrs.reject_reason ? ': ' + escapeHtml(attrs.reject_reason) : '') +
           '</span>'
         : '') +
@@ -497,7 +485,7 @@
     offersEl.innerHTML = '';
     const offers = bundle.offers || [];
     if (!offers.length) {
-      offersEl.innerHTML = '<p class="podborka__meta">Офферов пока нет.</p>';
+      offersEl.innerHTML = '<p class="podborka__meta" style="grid-column:1/-1;text-align:center;">Офферов пока нет.</p>';
       return;
     }
 
@@ -508,30 +496,61 @@
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
 
+      const thumbWrap = document.createElement('div');
+      thumbWrap.className = 'podborka__offer-thumb-wrap';
+
       if (o.thumbnailUrl) {
         const img = document.createElement('img');
         img.className = 'podborka__offer-thumb';
         img.src = o.thumbnailUrl;
-        img.alt = '';
-        a.appendChild(img);
+        img.alt = o.title || '';
+        img.loading = 'lazy';
+        thumbWrap.appendChild(img);
       } else {
         const ph = document.createElement('div');
         ph.className = 'podborka__offer-thumb podborka__offer-thumb--empty';
-        ph.textContent = o.shop || 'shop';
-        a.appendChild(ph);
+        ph.textContent = o.shop || 'Магазин';
+        thumbWrap.appendChild(ph);
       }
+      a.appendChild(thumbWrap);
 
       const body = document.createElement('div');
-      const h3 = document.createElement('h3');
-      h3.textContent = o.title;
-      const p = document.createElement('p');
-      p.textContent = [formatPrice(o.priceCents, o.currency), o.snippet]
-        .filter(Boolean)
-        .join(' — ');
+      body.className = 'podborka__offer-body';
+
+      const topRow = document.createElement('div');
+      topRow.className = 'podborka__offer-top';
+
+      const shopKind = getShopKind(o.shop);
       const shop = document.createElement('span');
-      shop.className = 'podborka__offer-shop';
-      shop.textContent = o.shop || 'other';
-      body.append(h3, p, shop);
+      shop.className = `podborka__offer-shop podborka__offer-shop--${shopKind}`;
+      shop.textContent = o.shop || 'Магазин';
+      topRow.appendChild(shop);
+
+      if (o.priceCents != null) {
+        const price = document.createElement('span');
+        price.className = 'podborka__offer-price';
+        price.textContent = formatPrice(o.priceCents, o.currency);
+        topRow.appendChild(price);
+      }
+      body.appendChild(topRow);
+
+      const title = document.createElement('h3');
+      title.className = 'podborka__offer-title';
+      title.textContent = o.title || 'Товар';
+      body.appendChild(title);
+
+      if (o.snippet) {
+        const p = document.createElement('p');
+        p.className = 'podborka__offer-snippet';
+        p.textContent = o.snippet;
+        body.appendChild(p);
+      }
+
+      const btn = document.createElement('span');
+      btn.className = 'podborka__offer-btn';
+      btn.textContent = 'В магазин →';
+      body.appendChild(btn);
+
       a.appendChild(body);
       offersEl.appendChild(a);
     }
@@ -618,97 +637,86 @@
   }
 
   carouselPrev.addEventListener('click', () => {
-    historyCarousel.scrollBy({ left: -280, behavior: 'smooth' });
+    historyCarousel.scrollBy({ left: -220, behavior: 'smooth' });
   });
   carouselNext.addEventListener('click', () => {
-    historyCarousel.scrollBy({ left: 280, behavior: 'smooth' });
+    historyCarousel.scrollBy({ left: 220, behavior: 'smooth' });
   });
 
   async function refreshMe() {
-    const me = await api('/api/auth/me');
+    const me = window.VeshaAuth ? await window.VeshaAuth.getMe(true) : await api('/api/auth/me');
     renderUsage(me);
     await refreshHistory();
     return me;
   }
 
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(loginForm);
-    try {
-      setStatus('Вход…');
-      await api('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: fd.get('email'),
-          password: fd.get('password'),
-        }),
-      });
-      activeLookId = null;
-      await refreshMe();
-      setStatus('Вход выполнен', 'ok');
-    } catch (err) {
-      setStatus(err.message, 'error');
-    }
+  window.addEventListener('auth:change', () => {
+    refreshMe().catch(() => {});
   });
 
-  registerForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(registerForm);
-    try {
-      setStatus('Регистрация…');
-      await api('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          displayName: fd.get('displayName'),
-          email: fd.get('email'),
-          password: fd.get('password'),
-        }),
-      });
-      activeLookId = null;
-      await refreshMe();
-      setStatus('Аккаунт создан', 'ok');
-    } catch (err) {
-      setStatus(err.message, 'error');
-    }
-  });
-
-  logoutBtn.addEventListener('click', async () => {
-    try {
-      await api('/api/auth/logout', { method: 'POST' });
-      activeLookId = null;
-      resultEl.hidden = true;
-      await refreshMe();
-      setStatus('Вы вышли', 'ok');
-    } catch (err) {
-      setStatus(err.message, 'error');
-    }
-  });
-
-  imageInput.addEventListener('change', () => {
-    const file = imageInput.files && imageInput.files[0];
+  function setFile(file) {
     if (!file) {
       previewWrap.hidden = true;
+      dropLabel.hidden = false;
       return;
     }
     const url = URL.createObjectURL(file);
     preview.src = url;
     previewWrap.hidden = false;
+    dropLabel.hidden = true;
+  }
+
+  imageInput.addEventListener('change', () => {
+    const file = imageInput.files && imageInput.files[0];
+    setFile(file);
+  });
+
+  if (previewClear) {
+    previewClear.addEventListener('click', (e) => {
+      e.stopPropagation();
+      imageInput.value = '';
+      setFile(null);
+    });
+  }
+
+  // Drag and drop handlers
+  ['dragenter', 'dragover'].forEach((eventName) => {
+    dropLabel.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropLabel.classList.add('is-dragover');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach((eventName) => {
+    dropLabel.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropLabel.classList.remove('is-dragover');
+    });
+  });
+
+  dropLabel.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    const file = dt && dt.files && dt.files[0];
+    if (file) {
+      imageInput.files = dt.files;
+      setFile(file);
+    }
   });
 
   uploadForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const file = imageInput.files && imageInput.files[0];
     if (!file) {
-      setStatus('Выберите изображение', 'error');
+      setStatus('Выберите изображение одежды', 'error');
       return;
     }
     const fd = new FormData();
     fd.append('image', file);
     setUploadBusy(true);
     recalcBtn.disabled = true;
-    setStatus('Анализируем и ищем… это может занять минуту');
+    setStatus('Анализируем фото и ищем предложения… это может занять минуту');
     try {
       const bundle = await api('/api/looks', { method: 'POST', body: fd });
       activeLookId = bundle.look && bundle.look.id ? bundle.look.id : null;
@@ -732,6 +740,6 @@
   });
 
   refreshMe().catch((err) => {
-    usageEl.textContent = 'Не удалось связаться с API: ' + err.message;
+    usageEl.textContent = 'Гостевой режим · Загрузок: 0 / 3';
   });
 })();

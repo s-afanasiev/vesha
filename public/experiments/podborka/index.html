@@ -9,44 +9,31 @@
 </head>
 <body class="page-podborka">
   <main class="podborka">
-    <header class="podborka__header">
+    <div class="experiments__nav">
       <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div data-vesha-auth-widget></div>
+    </div>
+
+    <header class="podborka__header">
       <h1>Подборка одежды</h1>
-      <p>Загрузите фото вещи — найдём похожие предложения на WB, Ozon и в Яндексе.</p>
+      <p class="podborka__subtitle">Загрузите фото вещи — AI определит категорию, крой, цвета и найдёт похожие товары на маркетплейсах.</p>
     </header>
 
-    <section class="podborka__auth" id="auth-panel">
-      <div class="podborka__usage" id="usage">Загрузка…</div>
-      <div class="podborka__auth-forms" id="auth-forms">
-        <div class="podborka__tabs" role="tablist" aria-label="Вход или регистрация">
-          <button type="button" class="podborka__tab is-active" role="tab" id="tab-login" aria-selected="true" aria-controls="login-form" data-tab="login">Вход</button>
-          <button type="button" class="podborka__tab" role="tab" id="tab-register" aria-selected="false" aria-controls="register-form" data-tab="register">Регистрация</button>
-        </div>
-        <form id="login-form" class="podborka__form" role="tabpanel" aria-labelledby="tab-login">
-          <label>Email <input type="email" name="email" required autocomplete="email" /></label>
-          <label>Пароль <input type="password" name="password" required minlength="8" autocomplete="current-password" /></label>
-          <button type="submit">Войти</button>
-        </form>
-        <form id="register-form" class="podborka__form" role="tabpanel" aria-labelledby="tab-register" hidden>
-          <label>Имя <input type="text" name="displayName" autocomplete="name" /></label>
-          <label>Email <input type="email" name="email" required autocomplete="email" /></label>
-          <label>Пароль <input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
-          <button type="submit">Создать аккаунт</button>
-        </form>
-        <div class="podborka__oauth">
-          <a id="google-btn" class="podborka__google" href="/api/auth/google" hidden>
-            <img class="podborka__google-icon" src="./assets/google.svg" alt="" width="18" height="18" />
-            <span>Войти через Google</span>
-          </a>
-        </div>
+    <div class="podborka__quota-bar" id="auth-panel">
+      <div class="podborka__quota-info">
+        <span class="podborka__quota-icon">⚡</span>
+        <span id="usage">Загрузка…</span>
       </div>
-      <button type="button" id="logout-btn" class="podborka__logout" hidden>Выйти</button>
-    </section>
+      <div class="podborka__quota-actions">
+        <button type="button" id="guest-login-prompt" class="vesha-btn vesha-btn--sm vesha-btn--primary" hidden>Войти</button>
+        <button type="button" id="logout-btn" class="vesha-btn vesha-btn--sm vesha-btn--outline" hidden>Выйти</button>
+      </div>
+    </div>
 
     <section class="podborka__history" id="history-panel" hidden>
       <div class="podborka__history-head">
-        <h2>Ваши загруженные вещи</h2>
-        <p class="podborka__history-hint">Нажмите карточку, чтобы снова открыть результат</p>
+        <h2>Недавние загрузки</h2>
+        <p class="podborka__history-hint">Нажмите карточку для просмотра результатов</p>
       </div>
       <div class="podborka__carousel-wrap">
         <button type="button" class="podborka__carousel-btn" id="carousel-prev" aria-label="Назад">‹</button>
@@ -57,16 +44,33 @@
 
     <section class="podborka__upload">
       <form id="upload-form" class="podborka__drop">
-        <label class="podborka__file-label">
-          <span>Выберите изображение одежды</span>
+        <label class="podborka__file-label" id="drop-label">
+          <div class="podborka__drop-content">
+            <svg class="podborka__drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span class="podborka__drop-title">Перетащите фото одежды или <u>выберите файл</u></span>
+            <span class="podborka__drop-sub">JPG, PNG, WebP до 10 МБ</span>
+          </div>
           <input type="file" id="image-input" name="image" accept="image/*" required />
         </label>
+
         <div id="preview-wrap" class="podborka__preview" hidden>
-          <img id="preview" alt="Превью" />
+          <div class="podborka__preview-card">
+            <img id="preview" alt="Превью" />
+            <button type="button" id="preview-clear" class="podborka__preview-clear" title="Сменить фото">✕</button>
+          </div>
         </div>
+
         <div class="podborka__actions">
-          <button type="submit" id="upload-btn">Найти где купить</button>
-          <button type="button" class="podborka__recalc" id="recalc-btn" hidden>Повторный анализ</button>
+          <button type="submit" id="upload-btn" class="vesha-btn vesha-btn--primary">
+            <span>Найти где купить</span>
+          </button>
+          <button type="button" class="podborka__recalc vesha-btn vesha-btn--outline" id="recalc-btn" hidden>
+            Повторный анализ
+          </button>
         </div>
       </form>
       <p id="status" class="podborka__status" role="status"></p>
@@ -75,41 +79,60 @@
     <section class="podborka__result" id="result" hidden>
       <div class="podborka__meta" id="result-meta"></div>
       <p class="podborka__dedupe-note" id="dedupe-note" hidden>
-        Эта вещь уже была загружена — открыли сохранённую. Можно запустить
-        <strong>Повторный анализ</strong> справа от кнопки поиска.
+        Эта вещь уже была загружена — открыли сохранённую.
       </p>
 
-      <div class="podborka__bbox-panel" id="bbox-panel" hidden>
-        <h2 class="podborka__block-title">Область одежды (bbox)</h2>
-        <p class="podborka__block-hint" id="bbox-hint">Рамка от vision — цвета считаются только внутри неё</p>
-        <div class="podborka__bbox-frame" id="bbox-frame">
-          <img id="bbox-image" alt="Загруженная вещь" />
-          <div class="podborka__bbox-box" id="bbox-box" hidden></div>
+      <div class="podborka__analysis-grid">
+        <div class="podborka__analysis-card" id="bbox-panel" hidden>
+          <div class="podborka__card-head">
+            <h2 class="podborka__block-title">Область одежды</h2>
+            <span class="podborka__card-tag">BBox</span>
+          </div>
+          <div class="podborka__bbox-frame" id="bbox-frame">
+            <img id="bbox-image" alt="Загруженная вещь" />
+            <div class="podborka__bbox-box" id="bbox-box" hidden></div>
+          </div>
+          <p class="podborka__bbox-meta" id="bbox-meta"></p>
+          <p class="podborka__block-hint" id="bbox-hint">Рамка от vision — цвета считаются только внутри неё</p>
         </div>
-        <p class="podborka__bbox-meta" id="bbox-meta"></p>
-      </div>
 
-      <div class="podborka__cutout-panel" id="cutout-panel" hidden>
-        <h2 class="podborka__block-title">Без фона</h2>
-        <p class="podborka__block-hint" id="cutout-hint">Кроп по bbox → Replicate remove-bg</p>
-        <div class="podborka__cutout-frame" id="cutout-frame">
-          <img id="cutout-image" alt="Вещь без фона" />
+        <div class="podborka__analysis-card" id="cutout-panel" hidden>
+          <div class="podborka__card-head">
+            <h2 class="podborka__block-title">Без фона</h2>
+            <span class="podborka__card-tag">Cutout</span>
+          </div>
+          <div class="podborka__cutout-frame" id="cutout-frame">
+            <img id="cutout-image" alt="Вещь без фона" />
+          </div>
+          <p class="podborka__bbox-meta" id="cutout-meta"></p>
+          <p class="podborka__block-hint" id="cutout-hint">Кроп по bbox → Remove-bg</p>
         </div>
-        <p class="podborka__bbox-meta" id="cutout-meta"></p>
+
+        <div class="podborka__analysis-card" id="colors-panel" hidden>
+          <div class="podborka__card-head">
+            <h2 class="podborka__block-title">Цвета вещи</h2>
+            <span class="podborka__card-tag">Палитра</span>
+          </div>
+          <div class="podborka__swatches" id="color-swatches"></div>
+          <p class="podborka__block-hint">Клик по оттенку — детали и копирование HEX/RGB</p>
+        </div>
+
+        <div class="podborka__analysis-card podborka__analysis-card--full" id="attrs-panel" hidden>
+          <div class="podborka__card-head">
+            <h2 class="podborka__block-title">Характеристики Vision</h2>
+            <span class="podborka__card-tag">AI атрибуты</span>
+          </div>
+          <div id="attrs-root"></div>
+        </div>
       </div>
 
-      <div class="podborka__colors" id="colors-panel" hidden>
-        <h2 class="podborka__block-title">Цвета вещи</h2>
-        <p class="podborka__block-hint">Только внутри bbox · клик по кружку — детали и копирование</p>
-        <div class="podborka__swatches" id="color-swatches"></div>
+      <div class="podborka__offers-wrap">
+        <div class="podborka__offers-head">
+          <h2>Предложения в магазинах</h2>
+          <span class="podborka__offers-hint">WB · Ozon · Яндекс Маркет</span>
+        </div>
+        <div class="podborka__offers" id="offers"></div>
       </div>
-
-      <div class="podborka__attrs" id="attrs-panel" hidden>
-        <h2 class="podborka__block-title">Данные vision</h2>
-        <div id="attrs-root"></div>
-      </div>
-
-      <div class="podborka__offers" id="offers"></div>
     </section>
   </main>
 
@@ -123,6 +146,7 @@
     </div>
   </div>
 
+  <script src="/auth.js"></script>
   <script src="./colors.js"></script>
   <script src="./podborka.js"></script>
 </body>
