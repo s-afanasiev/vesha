@@ -5,9 +5,9 @@
 }
 
 body {
-  font-family: system-ui, sans-serif;
-  background: #0f0f0f;
-  color: #e8e8e8;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #202328;
+  color: #f1f5f9;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -22,21 +22,23 @@ h1 {
   font-size: 3rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: #ffffff;
   margin-bottom: 0.5rem;
 }
 
 p {
   font-size: 1.1rem;
-  color: #888;
+  color: #a3acb9;
 }
 
 a {
-  color: #c8c8c8;
+  color: #cbd5e1;
   text-decoration: none;
+  transition: color 0.15s ease;
 }
 
 a:hover {
-  color: #fff;
+  color: #ffffff;
 }
 
 .home-nav {
@@ -44,11 +46,12 @@ a:hover {
 }
 
 .home-nav a {
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid #525a66;
+  padding-bottom: 2px;
 }
 
 .home-nav a:hover {
-  border-bottom-color: #fff;
+  border-bottom-color: #ffffff;
 }
 
 .home-top-bar {
@@ -62,6 +65,9 @@ a:hover {
 body.page-experiments {
   align-items: flex-start;
   justify-content: flex-start;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+    #202328;
 }
 
 .experiments {
@@ -78,19 +84,21 @@ body.page-experiments {
 .experiments__header h1 {
   font-size: 2.25rem;
   margin-top: 0.75rem;
+  color: #ffffff;
 }
 
 .experiments__header p {
   margin-top: 0.35rem;
+  color: #94a3b8;
 }
 
 .back-link {
   font-size: 0.95rem;
-  color: #777;
+  color: #94a3b8;
 }
 
 .back-link:hover {
-  color: #fff;
+  color: #ffffff;
 }
 
 .experiments__status {
@@ -99,38 +107,42 @@ body.page-experiments {
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.15rem;
 }
 
 .tile {
   display: flex;
   flex-direction: column;
   aspect-ratio: 1;
-  padding: 1.1rem;
-  border: 1px solid #2a2a2a;
-  background: #141414;
+  padding: 1.25rem;
+  border: 1px solid #383f4a;
+  background: #282c34;
   color: inherit;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
 .tile:hover {
-  border-color: #555;
-  background: #1a1a1a;
-  color: inherit;
+  border-color: #5c6677;
+  background: #323742;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
 .tile__title {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: #ffffff;
   margin-bottom: 0.4rem;
 }
 
 .tile__desc {
   font-size: 0.9rem;
-  color: #888;
-  line-height: 1.35;
+  color: #94a3b8;
+  line-height: 1.4;
   flex: 1;
 }
 
@@ -146,23 +158,26 @@ body.page-experiments {
 .tile__status {
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #aaa;
-  border: 1px solid #333;
-  padding: 0.15rem 0.4rem;
+  color: #cbd5e1;
+  border: 1px solid #4a5362;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
 }
 
 .tile[data-status="live"] .tile__status {
-  color: #9cba9c;
-  border-color: #3a4a3a;
+  color: #86efac;
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
 }
 
 .tile[data-status="archived"] .tile__status {
-  color: #777;
-  border-color: #2a2a2a;
+  color: #94a3b8;
+  border-color: #4a5362;
 }
 
 .tile__tech {
-  color: #666;
+  color: #818cf8;
 }
 
 /* Header & Auth Navigation */
@@ -179,11 +194,12 @@ body.page-experiments {
   display: inline-flex;
   align-items: center;
   gap: 0.85rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: #2a2f38;
   padding: 0.35rem 0.5rem 0.35rem 0.75rem;
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid #424957;
   font-size: 0.875rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .vesha-user-bar--guest {
@@ -191,7 +207,7 @@ body.page-experiments {
 }
 
 .vesha-guest-badge {
-  color: #888;
+  color: #a3acb9;
   font-size: 0.8rem;
   font-weight: 500;
 }
@@ -209,12 +225,12 @@ body.page-experiments {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: #fff;
   font-weight: 700;
   font-size: 0.8rem;
   text-transform: uppercase;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
 }
 
 .vesha-user-meta {
@@ -225,13 +241,13 @@ body.page-experiments {
 
 .vesha-user-name {
   font-weight: 600;
-  color: #f3f3f3;
+  color: #ffffff;
   font-size: 0.85rem;
 }
 
 .vesha-user-email {
   font-size: 0.72rem;
-  color: #777;
+  color: #94a3b8;
 }
 
 /* Buttons */
@@ -244,47 +260,47 @@ body.page-experiments {
   font-size: 0.875rem;
   font-weight: 500;
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
   text-decoration: none;
-  background: #262626;
-  color: #eee;
+  background: #383f4d;
+  color: #f1f5f9;
 }
 
 .vesha-btn:hover {
-  background: #333;
+  background: #454d5c;
   color: #fff;
 }
 
 .vesha-btn--primary {
-  background: #f0f0f0;
-  color: #111;
+  background: #ffffff;
+  color: #0f172a;
   font-weight: 600;
 }
 
 .vesha-btn--primary:hover {
-  background: #ffffff;
+  background: #f8fafc;
   color: #000;
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.25);
 }
 
 .vesha-btn--sm {
-  padding: 0.25rem 0.75rem;
+  padding: 0.28rem 0.85rem;
   font-size: 0.8rem;
   border-radius: 9999px;
 }
 
 .vesha-btn--outline {
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #aaa;
+  border-color: #4b5463;
+  color: #cbd5e1;
 }
 
 .vesha-btn--outline:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: #333a46;
+  border-color: #64748b;
   color: #fff;
 }
 
@@ -324,19 +340,19 @@ body.vesha-modal-open {
 .vesha-auth-modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(8px);
 }
 
 .vesha-auth-modal__dialog {
   position: relative;
   width: 100%;
-  max-width: 400px;
-  background: #141414;
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
+  max-width: 420px;
+  background: #282c34;
+  border: 1px solid #424957;
+  border-radius: 14px;
   padding: 2rem;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
   transform: translateY(12px) scale(0.98);
   transition: transform 0.2s ease;
 }
@@ -352,7 +368,7 @@ body.vesha-modal-open {
   background: transparent;
   border: none;
   font-size: 1.5rem;
-  color: #666;
+  color: #94a3b8;
   cursor: pointer;
   padding: 0.25rem;
   line-height: 1;
@@ -373,54 +389,54 @@ body.vesha-modal-open {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #777;
+  color: #818cf8;
   margin-bottom: 0.25rem;
 }
 
 .vesha-auth-modal__title {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #fff;
+  color: #ffffff;
   margin-bottom: 0.35rem;
 }
 
 .vesha-auth-modal__subtitle {
   font-size: 0.875rem;
-  color: #777;
+  color: #94a3b8;
 }
 
 /* Tabs */
 
 .vesha-auth-tabs {
   display: flex;
-  background: #0a0a0a;
-  padding: 3px;
-  border-radius: 8px;
+  background: #1e2229;
+  padding: 4px;
+  border-radius: 10px;
   margin-bottom: 1.25rem;
-  border: 1px solid #222;
+  border: 1px solid #363d4a;
 }
 
 .vesha-auth-tab {
   flex: 1;
   background: transparent;
   border: none;
-  color: #777;
-  padding: 0.5rem;
+  color: #94a3b8;
+  padding: 0.55rem;
   font-size: 0.85rem;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .vesha-auth-tab:hover {
-  color: #ccc;
+  color: #fff;
 }
 
 .vesha-auth-tab.is-active {
-  background: #222;
+  background: #353b47;
   color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 /* Forms */
@@ -440,49 +456,49 @@ body.vesha-modal-open {
 
 .vesha-form-group label {
   font-size: 0.8rem;
-  color: #aaa;
+  color: #cbd5e1;
   font-weight: 500;
 }
 
 .vesha-form-group input {
-  background: #0a0a0a;
-  border: 1px solid #282828;
+  background: #1e2229;
+  border: 1px solid #3a414f;
   color: #fff;
-  padding: 0.65rem 0.85rem;
-  border-radius: 6px;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
   font-size: 0.95rem;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .vesha-form-group input:focus {
-  border-color: #666;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+  border-color: #818cf8;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
 }
 
 .vesha-form-group input::placeholder {
-  color: #444;
+  color: #64748b;
 }
 
 /* Alerts */
 
 .vesha-auth-alert {
   padding: 0.65rem 0.85rem;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.85rem;
   margin-bottom: 1rem;
   text-align: left;
 }
 
 .vesha-auth-alert--error {
-  background: rgba(220, 38, 38, 0.12);
-  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
   color: #fca5a5;
 }
 
 .vesha-auth-alert--ok {
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.35);
   color: #86efac;
 }
 
@@ -499,13 +515,13 @@ body.vesha-modal-open {
 .vesha-auth-divider::after {
   content: '';
   flex: 1;
-  border-bottom: 1px solid #262626;
+  border-bottom: 1px solid #38404d;
 }
 
 .vesha-auth-divider span {
   padding: 0 0.65rem;
   font-size: 0.75rem;
-  color: #666;
+  color: #94a3b8;
   text-transform: uppercase;
 }
 
@@ -515,11 +531,11 @@ body.vesha-modal-open {
   justify-content: center;
   gap: 0.65rem;
   width: 100%;
-  background: #1f1f1f;
-  color: #eee;
-  border: 1px solid #333;
-  padding: 0.65rem;
-  border-radius: 6px;
+  background: #333945;
+  color: #f8fafc;
+  border: 1px solid #475060;
+  padding: 0.7rem;
+  border-radius: 8px;
   font-size: 0.875rem;
   font-weight: 500;
   text-decoration: none;
@@ -527,8 +543,7 @@ body.vesha-modal-open {
 }
 
 .vesha-google-btn:hover {
-  background: #282828;
-  border-color: #444;
+  background: #3d4554;
+  border-color: #5c667a;
   color: #fff;
 }
-

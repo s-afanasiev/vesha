@@ -3,33 +3,198 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Суммаризация видео или аудио — Vesha</title>
+  <title>Суммаризация видео и аудио — Vesha</title>
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="./summarize.css" />
 </head>
 <body class="page-experiments">
   <main class="experiments">
-    <header class="experiments__header">
+    <div class="experiments__nav">
       <a class="back-link" href="/experiments/">← Эксперименты</a>
-      <h1>Суммаризация видео или аудио</h1>
-      <p>Вставьте ссылку — на сервере yt-dlp снимет только звук, ffmpeg приведёт его к WAV 16 kHz.</p>
+      <div data-vesha-auth-widget></div>
+    </div>
+
+    <header class="experiments__header">
+      <div class="summarize-badge">AI & WebAudio Lab</div>
+      <h1>Суммаризация видео и аудио</h1>
+      <p>Извлекайте аудио из видео, транскрибируйте речь и получайте структурированные тезисы, таймкоды и задачи.</p>
     </header>
 
-    <p id="tools" class="summarize-tools">Проверяю yt-dlp и ffmpeg…</p>
+    <div class="summarize-controls-bar">
+      <div class="summarize-mode-selector">
+        <span class="summarize-mode-label">Режим обработки:</span>
+        <div class="summarize-mode-radios">
+          <label class="summarize-mode-opt">
+            <input type="radio" name="proc-mode" value="hybrid" checked />
+            <span>🤖 AI на сервере (Gemini / Whisper)</span>
+          </label>
+          <label class="summarize-mode-opt">
+            <input type="radio" name="proc-mode" value="client" />
+            <span>💻 В браузере (Локально / WebAudio)</span>
+          </label>
+        </div>
+      </div>
+      <div class="summarize-tools-pill" id="tools-status">Проверка инструментов…</div>
+    </div>
 
-    <form id="url-form" class="summarize-form">
-      <input type="url" id="url-input" name="url" required placeholder="https://…" autocomplete="off" />
-      <button type="submit" id="extract-btn">Вытянуть звук</button>
-    </form>
+    <!-- Input Mode Tabs -->
+    <section class="summarize-input-card">
+      <div class="summarize-tabs" role="tablist">
+        <button type="button" class="summarize-tab is-active" id="tab-file" role="tab" aria-selected="true" data-target="panel-file">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>Файл (Видео / Аудио)</span>
+        </button>
+        <button type="button" class="summarize-tab" id="tab-url" role="tab" aria-selected="false" data-target="panel-url">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span>Ссылка (YouTube / VK / URL)</span>
+        </button>
+        <button type="button" class="summarize-tab" id="tab-mic" role="tab" aria-selected="false" data-target="panel-mic">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          <span>Запись с микрофона</span>
+        </button>
+      </div>
+
+      <!-- Panel: File Upload -->
+      <div class="summarize-panel is-active" id="panel-file" role="tabpanel">
+        <label class="summarize-dropzone" id="file-dropzone">
+          <input type="file" id="file-input" accept="video/*,audio/*,.mp4,.mov,.webm,.mkv,.avi,.mp3,.wav,.m4a,.ogg,.aac,.flac" />
+          <div class="summarize-dropzone-inner">
+            <div class="summarize-drop-icon">
+              <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <p class="summarize-drop-title">Перетащите видео или аудио файл сюда или <u>выберите с диска</u></p>
+            <p class="summarize-drop-hint">MP4, WebM, MOV, AVI, MKV, MP3, WAV, M4A, OGG до 150 МБ</p>
+          </div>
+        </label>
+        <div class="summarize-file-chosen" id="file-chosen" hidden>
+          <div class="summarize-file-info">
+            <span class="summarize-file-icon">📄</span>
+            <div class="summarize-file-meta">
+              <strong id="file-name">filename.mp4</strong>
+              <span id="file-size">0 МБ</span>
+            </div>
+          </div>
+          <button type="button" class="summarize-clear-btn" id="file-clear">✕</button>
+        </div>
+      </div>
+
+      <!-- Panel: URL -->
+      <div class="summarize-panel" id="panel-url" role="tabpanel" hidden>
+        <div class="summarize-url-group">
+          <input type="url" id="url-input" placeholder="https://www.youtube.com/watch?v=... или ссылка на файл" autocomplete="off" />
+        </div>
+      </div>
+
+      <!-- Panel: Mic Record -->
+      <div class="summarize-panel" id="panel-mic" role="tabpanel" hidden>
+        <div class="summarize-mic-box">
+          <button type="button" class="summarize-mic-btn" id="mic-toggle-btn">
+            <span class="summarize-mic-ring"></span>
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <p id="mic-status-text">Нажмите для начала записи голоса</p>
+          <p id="mic-timer" class="summarize-mic-timer" hidden>00:00</p>
+        </div>
+      </div>
+
+      <div class="summarize-submit-row">
+        <button type="button" class="vesha-btn vesha-btn--primary" id="process-btn">
+          <span>Запустить суммаризацию</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Pipeline Steps Indicator -->
+    <div class="summarize-pipeline" id="pipeline" hidden>
+      <div class="pipeline-step" id="step-extract" data-status="pending">
+        <div class="pipeline-step__num">1</div>
+        <div class="pipeline-step__info">
+          <strong>Звук</strong>
+          <span>Извлечение аудио</span>
+        </div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step" id="step-stt" data-status="pending">
+        <div class="pipeline-step__num">2</div>
+        <div class="pipeline-step__info">
+          <strong>Текст</strong>
+          <span>Распознавание речи</span>
+        </div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step" id="step-ai" data-status="pending">
+        <div class="pipeline-step__num">3</div>
+        <div class="pipeline-step__info">
+          <strong>AI Анализ</strong>
+          <span>Суммаризация</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status & Alerts -->
     <p id="status" class="summarize-status" hidden></p>
     <p id="error" class="summarize-error" hidden></p>
 
+    <!-- Results Section -->
     <section id="result" class="summarize-result" hidden>
-      <h2 id="result-title"></h2>
-      <p id="result-meta"></p>
-      <audio id="player" controls></audio>
+      <!-- Media Player & Header -->
+      <div class="summarize-result-head">
+        <div class="summarize-result-info">
+          <h2 id="result-title">Результат суммаризации</h2>
+          <div class="summarize-meta-tags" id="result-meta-tags"></div>
+        </div>
+        <div class="summarize-actions-top">
+          <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="copy-md-btn">📋 Скопировать Markdown</button>
+          <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="download-txt-btn">💾 Скачать TXT</button>
+        </div>
+      </div>
+
+      <!-- Audio Player Card -->
+      <div class="summarize-player-card">
+        <audio id="player" controls></audio>
+      </div>
+
+      <!-- Result Content Tabs -->
+      <div class="summarize-output-tabs" role="tablist">
+        <button type="button" class="output-tab is-active" data-view="tldr">⚡ Краткая суть</button>
+        <button type="button" class="output-tab" data-view="keypoints">📌 Тезисы</button>
+        <button type="button" class="output-tab" data-view="timeline">⏱️ Таймкоды и главы</button>
+        <button type="button" class="output-tab" data-view="actions">📝 Задачи и выводы</button>
+        <button type="button" class="output-tab" data-view="transcript">📜 Полная расшифровка</button>
+      </div>
+
+      <!-- View: TLDR -->
+      <div class="output-panel is-active" id="view-tldr">
+        <div class="output-box output-box--highlight" id="output-tldr"></div>
+      </div>
+
+      <!-- View: Keypoints -->
+      <div class="output-panel" id="view-keypoints" hidden>
+        <ul class="output-keypoints-list" id="output-keypoints"></ul>
+      </div>
+
+      <!-- View: Timeline -->
+      <div class="output-panel" id="view-timeline" hidden>
+        <div class="output-timeline-list" id="output-timeline"></div>
+      </div>
+
+      <!-- View: Actions -->
+      <div class="output-panel" id="view-actions" hidden>
+        <ul class="output-actions-list" id="output-actions"></ul>
+      </div>
+
+      <!-- View: Transcript -->
+      <div class="output-panel" id="view-transcript" hidden>
+        <div class="transcript-toolbar">
+          <input type="search" id="transcript-search" placeholder="Поиск по расшифровке…" />
+          <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="copy-transcript-btn">Скопировать текст</button>
+        </div>
+        <div class="transcript-content" id="output-transcript"></div>
+      </div>
     </section>
   </main>
+
+  <script src="/auth.js"></script>
   <script src="./summarize.js"></script>
 </body>
 </html>
