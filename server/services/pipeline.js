@@ -1,14 +1,30 @@
+const fs = require('fs');
 const path = require('path');
 const db = require('../db');
 const { extractClothing } = require('./vision');
 const { runSearch } = require('./search');
 const { buildSearchPlan } = require('./queryBuilder');
+const { removeBackgroundFromLook } = require('./removeBg');
 const config = require('../config');
+
+function cutoutPathForLook(lookId) {
+  return path.join(config.uploadDir, `${lookId}-cutout.png`);
+}
+
+function deleteCutoutFile(lookId) {
+  const p = cutoutPathForLook(lookId);
+  try {
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (_) {
+    // ignore
+  }
+}
 
 async function clearLookDerivedData(lookId) {
   await db.query(`DELETE FROM offers WHERE look_id = $1`, [lookId]);
   await db.query(`DELETE FROM search_jobs WHERE look_id = $1`, [lookId]);
   await db.query(`DELETE FROM ai_extractions WHERE look_id = $1`, [lookId]);
+  deleteCutoutFile(lookId);
 }
 
 async function processLook(lookId, { clearPrevious = false } = {}) {
@@ -74,6 +90,28 @@ async function processLook(lookId, { clearPrevious = false } = {}) {
         : extraction.search_queries && extraction.search_queries.length
           ? extraction.search_queries
           : ['купить одежду'];
+
+    if (isClothing && attributes.bbox) {
+      try {
+        const cutout = await removeBackgroundFromLook({
+          imagePath: absPath,
+          bbox: attributes.bbox,
+          lookId,
+        });
+        if (cutout) {
+          attributes.cutout = {
+            filename: cutout.filename,
+            model: cutout.model,
+            bytes: cutout.bytes,
+            crop: cutout.crop,
+            url: `/api/looks/${lookId}/cutout`,
+          };
+        }
+      } catch (err) {
+        console.error('removeBg failed', lookId, err.message);
+        attributes.cutout_error = err.message || 'Ошибка remove-bg';
+      }
+    }
 
     await db.query(
       `INSERT INTO ai_extractions (look_id, provider, model, raw_response, attributes, search_queries)
@@ -157,4 +195,4 @@ async function processLook(lookId, { clearPrevious = false } = {}) {
   }
 }
 
-module.exports = { processLook, clearLookDerivedData };
+module.exports = { processLook, clearLookDerivedData, cutoutPathForLook };

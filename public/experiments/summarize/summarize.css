@@ -1,0 +1,68 @@
+.summarize-form {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.summarize-form input[type="url"] {
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #2a2a2a;
+  background: #141414;
+  color: #e8e8e8;
+  font: inherit;
+}
+
+.summarize-form button {
+  padding: 0.65rem 1rem;
+  border: 1px solid #3a3a3a;
+  background: #1c1c1c;
+  color: #e8e8e8;
+  font: inherit;
+  cursor: pointer;
+}
+
+.summarize-form button:hover:not(:disabled) {
+  border-color: #666;
+  background: #242424;
+}
+
+.summarize-form button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.summarize-tools,
+.summarize-status,
+.summarize-error {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 1rem;
+}
+
+.summarize-error {
+  color: #c97a7a;
+}
+
+.summarize-result {
+  border: 1px solid #2a2a2a;
+  background: #141414;
+  padding: 1rem;
+}
+
+.summarize-result h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.summarize-result p {
+  font-size: 0.9rem;
+  margin-bottom: 0.85rem;
+}
+
+.summarize-result audio {
+  width: 100%;
+}

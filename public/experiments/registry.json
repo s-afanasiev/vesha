@@ -15,6 +15,14 @@
       "href": "/experiments/podborka/",
       "status": "wip",
       "tech": ["js", "vision", "postgres"]
+    },
+    {
+      "id": "summarize",
+      "title": "Суммаризация видео или аудио",
+      "description": "Краткое содержание из ролика или записи",
+      "href": "/experiments/summarize/",
+      "status": "wip",
+      "tech": ["js", "yt-dlp", "ffmpeg"]
     }
   ]
 }

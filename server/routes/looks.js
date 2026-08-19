@@ -6,7 +6,7 @@ const { randomUUID } = require('crypto');
 const db = require('../db');
 const config = require('../config');
 const quota = require('../services/quota');
-const { processLook } = require('../services/pipeline');
+const { processLook, cutoutPathForLook } = require('../services/pipeline');
 const {
   hashFile,
   findExistingLookByHash,
@@ -270,6 +270,26 @@ router.get('/:id/image', async (req, res, next) => {
     const abs = path.join(config.uploadDir, path.basename(image.storage_path));
     if (!fs.existsSync(abs)) return res.status(404).json({ error: 'Файл отсутствует' });
     res.type(image.mime);
+    fs.createReadStream(abs).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Transparent PNG cutout (bbox crop → Replicate remove-bg). */
+router.get('/:id/cutout', async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`SELECT * FROM looks WHERE id = $1`, [req.params.id]);
+    const look = rows[0];
+    if (!look) return res.status(404).json({ error: 'Не найдено' });
+    if (!canAccessLook(look, req)) {
+      return res.status(403).json({ error: 'Нет доступа' });
+    }
+    const abs = cutoutPathForLook(look.id);
+    if (!fs.existsSync(abs)) {
+      return res.status(404).json({ error: 'Cutout ещё нет' });
+    }
+    res.type('image/png');
     fs.createReadStream(abs).pipe(res);
   } catch (err) {
     next(err);

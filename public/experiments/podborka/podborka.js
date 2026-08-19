@@ -42,6 +42,10 @@
   const bboxBox = document.getElementById('bbox-box');
   const bboxMeta = document.getElementById('bbox-meta');
   const bboxHint = document.getElementById('bbox-hint');
+  const cutoutPanel = document.getElementById('cutout-panel');
+  const cutoutImage = document.getElementById('cutout-image');
+  const cutoutHint = document.getElementById('cutout-hint');
+  const cutoutMeta = document.getElementById('cutout-meta');
   const offersEl = document.getElementById('offers');
   const historyPanel = document.getElementById('history-panel');
   const historyCarousel = document.getElementById('history-carousel');
@@ -145,6 +149,31 @@
     bboxImage.src = url;
   }
 
+  function renderCutout(lookId, attrs) {
+    if (!cutoutPanel) return;
+    const cutout = attrs && attrs.cutout;
+    const err = attrs && attrs.cutout_error;
+    if (!lookId || (!cutout && !err)) {
+      cutoutPanel.hidden = true;
+      return;
+    }
+    cutoutPanel.hidden = false;
+    if (err && !cutout) {
+      cutoutHint.textContent = 'Не удалось убрать фон';
+      cutoutMeta.textContent = err;
+      cutoutImage.removeAttribute('src');
+      cutoutImage.alt = '';
+      return;
+    }
+    cutoutHint.textContent = 'Кроп по bbox → Replicate remove-bg';
+    cutoutMeta.textContent = cutout.model
+      ? 'модель: ' + cutout.model + (cutout.bytes ? ' · ' + Math.round(cutout.bytes / 1024) + ' KB' : '')
+      : '';
+    cutoutImage.alt = 'Вещь без фона';
+    cutoutImage.src =
+      '/api/looks/' + encodeURIComponent(lookId) + '/cutout?t=' + Date.now();
+  }
+
   function renderCopyList(items) {
     const ul = document.createElement('ul');
     ul.className = 'podborka__copy-list';
@@ -180,6 +209,8 @@
       'distinctive_features',
       'search_queries',
       'search_queries_sent',
+      'cutout',
+      'cutout_error',
     ]);
     const table = document.createElement('table');
     table.className = 'podborka__attrs-table';
@@ -452,12 +483,15 @@
       renderBboxPreview(look.id, bbox);
       if (notClothing) {
         colorsPanel.hidden = true;
+        if (cutoutPanel) cutoutPanel.hidden = true;
       } else {
         renderColors(look.id, bbox);
+        renderCutout(look.id, attrs);
       }
     } else {
       bboxPanel.hidden = true;
       colorsPanel.hidden = true;
+      if (cutoutPanel) cutoutPanel.hidden = true;
     }
 
     offersEl.innerHTML = '';

@@ -28,7 +28,14 @@ function publicUser(user) {
 
 router.get('/me', async (req, res, next) => {
   try {
-    const usage = await quota.getUsage(req);
+    let usage = {};
+    if (req.guest || req.user) {
+      try {
+        usage = await quota.getUsage(req);
+      } catch (err) {
+        usage = {};
+      }
+    }
     res.json({
       user: req.user || null,
       guestId: req.guest ? req.guest.id : null,
@@ -120,10 +127,14 @@ router.get('/google', (req, res) => {
   if (!googleClient) {
     return res.status(503).json({ error: 'Google OAuth не настроен' });
   }
+  const returnTo = typeof req.query.returnTo === 'string' && req.query.returnTo.startsWith('/') && !req.query.returnTo.startsWith('//')
+    ? req.query.returnTo
+    : '/experiments/';
   const url = googleClient.generateAuthUrl({
     access_type: 'online',
     scope: ['openid', 'email', 'profile'],
     prompt: 'select_account',
+    state: returnTo,
   });
   res.redirect(url);
 });
@@ -193,7 +204,12 @@ router.get('/google/callback', async (req, res, next) => {
       userAgent: req.get('user-agent'),
       ip: req.ip,
     });
-    res.redirect('/experiments/podborka/');
+
+    const state = req.query.state;
+    const returnTo = typeof state === 'string' && state.startsWith('/') && !state.startsWith('//')
+      ? state
+      : '/experiments/';
+    res.redirect(returnTo);
   } catch (err) {
     next(err);
   }

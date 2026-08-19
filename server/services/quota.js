@@ -5,7 +5,8 @@ async function getSubject(req) {
   if (req.user) {
     return { subjectType: 'user', subjectId: req.user.id, isGuest: false };
   }
-  return { subjectType: 'guest', subjectId: req.guest.id, isGuest: true };
+  const guestId = req.guest ? req.guest.id : '00000000-0000-0000-0000-000000000000';
+  return { subjectType: 'guest', subjectId: guestId, isGuest: true };
 }
 
 async function getQuotaRow(subjectType, subjectId) {

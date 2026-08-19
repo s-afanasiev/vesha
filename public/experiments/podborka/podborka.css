@@ -411,12 +411,37 @@ body.page-podborka {
 
 .podborka__colors,
 .podborka__attrs,
-.podborka__bbox-panel {
+.podborka__bbox-panel,
+.podborka__cutout-panel {
   margin: 0 0 1.25rem;
   padding: 0.9rem 1rem;
   border: 1px solid var(--pb-line);
   border-radius: 10px;
   background: var(--pb-surface);
+}
+
+.podborka__cutout-frame {
+  display: inline-block;
+  max-width: min(360px, 100%);
+  margin-top: 0.75rem;
+  border: 1px solid var(--pb-line);
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+  background-color: #d7ddd8;
+  background-image:
+    linear-gradient(45deg, #c2cac4 25%, transparent 25%),
+    linear-gradient(-45deg, #c2cac4 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #c2cac4 75%),
+    linear-gradient(-45deg, transparent 75%, #c2cac4 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.podborka__cutout-frame img {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .podborka__bbox-frame {

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Суммаризация видео или аудио — Vesha</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./summarize.css" />
+</head>
+<body class="page-experiments">
+  <main class="experiments">
+    <header class="experiments__header">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <h1>Суммаризация видео или аудио</h1>
+      <p>Вставьте ссылку — на сервере yt-dlp снимет только звук, ffmpeg приведёт его к WAV 16 kHz.</p>
+    </header>
+
+    <p id="tools" class="summarize-tools">Проверяю yt-dlp и ffmpeg…</p>
+
+    <form id="url-form" class="summarize-form">
+      <input type="url" id="url-input" name="url" required placeholder="https://…" autocomplete="off" />
+      <button type="submit" id="extract-btn">Вытянуть звук</button>
+    </form>
+    <p id="status" class="summarize-status" hidden></p>
+    <p id="error" class="summarize-error" hidden></p>
+
+    <section id="result" class="summarize-result" hidden>
+      <h2 id="result-title"></h2>
+      <p id="result-meta"></p>
+      <audio id="player" controls></audio>
+    </section>
+  </main>
+  <script src="./summarize.js"></script>
+</body>
+</html>

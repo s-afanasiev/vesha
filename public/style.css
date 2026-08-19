@@ -51,6 +51,12 @@ a:hover {
   border-bottom-color: #fff;
 }
 
+.home-top-bar {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+}
+
 /* Experiments page */
 
 body.page-experiments {
@@ -158,3 +164,371 @@ body.page-experiments {
 .tile__tech {
   color: #666;
 }
+
+/* Header & Auth Navigation */
+
+.experiments__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.vesha-user-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.875rem;
+}
+
+.vesha-user-bar--guest {
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+}
+
+.vesha-guest-badge {
+  color: #888;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.vesha-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.vesha-user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+}
+
+.vesha-user-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.vesha-user-name {
+  font-weight: 600;
+  color: #f3f3f3;
+  font-size: 0.85rem;
+}
+
+.vesha-user-email {
+  font-size: 0.72rem;
+  color: #777;
+}
+
+/* Buttons */
+
+.vesha-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  background: #262626;
+  color: #eee;
+}
+
+.vesha-btn:hover {
+  background: #333;
+  color: #fff;
+}
+
+.vesha-btn--primary {
+  background: #f0f0f0;
+  color: #111;
+  font-weight: 600;
+}
+
+.vesha-btn--primary:hover {
+  background: #ffffff;
+  color: #000;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+.vesha-btn--sm {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: 9999px;
+}
+
+.vesha-btn--outline {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #aaa;
+}
+
+.vesha-btn--outline:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.vesha-btn--block {
+  width: 100%;
+}
+
+.vesha-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Auth Modal */
+
+body.vesha-modal-open {
+  overflow: hidden;
+}
+
+.vesha-auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.vesha-auth-modal.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.vesha-auth-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+}
+
+.vesha-auth-modal__dialog {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transform: translateY(12px) scale(0.98);
+  transition: transform 0.2s ease;
+}
+
+.vesha-auth-modal.is-open .vesha-auth-modal__dialog {
+  transform: translateY(0) scale(1);
+}
+
+.vesha-auth-modal__close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  color: #666;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.vesha-auth-modal__close:hover {
+  color: #fff;
+}
+
+.vesha-auth-modal__header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.vesha-auth-modal__brand {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #777;
+  margin-bottom: 0.25rem;
+}
+
+.vesha-auth-modal__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.35rem;
+}
+
+.vesha-auth-modal__subtitle {
+  font-size: 0.875rem;
+  color: #777;
+}
+
+/* Tabs */
+
+.vesha-auth-tabs {
+  display: flex;
+  background: #0a0a0a;
+  padding: 3px;
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+  border: 1px solid #222;
+}
+
+.vesha-auth-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #777;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vesha-auth-tab:hover {
+  color: #ccc;
+}
+
+.vesha-auth-tab.is-active {
+  background: #222;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Forms */
+
+.vesha-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vesha-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+}
+
+.vesha-form-group label {
+  font-size: 0.8rem;
+  color: #aaa;
+  font-weight: 500;
+}
+
+.vesha-form-group input {
+  background: #0a0a0a;
+  border: 1px solid #282828;
+  color: #fff;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vesha-form-group input:focus {
+  border-color: #666;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.vesha-form-group input::placeholder {
+  color: #444;
+}
+
+/* Alerts */
+
+.vesha-auth-alert {
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.vesha-auth-alert--error {
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #fca5a5;
+}
+
+.vesha-auth-alert--ok {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+/* Divider & Google */
+
+.vesha-auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 1.25rem 0;
+}
+
+.vesha-auth-divider::before,
+.vesha-auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #262626;
+}
+
+.vesha-auth-divider span {
+  padding: 0 0.65rem;
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.vesha-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  width: 100%;
+  background: #1f1f1f;
+  color: #eee;
+  border: 1px solid #333;
+  padding: 0.65rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.vesha-google-btn:hover {
+  background: #282828;
+  border-color: #444;
+  color: #fff;
+}
+

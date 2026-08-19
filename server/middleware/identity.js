@@ -100,11 +100,17 @@ async function destroySession(req, res) {
 async function identityMiddleware(req, res, next) {
   try {
     await loadSession(req);
-    await ensureGuest(req, res);
-    next();
   } catch (err) {
-    next(err);
+    req.user = null;
   }
+
+  try {
+    await ensureGuest(req, res);
+  } catch (err) {
+    req.guest = null;
+  }
+
+  next();
 }
 
 function requireUser(req, res, next) {

@@ -8,14 +8,18 @@
 </head>
 <body class="page-experiments">
   <main class="experiments">
-    <header class="experiments__header">
+    <div class="experiments__nav">
       <a class="back-link" href="/">← Vesha</a>
+      <div data-vesha-auth-widget></div>
+    </div>
+    <header class="experiments__header">
       <h1>Эксперименты</h1>
       <p>Произвольные песочницы. Каждая плитка — отдельный проект.</p>
     </header>
     <div id="grid" class="tiles" aria-live="polite"></div>
     <p id="status" class="experiments__status" hidden></p>
   </main>
+  <script src="/auth.js"></script>
   <script>
     const grid = document.getElementById('grid');
     const statusEl = document.getElementById('status');
