@@ -23,6 +23,14 @@
       "href": "/experiments/summarize/",
       "status": "wip",
       "tech": ["js", "yt-dlp", "ffmpeg"]
+    },
+    {
+      "id": "extract-audio",
+      "title": "Извлечение аудио",
+      "description": "Достаём звук из видео через локальный ffmpeg.exe",
+      "href": "/experiments/extract-audio/",
+      "status": "wip",
+      "tech": ["js", "ffmpeg"]
     }
   ]
 }

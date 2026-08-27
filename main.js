@@ -8,17 +8,20 @@ const { identityMiddleware } = require('./server/middleware/identity');
 const authRoutes = require('./server/routes/auth');
 const looksRoutes = require('./server/routes/looks');
 const summarizeRoutes = require('./server/routes/summarize');
+const extractAudioRoutes = require('./server/routes/extractAudio');
 
 const app = express();
 
 fs.mkdirSync(config.uploadDir, { recursive: true });
 fs.mkdirSync(config.summarizeDir, { recursive: true });
+fs.mkdirSync(config.extractAudioDir, { recursive: true });
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use('/api/summarize', summarizeRoutes);
+app.use('/api/extract-audio', extractAudioRoutes);
 app.use('/api', identityMiddleware);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);

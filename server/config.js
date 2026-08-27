@@ -52,6 +52,14 @@ const config = {
   summarizeMaxDurationSec: intEnv('SUMMARIZE_MAX_DURATION_SEC', 3 * 60 * 60),
   summarizeTimeoutMs: intEnv('SUMMARIZE_TIMEOUT_MS', 10 * 60 * 1000),
   summarizeMaxFilesize: process.env.SUMMARIZE_MAX_FILESIZE || '80M',
+  extractAudioDir:
+    process.env.EXTRACT_AUDIO_DIR ||
+    require('path').join(
+      process.env.UPLOAD_DIR || require('path').join(__dirname, '..', 'uploads'),
+      'extract-audio'
+    ),
+  extractAudioTimeoutMs: intEnv('EXTRACT_AUDIO_TIMEOUT_MS', 30 * 60 * 1000),
+  extractAudioMaxFilesize: intEnv('EXTRACT_AUDIO_MAX_FILESIZE', 2 * 1024 * 1024 * 1024),
 };
 
 module.exports = config;

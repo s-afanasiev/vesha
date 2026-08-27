@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Извлечение аудио — Vesha</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./extract-audio.css" />
+</head>
+<body class="page-experiments page-extract-audio">
+  <main class="experiments">
+    <div class="experiments__nav">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div data-vesha-auth-widget></div>
+    </div>
+
+    <header class="experiments__header">
+      <div class="ea-badge">ffmpeg lab</div>
+      <h1>Извлечение аудио</h1>
+      <p>Укажите папку с локальным ffmpeg.exe, выберите видео и скачайте звук.</p>
+    </header>
+
+    <section class="ea-card">
+      <label class="ea-field">
+        <span class="ea-label">Папка с ffmpeg.exe</span>
+        <div class="ea-path-row">
+          <input
+            type="text"
+            id="ffmpeg-dir"
+            spellcheck="false"
+            autocomplete="off"
+            value="C:\CODE\VESHA\v1\bin\"
+            placeholder="C:\CODE\VESHA\v1\bin\"
+          />
+          <button type="button" class="vesha-btn vesha-btn--outline" id="probe-btn">Проверить</button>
+        </div>
+        <span class="ea-hint" id="ffmpeg-hint">Можно указать папку или полный путь к ffmpeg.exe</span>
+      </label>
+
+      <div class="ea-field">
+        <span class="ea-label">Видеофайл</span>
+        <label class="ea-dropzone" id="file-dropzone">
+          <input type="file" id="file-input" accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.wmv,.flv" />
+          <div class="ea-dropzone-inner">
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p>Перетащите видео сюда или <u>выберите файл</u></p>
+            <span>MP4, MOV, WebM, MKV, AVI до 2 ГБ</span>
+          </div>
+        </label>
+        <div class="ea-file-chosen" id="file-chosen" hidden>
+          <div class="ea-file-meta">
+            <strong id="file-name"></strong>
+            <span id="file-size"></span>
+          </div>
+          <button type="button" class="ea-clear" id="file-clear" aria-label="Убрать файл">✕</button>
+        </div>
+      </div>
+
+      <div class="ea-field">
+        <div class="ea-label-row">
+          <span class="ea-label">Команда ffmpeg</span>
+          <div class="ea-cmd-actions">
+            <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="copy-cmd-btn">Копировать</button>
+            <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="reset-cmd-btn">Сбросить</button>
+          </div>
+        </div>
+        <textarea
+          id="ffmpeg-command"
+          spellcheck="false"
+          autocomplete="off"
+          rows="4"
+          placeholder="Команда появится после указания ffmpeg и файла"
+        ></textarea>
+        <span class="ea-hint">Буквальная команда, которую запустит сервер. Можно править. Плейсхолдеры {ffmpeg}, {input}, {output} подставятся сами. Пути -i и выходного файла сервер всё равно заменит на загруженный ролик.</span>
+      </div>
+
+      <button type="button" class="vesha-btn vesha-btn--primary ea-extract" id="extract-btn">
+        Извлечь звук
+      </button>
+    </section>
+
+    <section class="ea-progress" id="progress-panel" hidden>
+      <div class="ea-progress-head">
+        <strong id="progress-label">Извлечение…</strong>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="ea-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
+        <div class="ea-bar__fill" id="progress-fill"></div>
+      </div>
+      <pre class="ea-ran-cmd" id="ran-command" hidden></pre>
+    </section>
+
+    <p class="ea-error" id="error" hidden></p>
+
+    <section class="ea-result" id="result" hidden>
+      <div class="ea-result-head">
+        <div>
+          <h2>Готово</h2>
+          <p id="result-meta"></p>
+        </div>
+        <a class="vesha-btn vesha-btn--primary" id="download-btn" href="#" download>Скачать</a>
+      </div>
+      <audio id="player" controls></audio>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="./extract-audio.js"></script>
+</body>
+</html>
