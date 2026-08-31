@@ -11,7 +11,7 @@ const {
   assertHttpUrl,
 } = require('./extractAudio');
 const { summarizeWithGemini } = require('./aiSummarize');
-const { buildUrlSteps, buildFileSteps, patchStep, markDone } = require('./jobSteps');
+const { buildUrlSteps, buildFileSteps, patchStep, markDone, geminiCommand } = require('./jobSteps');
 
 const MAX_QUEUE = 30;
 
@@ -115,7 +115,9 @@ async function runJob(job) {
   const afterExtract = readMeta(job.id) || {};
   let steps = patchStep(afterExtract.steps || [], 'summarize', {
     status: 'active',
-    progress: null,
+    progress: 0,
+    indeterminate: true,
+    command: geminiCommand(),
     detail: 'Отправляем audio.wav в Gemini…',
   });
   persist(job.id, { status: 'running', phase: 'summarizing', steps });
@@ -133,6 +135,14 @@ async function runJob(job) {
     audioPath,
     audioMime,
     transcriptText: '',
+    onProgress: (patch) => {
+      steps = patchStep(steps, 'summarize', {
+        status: 'active',
+        indeterminate: true,
+        ...patch,
+      });
+      persist(job.id, { steps, phase: 'summarizing' });
+    },
   });
 
   steps = markDone(steps, 'summarize', ai.model ? `Готово (${ai.provider} / ${ai.model})` : 'Готово');

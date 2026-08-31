@@ -55,9 +55,13 @@ function parseJsonLoose(text) {
 }
 
 async function summarizeWithGemini(options = {}) {
-  const { audioPath, audioMime = 'audio/wav', transcriptText = '' } = options;
+  const { audioPath, audioMime = 'audio/wav', transcriptText = '', onProgress } = options;
+  const report = (patch) => {
+    if (typeof onProgress === 'function') onProgress(patch);
+  };
 
   if (!config.geminiApiKey) {
+    report({ detail: 'GEMINI_API_KEY нет — отдаём демонстрационный ответ.' });
     return {
       provider: 'mock',
       model: 'mock',
@@ -69,6 +73,11 @@ async function summarizeWithGemini(options = {}) {
   const parts = [{ text: SUMMARIZE_PROMPT }];
 
   if (audioPath && fs.existsSync(audioPath)) {
+    const stat = fs.statSync(audioPath);
+    const mb = (stat.size / (1024 * 1024)).toFixed(1);
+    report({
+      detail: `Читаем ${path.basename(audioPath)} (${mb} МБ) и кодируем для Gemini…`,
+    });
     const b64 = fs.readFileSync(audioPath).toString('base64');
     parts.push({
       inlineData: {
@@ -87,6 +96,14 @@ async function summarizeWithGemini(options = {}) {
   let lastErr;
   for (const model of models) {
     try {
+      report({
+        detail: `Отправляем audio.wav в ${model} и ждём JSON с расшифровкой…`,
+        command: [
+          `POST https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          '  Content-Type: application/json',
+          '  parts: prompt (суммаризация на русском) + inlineData audio.wav',
+        ].join('\n'),
+      });
       const url =
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
         `?key=${encodeURIComponent(config.geminiApiKey)}`;
@@ -119,10 +136,18 @@ async function summarizeWithGemini(options = {}) {
       };
     } catch (err) {
       lastErr = err;
+      report({
+        detail: `${model} не сработал: ${err.message}. Пробуем следующую модель…`,
+      });
     }
   }
 
   console.warn('Gemini summarize failed, returning fallback:', lastErr?.message);
+  report({
+    detail: lastErr
+      ? `Gemini не ответил (${lastErr.message}). Показываем запасной ответ.`
+      : 'Gemini не ответил. Показываем запасной ответ.',
+  });
   return {
     provider: 'fallback',
     model: 'mock',

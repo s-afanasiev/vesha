@@ -9,22 +9,40 @@ function formatCommand(binName, args) {
   return [binName, ...args.map(quoteArg)].join(' ');
 }
 
-function buildUrlSteps(url) {
-  const ytdlpShow = [
+function geminiCommand(model) {
+  const name = model || 'gemini-2.5-flash';
+  return [
+    `POST https://generativelanguage.googleapis.com/v1beta/models/${name}:generateContent`,
+    '  Content-Type: application/json',
+    '  parts: prompt (суммаризация на русском) + inlineData audio.wav',
+  ].join('\n');
+}
+
+function ytdlpShowArgs(url, cookiesBrowser = 'firefox') {
+  return [
     '--js-runtimes',
     'node',
-    '--cookies-from-browser',
-    'firefox',
+    ...(cookiesBrowser ? ['--cookies-from-browser', cookiesBrowser] : []),
+    '--force-ipv4',
+    '--ffmpeg-location',
+    'ffmpeg',
     '-f',
     'bestvideo+bestaudio/best',
     '--no-playlist',
     '--newline',
+    '--progress',
+    '--no-mtime',
+    '-o',
+    'source.%(ext)s',
     url,
   ];
-  const ffmpegShow = [
+}
+
+function ffmpegPreviewArgs(input) {
+  return [
     '-y',
     '-i',
-    'source.*',
+    input || 'source.*',
     '-vn',
     '-ar',
     '16000',
@@ -32,67 +50,103 @@ function buildUrlSteps(url) {
     '1',
     '-c:a',
     'pcm_s16le',
+    '-nostats',
+    '-progress',
+    'pipe:1',
     'audio.wav',
   ];
+}
+
+function emptyDownloadStats() {
+  return {
+    phase: 'pending',
+    phaseLabel: 'Ещё не начался. После запуска здесь появятся этап, скорость и размер.',
+    items: [
+      { key: 'speed', label: 'Скорость', value: '—' },
+      { key: 'size', label: 'Скачано', value: '—' },
+      { key: 'eta', label: 'Осталось', value: '—' },
+      { key: 'elapsed', label: 'Прошло', value: '—' },
+    ],
+    log: [],
+  };
+}
+
+function makeStep({ n, id, title, tool, why, command, waitHint, detail, stats }) {
+  return {
+    n,
+    id,
+    title,
+    tool,
+    why,
+    command,
+    waitHint,
+    detail,
+    stats: stats || null,
+    status: 'pending',
+    progress: 0,
+    indeterminate: false,
+  };
+}
+
+function buildUrlSteps(url) {
   return [
-    {
+    makeStep({
+      n: 1,
       id: 'download',
       title: 'Скачивание видео',
-      command: formatCommand('yt-dlp', ytdlpShow),
-      status: 'pending',
-      progress: null,
-      detail: 'Если YouTube отвечает 403, берём cookies из Firefox и JS-runtime Node.',
-    },
-    {
+      tool: 'yt-dlp',
+      why: 'Шаг качает ролик через yt-dlp (видео+аудио). Ниже — живой этап: соединение это или уже байты файла, плюс скорость.',
+      command: formatCommand('yt-dlp', ytdlpShowArgs(url)),
+      waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+      detail: 'В очереди. Как только сервер освободится — запустим эту команду.',
+      stats: emptyDownloadStats(),
+    }),
+    makeStep({
+      n: 2,
       id: 'ffmpeg',
       title: 'Извлечение звука',
-      command: formatCommand('ffmpeg', ffmpegShow),
-      status: 'pending',
-      progress: null,
-      detail: 'После скачивания вырежем аудио и приведём к WAV 16 kHz mono.',
-    },
-    {
+      tool: 'ffmpeg',
+      why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
+      command: formatCommand('ffmpeg', ffmpegPreviewArgs('source.*')),
+      waitHint: 'Ещё не начался. Стартует сразу после скачивания.',
+      detail: 'Ждёт файл source.* от yt-dlp.',
+    }),
+    makeStep({
+      n: 3,
       id: 'summarize',
       title: 'Распознавание речи и суммаризация',
-      command: 'Gemini generateContent ← audio.wav',
-      status: 'pending',
-      progress: null,
-      detail: 'Модель получит WAV и вернёт расшифровку, тезисы и таймкоды.',
-    },
+      tool: 'Gemini',
+      why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
+      command: geminiCommand(),
+      waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+      detail: 'Ждёт audio.wav после ffmpeg.',
+    }),
   ];
 }
 
 function buildFileSteps(filename) {
   const src = filename || 'source.*';
   return [
-    {
+    makeStep({
+      n: 1,
       id: 'ffmpeg',
       title: 'Извлечение звука',
-      command: formatCommand('ffmpeg', [
-        '-y',
-        '-i',
-        src,
-        '-vn',
-        '-ar',
-        '16000',
-        '-ac',
-        '1',
-        '-c:a',
-        'pcm_s16le',
-        'audio.wav',
-      ]),
-      status: 'pending',
-      progress: null,
-      detail: 'Из загруженного файла вырежем дорожку и сделаем WAV 16 kHz mono.',
-    },
-    {
+      tool: 'ffmpeg',
+      why: 'Из загруженного файла вырежем дорожку и сделаем WAV 16 kHz mono.',
+      command: formatCommand('ffmpeg', ffmpegPreviewArgs(src)),
+      waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+      detail: 'В очереди. Как только сервер освободится — запустим эту команду.',
+    }),
+    makeStep({
+      n: 2,
       id: 'summarize',
       title: 'Распознавание речи и суммаризация',
-      command: 'Gemini generateContent ← audio.wav',
-      status: 'pending',
-      progress: null,
-      detail: 'Модель получит WAV и вернёт расшифровку, тезисы и таймкоды.',
-    },
+      tool: 'Gemini',
+      why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
+      command: geminiCommand(),
+      waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+      detail: 'Ждёт audio.wav после ffmpeg.',
+    }),
   ];
 }
 
@@ -104,12 +158,17 @@ function markDone(steps, id, detail) {
   return patchStep(steps, id, {
     status: 'done',
     progress: 100,
+    indeterminate: false,
     detail: detail || undefined,
   });
 }
 
 module.exports = {
+  emptyDownloadStats,
   formatCommand,
+  geminiCommand,
+  ytdlpShowArgs,
+  ffmpegPreviewArgs,
   buildUrlSteps,
   buildFileSteps,
   patchStep,

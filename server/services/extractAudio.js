@@ -3,7 +3,8 @@ const path = require('path');
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const { requireBins, run } = require('./mediaBins');
-const { formatCommand, patchStep, markDone } = require('./jobSteps');
+const { formatCommand, patchStep, markDone, ytdlpShowArgs } = require('./jobSteps');
+const { createYtdlpTracker } = require('./ytdlpProgress');
 
 const PRIVATE_HOST =
   /^(localhost|127\.|10\.|0\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1|\[::1\])/i;
@@ -66,21 +67,6 @@ function findSourceFile(dir) {
   return path.join(dir, hit || names[0]);
 }
 
-function lastLine(text) {
-  return String(text || '')
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .pop() || '';
-}
-
-function parseYtdlpPercent(text) {
-  const matches = String(text).matchAll(/\[download\]\s+(\d+(?:\.\d+)?)%/g);
-  let last = null;
-  for (const m of matches) last = Number(m[1]);
-  return Number.isFinite(last) ? last : null;
-}
-
 function parseFfmpegOutTimeMs(text) {
   const matches = String(text).matchAll(/out_time_ms=(\d+)/g);
   let last = null;
@@ -92,7 +78,7 @@ function createReporter(id, onProgress) {
   let lastWrite = 0;
   return (patch, force = false) => {
     const now = Date.now();
-    if (!force && now - lastWrite < 400) return;
+    if (!force && now - lastWrite < 150) return;
     lastWrite = now;
     const prev = readMeta(id) || { id };
     const next = { ...prev, ...patch, id };
@@ -120,15 +106,25 @@ function ytdlpDownloadArgs(url, bins, dir, { cookiesBrowser = 'firefox' } = {}) 
   const args = [
     '--js-runtimes',
     `node:${process.execPath}`,
+    '--force-ipv4',
     '--ffmpeg-location',
     bins.ffmpeg,
     '-f',
     'bestvideo+bestaudio/best',
     '--no-playlist',
     '--newline',
+    '--progress',
+    '--progress-delta',
+    '0.4',
     '--no-mtime',
     '--socket-timeout',
     '30',
+    '--print',
+    'before_dl:TITLE\t%(title)s',
+    '--print',
+    'before_dl:META\t%(duration)s\t%(resolution)s\t%(fps)s\t%(format_id)s',
+    '--progress-template',
+    'download:PROGRESS\t%(progress.downloaded_bytes)s\t%(progress.total_bytes)s\t%(progress.total_bytes_estimate)s\t%(progress.speed)s\t%(progress.eta)s\t%(progress.elapsed)s\t%(progress.fragment_index)s\t%(progress.fragment_count)s',
     '-P',
     dir,
     '-o',
@@ -168,7 +164,17 @@ async function runFfmpegExtract(bins, sourcePath, wavPath, dir, { durationSec, o
       if (durationSec) {
         progress = Math.max(1, Math.min(99, Math.round((ms / 1e6 / durationSec) * 100)));
       }
-      if (onTick) onTick({ progress, detail: lastLine(text) });
+      const sec = ms / 1e6;
+      const detail = durationSec
+        ? `ffmpeg пишет WAV… ${Math.round(sec)} с из ${Math.round(durationSec)} с`
+        : `ffmpeg пишет WAV… ${Math.round(sec)} с`;
+      if (onTick) {
+        onTick({
+          progress,
+          indeterminate: progress == null,
+          detail,
+        });
+      }
     },
   });
 }
@@ -189,6 +195,7 @@ async function extractAudioFromFile(id, opts = {}) {
   steps = patchStep(steps, 'ffmpeg', {
     status: 'active',
     progress: 0,
+    indeterminate: !durationSec,
     command: formatCommand('ffmpeg', [
       '-y',
       '-i',
@@ -200,18 +207,24 @@ async function extractAudioFromFile(id, opts = {}) {
       '1',
       '-c:a',
       'pcm_s16le',
+      '-nostats',
+      '-progress',
+      'pipe:1',
       'audio.wav',
     ]),
-    detail: 'Идёт извлечение звука…',
+    detail: durationSec
+      ? `Идёт извлечение звука (~${Math.round(durationSec)} с)…`
+      : 'Идёт извлечение звука…',
   });
   report({ phase: 'extracting', steps }, true);
 
   await runFfmpegExtract(bins, sourcePath, wavPath, dir, {
     durationSec,
-    onTick: ({ progress, detail }) => {
+    onTick: ({ progress, indeterminate, detail }) => {
       steps = patchStep(steps, 'ffmpeg', {
         status: 'active',
         progress,
+        indeterminate: Boolean(indeterminate),
         detail: detail || 'ffmpeg пишет WAV…',
       });
       report({ steps, phase: 'extracting' });
@@ -258,7 +271,22 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
   steps = patchStep(steps, 'download', {
     status: 'active',
     progress: 0,
-    detail: 'Запускаем yt-dlp (Node + cookies Firefox)…',
+    indeterminate: true,
+    startedAt: new Date().toISOString(),
+    detail:
+      'Запускаем yt-dlp. Сейчас попытка соединиться с YouTube — файл ещё не качается, скорости нет.',
+    stats: {
+      phase: 'starting',
+      phaseLabel:
+        'yt-dlp запускается. Пытаемся прочитать cookies Firefox и открыть соединение с YouTube.',
+      items: [
+        { key: 'speed', label: 'Скорость', value: 'нет: файл ещё не качается' },
+        { key: 'size', label: 'Скачано', value: '0 — до файла не дошли' },
+        { key: 'eta', label: 'Осталось', value: 'появится, когда пойдут байты' },
+        { key: 'elapsed', label: 'Прошло', value: '00:00' },
+      ],
+      log: ['Процесс yt-dlp запускается…'],
+    },
   });
   meta.steps = steps;
   meta.phase = 'downloading';
@@ -267,40 +295,35 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
 
   const tryDownload = async (cookiesBrowser) => {
     const args = ytdlpDownloadArgs(url, bins, dir, { cookiesBrowser });
+    const startedAt = Date.now();
+    const tracker = createYtdlpTracker({ cookiesBrowser, startedAt });
     steps = patchStep(steps, 'download', {
       status: 'active',
-      command: formatCommand('yt-dlp', [
-        '--js-runtimes',
-        'node',
-        ...(cookiesBrowser ? ['--cookies-from-browser', cookiesBrowser] : []),
-        '-f',
-        'bestvideo+bestaudio/best',
-        '--no-playlist',
-        '--newline',
-        url,
-      ]),
-      detail: cookiesBrowser
-        ? `Скачивание с cookies ${cookiesBrowser}…`
-        : 'Повтор без cookies браузера…',
+      indeterminate: true,
+      command: formatCommand('yt-dlp', ytdlpShowArgs(url, cookiesBrowser)),
+      ...tracker.snapshot(),
     });
     report({ steps, phase: 'downloading' }, true);
 
-    await run(bins.ytdlp, args, {
-      timeoutMs: config.summarizeTimeoutMs,
-      cwd: dir,
-      onOutput: (text) => {
-        const percent = parseYtdlpPercent(text);
-        const line = lastLine(text);
-        const patch = { status: 'active' };
-        if (percent != null) patch.progress = Math.max(0, Math.min(99, Math.round(percent)));
-        if (line) patch.detail = line;
-        if (/\[Merger\]/i.test(text)) {
-          patch.detail = 'Склеиваем video+audio (ffmpeg merge)…';
-        }
-        steps = patchStep(steps, 'download', patch);
-        report({ steps, phase: 'downloading' });
-      },
-    });
+    const flush = (force = false) => {
+      steps = patchStep(steps, 'download', tracker.snapshot());
+      report({ steps, phase: 'downloading' }, force);
+    };
+    const timer = setInterval(() => flush(true), 500);
+
+    try {
+      await run(bins.ytdlp, args, {
+        timeoutMs: config.summarizeTimeoutMs,
+        cwd: dir,
+        onOutput: (text) => {
+          tracker.ingest(text);
+          flush(false);
+        },
+      });
+    } finally {
+      clearInterval(timer);
+      flush(true);
+    }
   };
 
   try {
@@ -327,10 +350,30 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
       throw err;
     }
 
-    steps = markDone(steps, 'download', `Скачано: ${path.basename(sourcePath)}`);
+    steps = markDone(
+      steps,
+      'download',
+      `Скачано: ${path.basename(sourcePath)}${durationSec ? ` · ${Math.round(durationSec)} с` : ''}`
+    );
+    steps = patchStep(steps, 'download', {
+      stats: {
+        phase: 'done',
+        phaseLabel: `Готово: ${path.basename(sourcePath)} сохранён.`,
+        items: [
+          { key: 'file', label: 'Файл', value: path.basename(sourcePath) },
+          {
+            key: 'size',
+            label: 'Длительность',
+            value: durationSec ? `${Math.round(durationSec)} с` : 'неизвестна',
+          },
+        ],
+        log: [],
+      },
+    });
     steps = patchStep(steps, 'ffmpeg', {
       status: 'active',
       progress: 0,
+      indeterminate: !durationSec,
       command: formatCommand('ffmpeg', [
         '-y',
         '-i',
@@ -342,9 +385,14 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
         '1',
         '-c:a',
         'pcm_s16le',
+        '-nostats',
+        '-progress',
+        'pipe:1',
         'audio.wav',
       ]),
-      detail: 'Идёт извлечение звука…',
+      detail: durationSec
+        ? `Идёт извлечение звука (~${Math.round(durationSec)} с)…`
+        : 'Идёт извлечение звука…',
     });
     report(
       {
@@ -359,10 +407,11 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
     const wavPath = path.join(dir, 'audio.wav');
     await runFfmpegExtract(bins, sourcePath, wavPath, dir, {
       durationSec,
-      onTick: ({ progress, detail }) => {
+      onTick: ({ progress, indeterminate, detail }) => {
         steps = patchStep(steps, 'ffmpeg', {
           status: 'active',
           progress,
+          indeterminate: Boolean(indeterminate),
           detail: detail || 'ffmpeg пишет WAV…',
         });
         report({ steps, phase: 'extracting' });

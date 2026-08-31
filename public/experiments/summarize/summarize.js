@@ -16,6 +16,8 @@
   const processBtn = document.getElementById('process-btn');
 
   const runLog = document.getElementById('run-log');
+  const runLogTitle = document.getElementById('run-log-title');
+  const runLogLead = document.getElementById('run-log-lead');
   const runSteps = document.getElementById('run-steps');
   const queueCard = document.getElementById('queue-card');
   const queueTitle = document.getElementById('queue-title');
@@ -53,6 +55,9 @@
   let recordTimerInterval = null;
   let recordSeconds = 0;
   let pollTimer = null;
+  let elapsedTimer = null;
+  let latestSteps = [];
+  let latestJobStatus = '';
 
   // Format helpers
   function formatBytes(bytes) {
@@ -82,36 +87,358 @@
   }
 
   function stepBadge(status) {
-    if (status === 'active') return 'сейчас';
+    if (status === 'active') return 'выполняется сейчас';
     if (status === 'done') return 'готово';
     if (status === 'failed') return 'ошибка';
-    return 'далее';
+    return 'ещё не начался';
   }
 
-  function renderRunSteps(steps) {
+  function cmdLabel(status) {
+    if (status === 'active') return 'Команда, которая выполняется сейчас';
+    if (status === 'done') return 'Команда, которой это было сделано';
+    if (status === 'failed') return 'Команда, на которой остановились';
+    return 'Команда, которой это будет сделано';
+  }
+
+  function geminiPreviewCommand() {
+    return [
+      'POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+      '  Content-Type: application/json',
+      '  parts: prompt (суммаризация на русском) + inlineData audio.wav',
+    ].join('\n');
+  }
+
+  function previewUrlSteps(url) {
+    return [
+      {
+        n: 1,
+        id: 'download',
+        title: 'Скачивание видео',
+        tool: 'yt-dlp',
+        why: 'Шаг качает ролик через yt-dlp (видео+аудио). Ниже — живой этап: соединение это или уже байты файла, плюс скорость.',
+        command: `yt-dlp --js-runtimes node --cookies-from-browser firefox --force-ipv4 --ffmpeg-location ffmpeg -f bestvideo+bestaudio/best --no-playlist --newline --progress --no-mtime -o source.%(ext)s ${url}`,
+        status: 'pending',
+        progress: 0,
+        waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+        detail: 'Ставим задачу и сразу показываем весь план шагов.',
+        stats: {
+          phase: 'pending',
+          phaseLabel: 'Ещё не начался. После запуска здесь появятся этап, скорость и размер.',
+          items: [
+            { key: 'speed', label: 'Скорость', value: '—' },
+            { key: 'size', label: 'Скачано', value: '—' },
+            { key: 'eta', label: 'Осталось', value: '—' },
+            { key: 'elapsed', label: 'Прошло', value: '—' },
+          ],
+          log: [],
+        },
+      },
+      {
+        n: 2,
+        id: 'ffmpeg',
+        title: 'Извлечение звука',
+        tool: 'ffmpeg',
+        why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
+        command: 'ffmpeg -y -i source.* -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav',
+        status: 'pending',
+        progress: 0,
+        waitHint: 'Ещё не начался. Стартует сразу после скачивания.',
+        detail: 'Ждёт файл source.* от yt-dlp.',
+      },
+      {
+        n: 3,
+        id: 'summarize',
+        title: 'Распознавание речи и суммаризация',
+        tool: 'Gemini',
+        why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
+        command: geminiPreviewCommand(),
+        status: 'pending',
+        progress: 0,
+        waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+        detail: 'Ждёт audio.wav после ffmpeg.',
+      },
+    ];
+  }
+
+  function previewFileSteps(filename) {
+    const src = filename || 'source.*';
+    return [
+      {
+        n: 1,
+        id: 'ffmpeg',
+        title: 'Извлечение звука',
+        tool: 'ffmpeg',
+        why: 'Из загруженного файла вырежем дорожку и сделаем WAV 16 kHz mono.',
+        command: `ffmpeg -y -i ${src} -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav`,
+        status: 'pending',
+        progress: 0,
+        waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+        detail: 'Ставим задачу и сразу показываем весь план шагов.',
+      },
+      {
+        n: 2,
+        id: 'summarize',
+        title: 'Распознавание речи и суммаризация',
+        tool: 'Gemini',
+        why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
+        command: geminiPreviewCommand(),
+        status: 'pending',
+        progress: 0,
+        waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+        detail: 'Ждёт audio.wav после ffmpeg.',
+      },
+    ];
+  }
+
+  function updateRunLogHead(steps, jobStatus) {
+    if (!runLogTitle || !runLogLead) return;
+    const total = (steps || []).length;
+    const active = (steps || []).find((s) => s.status === 'active');
+    const failed = (steps || []).some((s) => s.status === 'failed');
+    const doneCount = (steps || []).filter((s) => s.status === 'done').length;
+
+    if (failed) {
+      runLogTitle.textContent = 'План выполнения — остановка';
+      runLogLead.textContent = 'Один из шагов завершился с ошибкой. Ниже видно, на какой команде остановились.';
+      return;
+    }
+    if (jobStatus === 'ready' || (total && doneCount === total)) {
+      runLogTitle.textContent = `Все шаги выполнены · ${total} из ${total}`;
+      runLogLead.textContent = 'Все запланированные шаги завершены. Результат суммаризации ниже.';
+      return;
+    }
+    if (active) {
+      const n = active.n || (steps.findIndex((s) => s.id === active.id) + 1);
+      runLogTitle.textContent = `Ход задачи · шаг ${n} из ${total}`;
+      runLogLead.textContent = `Сейчас выполняется «${active.title}». Следующие блоки уже видны и ждут своей очереди.`;
+      return;
+    }
+    if (jobStatus === 'queued') {
+      runLogTitle.textContent = `План выполнения · ${total} шага`;
+      runLogLead.textContent = 'Задача в очереди. Все шаги уже расписаны: как только сервер освободится, первый блок станет активным.';
+      return;
+    }
+    runLogTitle.textContent = `План выполнения · ${total} шага`;
+    runLogLead.textContent = 'Все шаги видны сразу: текущий выполняется, следующие ждут своей очереди.';
+  }
+
+  function stepView(step, idx) {
+    const status = step.status || 'pending';
+    const n = step.n || idx + 1;
+    const pct = Number.isFinite(step.progress) ? Math.max(0, Math.min(100, step.progress)) : null;
+    const indeterminate = status === 'active' && (step.indeterminate || pct == null);
+    let barWidth = 0;
+    if (status === 'done') barWidth = 100;
+    else if (indeterminate) barWidth = 38;
+    else if (pct != null) barWidth = pct;
+    else if (status === 'active') barWidth = 8;
+
+    let pctLabel = 'ожидает';
+    if (status === 'done') pctLabel = '100%';
+    else if (status === 'failed') pctLabel = pct != null ? pct + '%' : 'ошибка';
+    else if (indeterminate) pctLabel = 'идёт…';
+    else if (status === 'active' && pct != null) pctLabel = pct + '%';
+
+    return {
+      status,
+      n,
+      pct,
+      indeterminate,
+      barWidth,
+      pctLabel,
+      liveDetail:
+        step.stats && step.stats.phaseLabel
+          ? ''
+          : status === 'pending'
+            ? step.waitHint || step.detail || ''
+            : step.detail || '',
+      title: step.title || '',
+      tool: step.tool || '',
+      why: step.why || '',
+      command: step.command || '',
+      stats: step.stats || null,
+      startedAt: step.startedAt || null,
+    };
+  }
+
+  function setText(el, text) {
+    if (!el) return;
+    if (el.textContent !== text) el.textContent = text;
+  }
+
+  function statsItemsHtml(items) {
+    if (!items || !items.length) return '';
+    return items
+      .map(
+        (it) =>
+          `<div class="run-step__stat"><span>${escapeHtml(it.label || '')}</span><strong>${escapeHtml(it.value || '—')}</strong></div>`
+      )
+      .join('');
+  }
+
+  function statsLogHtml(lines) {
+    if (!lines || !lines.length) return '';
+    return `<ol class="run-step__log">${lines
+      .map((l) => `<li>${escapeHtml(l)}</li>`)
+      .join('')}</ol>`;
+  }
+
+  function fillLive(article, stats) {
+    const card = article.querySelector('.run-step__card');
+    if (!card) return;
+    let live = article.querySelector('.run-step__live');
+    if (!stats || (!stats.phaseLabel && !(stats.items && stats.items.length) && !(stats.log && stats.log.length))) {
+      if (live) live.hidden = true;
+      return;
+    }
+    if (!live) {
+      live = document.createElement('div');
+      live.className = 'run-step__live';
+      const cmdWrap = article.querySelector('.run-step__cmd-wrap');
+      card.insertBefore(live, cmdWrap || null);
+    }
+    live.hidden = false;
+    live.innerHTML = `
+      ${stats.phaseLabel ? `<p class="run-step__phase">${escapeHtml(stats.phaseLabel)}</p>` : ''}
+      ${stats.items && stats.items.length ? `<div class="run-step__stats">${statsItemsHtml(stats.items)}</div>` : ''}
+      ${statsLogHtml(stats.log)}
+    `;
+  }
+
+  function patchStepEl(article, step, idx) {
+    const v = stepView(step, idx);
+    article.className = 'run-step is-' + v.status;
+    setText(article.querySelector('.run-step__index'), String(v.n));
+    setText(article.querySelector('h3'), 'Блок ' + v.n + ' — ' + v.title);
+    const toolEl = article.querySelector('.run-step__tool');
+    if (toolEl) setText(toolEl, v.tool);
+    const whyEl = article.querySelector('.run-step__why');
+    if (whyEl) setText(whyEl, v.why);
+    setText(article.querySelector('.run-step__badge'), stepBadge(v.status));
+    const bar = article.querySelector('.run-step__bar');
+    if (bar) {
+      bar.classList.toggle('is-indeterminate', v.indeterminate);
+      bar.setAttribute('aria-valuenow', String(v.pct != null ? v.pct : 0));
+      const fill = bar.querySelector('i');
+      if (fill) fill.style.width = v.barWidth + '%';
+    }
+    setText(article.querySelector('.run-step__pct'), v.pctLabel);
+    setText(article.querySelector('.run-step__cmd-label'), cmdLabel(v.status));
+    setText(article.querySelector('.run-step__cmd'), v.command);
+    fillLive(article, v.stats);
+    let detailEl = article.querySelector('.run-step__detail');
+    if (v.liveDetail) {
+      if (!detailEl) {
+        detailEl = document.createElement('p');
+        detailEl.className = 'run-step__detail';
+        article.querySelector('.run-step__card').appendChild(detailEl);
+      }
+      setText(detailEl, v.liveDetail);
+    } else if (detailEl) {
+      detailEl.remove();
+    }
+  }
+
+  function stepTemplate(step, idx) {
+    const v = stepView(step, idx);
+    return `
+      <article class="run-step is-${escapeHtml(v.status)}" data-step-id="${escapeHtml(step.id || String(idx))}">
+        <div class="run-step__index" aria-hidden="true">${v.n}</div>
+        <div class="run-step__card">
+          <div class="run-step__head">
+            <div class="run-step__titles">
+              <h3>Блок ${v.n} — ${escapeHtml(v.title)}</h3>
+              <div class="run-step__meta">
+                ${v.tool ? `<span class="run-step__tool">${escapeHtml(v.tool)}</span>` : ''}
+              </div>
+              ${v.why ? `<p class="run-step__why">${escapeHtml(v.why)}</p>` : ''}
+            </div>
+            <span class="run-step__badge">${stepBadge(v.status)}</span>
+          </div>
+          <div class="run-step__progress">
+            <div class="run-step__bar${v.indeterminate ? ' is-indeterminate' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v.pct != null ? v.pct : 0}">
+              <i style="width:${v.barWidth}%"></i>
+            </div>
+            <span class="run-step__pct">${escapeHtml(v.pctLabel)}</span>
+          </div>
+          <div class="run-step__live"${v.stats ? '' : ' hidden'}>
+            ${v.stats && v.stats.phaseLabel ? `<p class="run-step__phase">${escapeHtml(v.stats.phaseLabel)}</p>` : ''}
+            ${v.stats && v.stats.items && v.stats.items.length ? `<div class="run-step__stats">${statsItemsHtml(v.stats.items)}</div>` : ''}
+            ${v.stats ? statsLogHtml(v.stats.log) : ''}
+          </div>
+          <div class="run-step__cmd-wrap">
+            <span class="run-step__cmd-label">${cmdLabel(v.status)}</span>
+            <pre class="run-step__cmd">${escapeHtml(v.command)}</pre>
+          </div>
+          ${v.liveDetail ? `<p class="run-step__detail">${escapeHtml(v.liveDetail)}</p>` : ''}
+        </div>
+      </article>
+    `;
+  }
+
+  function formatElapsedLocal(startedAt) {
+    const t = Date.parse(startedAt);
+    if (!Number.isFinite(t)) return null;
+    const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const r = sec % 60;
+    if (h) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+
+  function stepsWithLocalElapsed(steps) {
+    return (steps || []).map((s) => {
+      if (s.status !== 'active' || !s.startedAt || !s.stats) return s;
+      const elapsed = formatElapsedLocal(s.startedAt);
+      if (!elapsed) return s;
+      const items = (s.stats.items || []).map((it) =>
+        it.key === 'elapsed' ? { ...it, value: elapsed } : it
+      );
+      return { ...s, stats: { ...s.stats, items } };
+    });
+  }
+
+  function stopElapsedClock() {
+    if (elapsedTimer) {
+      clearInterval(elapsedTimer);
+      elapsedTimer = null;
+    }
+  }
+
+  function startElapsedClock() {
+    if (elapsedTimer) return;
+    elapsedTimer = setInterval(() => {
+      if (!latestSteps.some((s) => s.status === 'active' && s.startedAt)) {
+        stopElapsedClock();
+        return;
+      }
+      paintRunSteps(latestSteps, latestJobStatus);
+    }, 1000);
+  }
+
+  function paintRunSteps(steps, jobStatus) {
     if (!runLog || !runSteps) return;
     if (!Array.isArray(steps) || !steps.length) {
       runLog.hidden = true;
       return;
     }
     runLog.hidden = false;
-    runSteps.innerHTML = steps
-      .map((step) => {
-        const pct = Number.isFinite(step.progress) ? Math.max(0, Math.min(100, step.progress)) : null;
-        const showBar = step.status === 'active' || step.status === 'done' || pct != null;
-        return `
-          <article class="run-step is-${escapeHtml(step.status || 'pending')}">
-            <div class="run-step__head">
-              <h3>${escapeHtml(step.title || '')}</h3>
-              <span class="run-step__badge">${stepBadge(step.status)}${pct != null ? ' · ' + pct + '%' : ''}</span>
-            </div>
-            ${showBar ? `<div class="run-step__bar"><i style="width:${pct != null ? pct : step.status === 'active' ? 8 : 0}%"></i></div>` : ''}
-            <pre class="run-step__cmd">${escapeHtml(step.command || '')}</pre>
-            ${step.detail ? `<p class="run-step__detail">${escapeHtml(step.detail)}</p>` : ''}
-          </article>
-        `;
-      })
-      .join('');
+    updateRunLogHead(steps, jobStatus);
+    const viewSteps = stepsWithLocalElapsed(steps);
+    const existing = runSteps.querySelectorAll('.run-step');
+    if (existing.length === viewSteps.length) {
+      viewSteps.forEach((step, idx) => patchStepEl(existing[idx], step, idx));
+      return;
+    }
+    runSteps.innerHTML = viewSteps.map(stepTemplate).join('');
+  }
+
+  function renderRunSteps(steps, jobStatus) {
+    latestSteps = steps || [];
+    latestJobStatus = jobStatus;
+    paintRunSteps(latestSteps, latestJobStatus);
+    if (latestSteps.some((s) => s.status === 'active' && s.startedAt)) startElapsedClock();
   }
 
   // Load server tool availability
@@ -407,10 +734,11 @@
       clearTimeout(pollTimer);
       pollTimer = null;
     }
+    stopElapsedClock();
   }
 
   function applyJobView(job) {
-    renderRunSteps(job.steps || []);
+    renderRunSteps(job.steps || [], job.status);
   }
 
   function renderQueue(job) {
@@ -448,7 +776,7 @@
           showError(err.message || 'Ошибка очереди');
           processBtn.disabled = false;
         });
-      }, 1200);
+      }, 500);
       return;
     }
 
@@ -456,8 +784,15 @@
       renderQueue(job);
       const active = (job.steps || []).find((s) => s.status === 'active');
       if (active) {
-        const pct = Number.isFinite(active.progress) ? ` ${active.progress}%` : '';
-        showStatus(`Сейчас: ${active.title}${pct}`);
+        const n = active.n || (job.steps || []).findIndex((s) => s.id === active.id) + 1;
+        const speed = (active.stats && active.stats.items || []).find((it) => it.key === 'speed');
+        const pct = Number.isFinite(active.progress) && !active.indeterminate ? ` ${active.progress}%` : '';
+        const spd = speed && speed.value && speed.value !== '—' ? ` · ${speed.value}` : '';
+        showStatus(
+          active.stats && active.stats.phaseLabel
+            ? active.stats.phaseLabel
+            : `Сейчас: блок ${n} — ${active.title}${pct}${spd}`
+        );
       } else if (job.phase === 'downloading') showStatus('Скачиваем видео…');
       else if (job.phase === 'extracting') showStatus('Извлекаем звук…');
       else if (job.phase === 'summarizing') showStatus('Распознаём речь и суммаризируем…');
@@ -467,7 +802,7 @@
           showError(err.message || 'Ошибка очереди');
           processBtn.disabled = false;
         });
-      }, 800);
+      }, 350);
       return;
     }
 
@@ -511,12 +846,20 @@
     }
 
     processBtn.disabled = true;
-    if (runLog) runLog.hidden = false;
+    const preview =
+      activeTab === 'panel-url'
+        ? previewUrlSteps(url)
+        : previewFileSteps(targetFile && targetFile.name);
+    renderRunSteps(preview, 'queued');
+    if (runLog) {
+      runLog.hidden = false;
+      runLog.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     try {
       let job;
       if (activeTab === 'panel-url') {
-        showStatus('Ставим задачу в очередь…');
+        showStatus('Ставим задачу в очередь. Ниже уже виден весь план шагов.');
         const res = await fetch('/api/summarize/from-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -525,7 +868,7 @@
         job = await res.json();
         if (!res.ok) throw new Error(job.error || 'Ошибка постановки в очередь');
       } else {
-        showStatus('Загружаем файл и ставим в очередь…');
+        showStatus('Загружаем файл. Ниже уже виден весь план шагов.');
         const fd = new FormData();
         fd.append('file', targetFile);
         const res = await fetch('/api/summarize/upload', {
