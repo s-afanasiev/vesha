@@ -61,6 +61,41 @@
       </div>
 
       <div class="ea-field">
+        <span class="ea-label">Качество звука</span>
+        <div class="ea-quality" role="radiogroup" aria-label="Качество звука">
+          <label class="ea-quality-opt">
+            <input type="radio" name="audio-quality" value="original" checked />
+            <span class="ea-quality-card">
+              <strong>Как есть</strong>
+              <small>~190 кбит/с · стерео</small>
+            </span>
+          </label>
+          <label class="ea-quality-opt">
+            <input type="radio" name="audio-quality" value="compact" />
+            <span class="ea-quality-card">
+              <strong>Компактнее</strong>
+              <small>96 кбит/с · стерео</small>
+            </span>
+          </label>
+          <label class="ea-quality-opt">
+            <input type="radio" name="audio-quality" value="low" />
+            <span class="ea-quality-card">
+              <strong>Хуже</strong>
+              <small>48 кбит/с · моно</small>
+            </span>
+          </label>
+          <label class="ea-quality-opt">
+            <input type="radio" name="audio-quality" value="speech" />
+            <span class="ea-quality-card">
+              <strong>Для речи</strong>
+              <small>32 кбит/с · 16 кГц</small>
+            </span>
+          </label>
+        </div>
+        <span class="ea-hint" id="quality-hint">Без дополнительного сжатия: стерео, VBR ~190 кбит/с.</span>
+      </div>
+
+      <div class="ea-field">
         <div class="ea-label-row">
           <span class="ea-label">Команда ffmpeg</span>
           <div class="ea-cmd-actions">

@@ -49,7 +49,11 @@ router.get('/tools', async (_req, res, next) => {
 
 router.get('/preview', (req, res, next) => {
   try {
-    const result = previewCommand(req.query.ffmpegDir, req.query.inputName);
+    const result = previewCommand(
+      req.query.ffmpegDir,
+      req.query.inputName,
+      req.query.quality
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -79,6 +83,7 @@ router.post('/jobs', upload.single('file'), (req, res, next) => {
       sourcePath: req.file.path,
       originalName: req.file.originalname || 'video',
       command: req.body && req.body.command,
+      quality: req.body && req.body.quality,
     });
     res.status(202).json(publicJob(meta));
   } catch (err) {

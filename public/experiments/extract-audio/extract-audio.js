@@ -1,6 +1,25 @@
 (function () {
   const STORAGE_KEY = 'vesha.extract-audio.ffmpegDir';
+  const QUALITY_STORAGE_KEY = 'vesha.extract-audio.quality';
   const DEFAULT_FFMPEG_DIR = 'C:\\CODE\\VESHA\\v1\\bin\\';
+  const QUALITY_ARGS = {
+    original: '-c:a libmp3lame -q:a 2',
+    compact: '-c:a libmp3lame -b:a 96k',
+    low: '-ac 1 -ar 22050 -c:a libmp3lame -b:a 48k',
+    speech: '-ac 1 -ar 16000 -c:a libmp3lame -b:a 32k',
+  };
+  const QUALITY_HINTS = {
+    original: 'Без дополнительного сжатия: стерео, VBR ~190 кбит/с. Файл как после обычного извлечения.',
+    compact: 'Меньше размер: 96 кбит/с, стерео. Речь и музыка ещё звучат нормально.',
+    low: 'Заметно хуже и легче: 48 кбит/с, моно, 22 кГц. Речь слышна, файл примерно в 4 раза меньше.',
+    speech: 'Минимум для распознавания речи: 32 кбит/с, моно, 16 кГц. Хватает Whisper и похожим движкам.',
+  };
+  const QUALITY_LABELS = {
+    original: 'как есть',
+    compact: 'компактнее',
+    low: 'хуже',
+    speech: 'для речи',
+  };
 
   const ffmpegDirInput = document.getElementById('ffmpeg-dir');
   const probeBtn = document.getElementById('probe-btn');
@@ -26,11 +45,37 @@
   const resultMeta = document.getElementById('result-meta');
   const downloadBtn = document.getElementById('download-btn');
   const player = document.getElementById('player');
+  const qualityHint = document.getElementById('quality-hint');
+  const qualityInputs = Array.from(document.querySelectorAll('input[name="audio-quality"]'));
 
   let currentFile = null;
   let progressSource = null;
   let commandDirty = false;
   let previewTimer = null;
+
+  function getQuality() {
+    const selected = qualityInputs.find((el) => el.checked);
+    const value = selected && selected.value;
+    return QUALITY_ARGS[value] ? value : 'original';
+  }
+
+  function setQuality(value) {
+    const id = QUALITY_ARGS[value] ? value : 'original';
+    qualityInputs.forEach((el) => {
+      el.checked = el.value === id;
+    });
+    qualityHint.textContent = QUALITY_HINTS[id];
+    return id;
+  }
+
+  function fallbackCommandLine(ffmpeg, input, quality) {
+    const output = input.replace(/\.[^.]+$/, '') + '.mp3';
+    const audioArgs = QUALITY_ARGS[quality] || QUALITY_ARGS.original;
+    return (
+      '"' + ffmpeg + '" -hide_banner -nostdin -y -i "' + input +
+      '" -vn ' + audioArgs + ' -progress pipe:1 -nostats "' + output + '"'
+    );
+  }
 
   function formatBytes(bytes) {
     if (!bytes) return '0 Б';
@@ -86,9 +131,11 @@
 
   async function refreshCommand(force) {
     if (commandDirty && !force) return;
+    const quality = getQuality();
     const params = new URLSearchParams({
       ffmpegDir: ffmpegDirInput.value.trim(),
       inputName: currentFile ? currentFile.name : 'video.mp4',
+      quality,
     });
     try {
       const res = await fetch('/api/extract-audio/preview?' + params.toString());
@@ -99,10 +146,7 @@
     } catch {
       const ffmpeg = ffmpegDirInput.value.trim() || 'ffmpeg.exe';
       const input = currentFile ? currentFile.name : 'video.mp4';
-      const output = input.replace(/\.[^.]+$/, '') + '.mp3';
-      commandEl.value =
-        '"' + ffmpeg + '" -hide_banner -nostdin -y -i "' + input +
-        '" -vn -c:a libmp3lame -q:a 2 -progress pipe:1 -nostats "' + output + '"';
+      commandEl.value = fallbackCommandLine(ffmpeg, input, quality);
       commandDirty = false;
     }
   }
@@ -122,7 +166,11 @@
   function showResult(job) {
     resultEl.hidden = false;
     const ext = (job.audioExt || 'mp3').toUpperCase();
-    resultMeta.textContent = job.bytes ? `${ext} · ${formatBytes(job.bytes)}` : ext;
+    const parts = [ext];
+    if (job.bytes) parts.push(formatBytes(job.bytes));
+    const qualityLabel = job.qualityLabel || QUALITY_LABELS[job.quality];
+    if (qualityLabel) parts.push(qualityLabel);
+    resultMeta.textContent = parts.join(' · ');
     downloadBtn.href = job.downloadUrl;
     downloadBtn.setAttribute('download', '');
     player.src = job.downloadUrl;
@@ -142,9 +190,10 @@
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && !isProjectBinPath(saved)) {
       ffmpegDirInput.value = saved;
-      return;
+    } else {
+      ffmpegDirInput.value = DEFAULT_FFMPEG_DIR;
     }
-    ffmpegDirInput.value = DEFAULT_FFMPEG_DIR;
+    setQuality(localStorage.getItem(QUALITY_STORAGE_KEY) || 'original');
   }
 
   async function probeFfmpeg() {
@@ -181,6 +230,7 @@
       fd.append('file', file);
       fd.append('ffmpegDir', ffmpegDir);
       fd.append('command', commandEl.value);
+      fd.append('quality', getQuality());
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onUploadProgress(e.loaded / e.total);
@@ -254,6 +304,15 @@
       };
     });
   }
+
+  qualityInputs.forEach((el) => {
+    el.addEventListener('change', () => {
+      const quality = setQuality(el.value);
+      localStorage.setItem(QUALITY_STORAGE_KEY, quality);
+      commandDirty = false;
+      refreshCommand(true);
+    });
+  });
 
   commandEl.addEventListener('input', () => {
     commandDirty = true;

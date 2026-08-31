@@ -247,6 +247,36 @@ function parseArgv(command) {
   return args;
 }
 
+const QUALITY_PRESETS = {
+  original: {
+    id: 'original',
+    label: 'Как есть',
+    args: ['-c:a', 'libmp3lame', '-q:a', '2'],
+  },
+  compact: {
+    id: 'compact',
+    label: 'Компактнее',
+    args: ['-c:a', 'libmp3lame', '-b:a', '96k'],
+  },
+  low: {
+    id: 'low',
+    label: 'Хуже',
+    args: ['-ac', '1', '-ar', '22050', '-c:a', 'libmp3lame', '-b:a', '48k'],
+  },
+  speech: {
+    id: 'speech',
+    label: 'Для речи',
+    args: ['-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k'],
+  },
+};
+
+function resolveQuality(raw) {
+  const id = String(raw || 'original')
+    .trim()
+    .toLowerCase();
+  return QUALITY_PRESETS[id] || QUALITY_PRESETS.original;
+}
+
 function defaultOutputName(inputName) {
   const base = path
     .basename(inputName || 'audio', path.extname(inputName || ''))
@@ -255,7 +285,8 @@ function defaultOutputName(inputName) {
   return `${base || 'audio'}.mp3`;
 }
 
-function defaultArgv(ffmpegPath, inputPath, outputPath) {
+function defaultArgv(ffmpegPath, inputPath, outputPath, quality) {
+  const preset = resolveQuality(quality);
   return [
     ffmpegPath,
     '-hide_banner',
@@ -264,10 +295,7 @@ function defaultArgv(ffmpegPath, inputPath, outputPath) {
     '-i',
     inputPath,
     '-vn',
-    '-c:a',
-    'libmp3lame',
-    '-q:a',
-    '2',
+    ...preset.args,
     '-progress',
     'pipe:1',
     '-nostats',
@@ -275,8 +303,9 @@ function defaultArgv(ffmpegPath, inputPath, outputPath) {
   ];
 }
 
-function previewCommand(ffmpegDir, inputName) {
+function previewCommand(ffmpegDir, inputName, quality) {
   const input = inputName || 'video.mp4';
+  const preset = resolveQuality(quality);
   let ffmpegPath = 'ffmpeg.exe';
   try {
     ffmpegPath = resolveFfmpeg(ffmpegDir);
@@ -288,8 +317,12 @@ function previewCommand(ffmpegDir, inputName) {
         : path.join(path.resolve(trimmed), process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
     }
   }
-  const argv = defaultArgv(ffmpegPath, input, defaultOutputName(input));
-  return { argv, commandLine: formatCommand(argv) };
+  const argv = defaultArgv(ffmpegPath, input, defaultOutputName(input), preset.id);
+  return {
+    argv,
+    commandLine: formatCommand(argv),
+    quality: preset.id,
+  };
 }
 
 function sanitizeOutputName(raw) {
@@ -350,6 +383,8 @@ function publicJob(meta) {
     bytes: meta.bytes || null,
     audioExt: meta.audioExt || null,
     commandLine: meta.commandLine || null,
+    quality: meta.quality || null,
+    qualityLabel: meta.qualityLabel || null,
     error: meta.error || null,
     createdAt: meta.createdAt,
     downloadUrl:
@@ -453,11 +488,12 @@ function safeDownloadName(originalName, ext) {
   return `${base || 'audio'}.${ext}`;
 }
 
-function startExtractJob({ ffmpegDir, sourcePath, originalName, command }) {
+function startExtractJob({ ffmpegDir, sourcePath, originalName, command, quality }) {
   const ffmpeg = resolveFfmpeg(ffmpegDir);
   const id = randomUUID();
   const dir = jobDir(id);
   fs.mkdirSync(dir, { recursive: true });
+  const preset = resolveQuality(quality);
 
   const ext = path.extname(originalName || '').toLowerCase() || '.dat';
   const storedSource = path.join(dir, `source${ext}`);
@@ -470,7 +506,7 @@ function startExtractJob({ ffmpegDir, sourcePath, originalName, command }) {
         ? applyUserCommand(ffmpeg, storedSource, dir, command, originalName)
         : (() => {
             const outputPath = path.join(dir, defaultOutputName(originalName));
-            const argv = defaultArgv(ffmpeg, storedSource, outputPath);
+            const argv = defaultArgv(ffmpeg, storedSource, outputPath, preset.id);
             return {
               argv,
               commandLine: formatCommand(argv),
@@ -496,6 +532,8 @@ function startExtractJob({ ffmpegDir, sourcePath, originalName, command }) {
     audioFile: planned.audioFile,
     audioExt: planned.audioExt,
     commandLine: planned.commandLine,
+    quality: preset.id,
+    qualityLabel: preset.label,
     downloadName: null,
     bytes: null,
     error: null,
