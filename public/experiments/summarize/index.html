@@ -98,8 +98,12 @@
       </div>
 
       <div class="summarize-submit-row">
+        <label class="summarize-audio-only" for="audio-only">
+          <input type="checkbox" id="audio-only" />
+          <span>Не распознавать текст, просто получить аудио</span>
+        </label>
         <button type="button" class="vesha-btn vesha-btn--primary" id="process-btn">
-          <span>Запустить суммаризацию</span>
+          <span id="process-btn-label">Запустить суммаризацию</span>
         </button>
       </div>
     </section>
@@ -119,6 +123,13 @@
         <p class="run-log__lead" id="run-log-lead">Все шаги видны сразу: текущий выполняется, следующие ждут своей очереди.</p>
       </div>
       <div id="run-steps" class="run-steps"></div>
+      <div class="summarize-audio-ready" id="audio-ready-bar" hidden>
+        <p id="audio-ready-lead">Аудио готово. Распознавание речи не запускалось.</p>
+        <div class="summarize-audio-ready__actions">
+          <button type="button" class="vesha-btn vesha-btn--primary" id="continue-summarize-btn">Получить суммаризацию</button>
+          <a class="vesha-btn vesha-btn--outline" id="download-audio-link" download>Скачать WAV</a>
+        </div>
+      </div>
     </section>
 
     <!-- Status & Alerts -->

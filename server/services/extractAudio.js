@@ -465,6 +465,13 @@ function publicJob(meta) {
     provider: meta.provider || null,
     model: meta.model || null,
     steps: meta.steps || [],
+    audioOnly: Boolean(meta.audioOnly),
+    canSummarize: Boolean(
+      meta.audioFile &&
+        !meta.summary &&
+        (meta.status === 'audio_ready' ||
+          (meta.steps || []).some((s) => s.id === 'summarize' && s.status === 'skipped'))
+    ),
   };
 }
 

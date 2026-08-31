@@ -88,8 +88,22 @@ function makeStep({ n, id, title, tool, why, command, waitHint, detail, stats })
   };
 }
 
-function buildUrlSteps(url) {
-  return [
+function skipSummarizeStep(steps, detail) {
+  return patchStep(steps, 'summarize', {
+    status: 'skipped',
+    progress: 0,
+    indeterminate: false,
+    waitHint:
+      detail ||
+      'Не запускается: выбран режим «только аудио». После извлечения звука можно попросить суммаризацию.',
+    detail:
+      detail ||
+      'Не запускается: выбран режим «только аудио». После извлечения звука можно попросить суммаризацию.',
+  });
+}
+
+function buildUrlSteps(url, { audioOnly = false } = {}) {
+  const steps = [
     makeStep({
       n: 1,
       id: 'download',
@@ -108,7 +122,9 @@ function buildUrlSteps(url) {
       tool: 'ffmpeg',
       why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
       command: formatCommand('ffmpeg', ffmpegPreviewArgs('source.*')),
-      waitHint: 'Ещё не начался. Стартует сразу после скачивания.',
+      waitHint: audioOnly
+        ? 'После этого шага остановимся: суммаризация не запустится сама.'
+        : 'Ещё не начался. Стартует сразу после скачивания.',
       detail: 'Ждёт файл source.* от yt-dlp.',
     }),
     makeStep({
@@ -118,15 +134,20 @@ function buildUrlSteps(url) {
       tool: 'Gemini',
       why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
       command: geminiCommand(),
-      waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
-      detail: 'Ждёт audio.wav после ffmpeg.',
+      waitHint: audioOnly
+        ? 'Пропущен: выбрано «только аудио». Можно запустить позже, не качая ролик заново.'
+        : 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+      detail: audioOnly
+        ? 'Автоматически не стартует. Кнопка появится, когда будет audio.wav.'
+        : 'Ждёт audio.wav после ffmpeg.',
     }),
   ];
+  return audioOnly ? skipSummarizeStep(steps) : steps;
 }
 
-function buildFileSteps(filename) {
+function buildFileSteps(filename, { audioOnly = false } = {}) {
   const src = filename || 'source.*';
-  return [
+  const steps = [
     makeStep({
       n: 1,
       id: 'ffmpeg',
@@ -134,7 +155,9 @@ function buildFileSteps(filename) {
       tool: 'ffmpeg',
       why: 'Из загруженного файла вырежем дорожку и сделаем WAV 16 kHz mono.',
       command: formatCommand('ffmpeg', ffmpegPreviewArgs(src)),
-      waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+      waitHint: audioOnly
+        ? 'После этого шага остановимся: суммаризация не запустится сама.'
+        : 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
       detail: 'В очереди. Как только сервер освободится — запустим эту команду.',
     }),
     makeStep({
@@ -144,10 +167,15 @@ function buildFileSteps(filename) {
       tool: 'Gemini',
       why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
       command: geminiCommand(),
-      waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
-      detail: 'Ждёт audio.wav после ffmpeg.',
+      waitHint: audioOnly
+        ? 'Пропущен: выбрано «только аудио». Можно запустить позже.'
+        : 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+      detail: audioOnly
+        ? 'Автоматически не стартует. Кнопка появится, когда будет audio.wav.'
+        : 'Ждёт audio.wav после ffmpeg.',
     }),
   ];
+  return audioOnly ? skipSummarizeStep(steps) : steps;
 }
 
 function patchStep(steps, id, patch) {
@@ -171,6 +199,7 @@ module.exports = {
   ffmpegPreviewArgs,
   buildUrlSteps,
   buildFileSteps,
+  skipSummarizeStep,
   patchStep,
   markDone,
 };

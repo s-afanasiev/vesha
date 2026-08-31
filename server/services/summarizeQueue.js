@@ -11,7 +11,14 @@ const {
   assertHttpUrl,
 } = require('./extractAudio');
 const { summarizeWithGemini } = require('./aiSummarize');
-const { buildUrlSteps, buildFileSteps, patchStep, markDone, geminiCommand } = require('./jobSteps');
+const {
+  buildUrlSteps,
+  buildFileSteps,
+  skipSummarizeStep,
+  patchStep,
+  markDone,
+  geminiCommand,
+} = require('./jobSteps');
 
 const MAX_QUEUE = 30;
 
@@ -22,6 +29,8 @@ let pumping = false;
 
 function runningLabel(job) {
   if (!job) return null;
+  if (job.kind === 'summarize-only') return 'суммаризация готового аудио';
+  if (job.audioOnly) return 'извлечение аудио';
   if (job.kind === 'url') return 'суммаризация по ссылке';
   if (job.kind === 'file') return 'суммаризация файла';
   return 'суммаризация';
@@ -101,18 +110,8 @@ function persist(id, patch) {
   return next;
 }
 
-async function runJob(job) {
-  persist(job.id, { status: 'running', phase: job.kind === 'url' ? 'downloading' : 'extracting', error: null });
-
-  const onProgress = (meta) => persist(job.id, meta);
-
-  if (job.kind === 'url') {
-    await extractAudioFromUrl(job.url, { jobId: job.id, leaveStatus: true, onProgress });
-  } else {
-    await extractAudioFromFile(job.id, { onProgress });
-  }
-
-  const afterExtract = readMeta(job.id) || {};
+async function runSummarizePhase(id) {
+  const afterExtract = readMeta(id) || {};
   let steps = patchStep(afterExtract.steps || [], 'summarize', {
     status: 'active',
     progress: 0,
@@ -120,10 +119,10 @@ async function runJob(job) {
     command: geminiCommand(),
     detail: 'Отправляем audio.wav в Gemini…',
   });
-  persist(job.id, { status: 'running', phase: 'summarizing', steps });
+  persist(id, { status: 'running', phase: 'summarizing', audioOnly: false, steps });
 
   const audioPath = afterExtract.audioFile
-    ? path.join(jobDir(job.id), afterExtract.audioFile)
+    ? path.join(jobDir(id), afterExtract.audioFile)
     : null;
   const audioMime = audioPath && audioPath.endsWith('.mp3')
     ? 'audio/mp3'
@@ -141,14 +140,15 @@ async function runJob(job) {
         indeterminate: true,
         ...patch,
       });
-      persist(job.id, { steps, phase: 'summarizing' });
+      persist(id, { steps, phase: 'summarizing' });
     },
   });
 
   steps = markDone(steps, 'summarize', ai.model ? `Готово (${ai.provider} / ${ai.model})` : 'Готово');
-  persist(job.id, {
+  persist(id, {
     status: 'ready',
     phase: 'done',
+    audioOnly: false,
     steps,
     summary: ai.summary || null,
     provider: ai.provider || null,
@@ -156,6 +156,42 @@ async function runJob(job) {
     aiError: ai.error || null,
     completedAt: new Date().toISOString(),
   });
+}
+
+async function runJob(job) {
+  if (job.kind !== 'summarize-only') {
+    persist(job.id, {
+      status: 'running',
+      phase: job.kind === 'url' ? 'downloading' : 'extracting',
+      error: null,
+    });
+
+    const onProgress = (meta) => persist(job.id, meta);
+
+    if (job.kind === 'url') {
+      await extractAudioFromUrl(job.url, { jobId: job.id, leaveStatus: true, onProgress });
+    } else {
+      await extractAudioFromFile(job.id, { onProgress });
+    }
+
+    const afterExtract = readMeta(job.id) || {};
+    if (job.audioOnly) {
+      const steps = skipSummarizeStep(
+        afterExtract.steps || [],
+        'Аудио готово. Распознавание не запускалось — можно запросить суммаризацию.'
+      );
+      persist(job.id, {
+        status: 'audio_ready',
+        phase: 'audio',
+        audioOnly: true,
+        steps,
+        completedAt: new Date().toISOString(),
+      });
+      return;
+    }
+  }
+
+  await runSummarizePhase(job.id);
 }
 
 async function pump() {
@@ -206,6 +242,7 @@ function enqueue(input) {
     kind: input.kind,
     url: input.url || null,
     title: input.title || null,
+    audioOnly: Boolean(input.audioOnly),
     status: 'queued',
     phase: 'queued',
     createdAt: new Date().toISOString(),
@@ -217,19 +254,20 @@ function enqueue(input) {
     kind: job.kind,
     url: job.url,
     title: job.title,
+    audioOnly: job.audioOnly,
     sourceTitle: input.sourceTitle || job.title,
     createdAt: job.createdAt,
     steps:
       job.kind === 'url'
-        ? buildUrlSteps(job.url)
-        : buildFileSteps(input.sourceTitle),
+        ? buildUrlSteps(job.url, { audioOnly: job.audioOnly })
+        : buildFileSteps(input.sourceTitle, { audioOnly: job.audioOnly }),
   });
   waiting.push(id);
   pump();
   return view(id);
 }
 
-function enqueueUrl(rawUrl) {
+function enqueueUrl(rawUrl, { audioOnly = false } = {}) {
   const url = assertHttpUrl(rawUrl);
   let title = 'Ссылка';
   try {
@@ -237,21 +275,77 @@ function enqueueUrl(rawUrl) {
   } catch (_) {
     // keep default
   }
-  return enqueue({ kind: 'url', url, title });
+  return enqueue({ kind: 'url', url, title, audioOnly });
 }
 
-function enqueueFile({ id, sourceTitle }) {
+function enqueueFile({ id, sourceTitle, audioOnly = false }) {
   return enqueue({
     id,
     kind: 'file',
     title: sourceTitle || 'Файл',
     sourceTitle,
+    audioOnly,
   });
+}
+
+function enqueueSummarize(id) {
+  const meta = readMeta(id);
+  if (!meta) {
+    const err = new Error('Задание не найдено');
+    err.status = 404;
+    throw err;
+  }
+  if (!meta.audioFile) {
+    const err = new Error('Аудио ещё нет — сначала извлеките звук');
+    err.status = 400;
+    throw err;
+  }
+  if (meta.summary && meta.status === 'ready') {
+    return view(id);
+  }
+  if (runningId === id || waiting.includes(id) || live.has(id)) {
+    return view(id);
+  }
+  if (waiting.length + (runningId ? 1 : 0) >= MAX_QUEUE) {
+    const err = new Error('Очередь переполнена, попробуйте позже');
+    err.status = 429;
+    throw err;
+  }
+
+  const job = {
+    id,
+    kind: 'summarize-only',
+    url: meta.url || null,
+    title: meta.title || meta.sourceTitle || 'Суммаризация',
+    audioOnly: false,
+    status: 'queued',
+    phase: 'queued',
+    createdAt: meta.createdAt || new Date().toISOString(),
+  };
+  live.set(id, job);
+  persist(id, {
+    status: 'queued',
+    phase: 'queued',
+    audioOnly: false,
+    error: null,
+    steps: patchStep(meta.steps || [], 'summarize', {
+      status: 'pending',
+      progress: 0,
+      indeterminate: false,
+      command: geminiCommand(),
+      waitHint: 'В очереди. Аудио уже готово, скачивать заново не будем.',
+      detail: 'В очереди на распознавание и суммаризацию.',
+    }),
+  });
+  waiting.push(id);
+  pump();
+  return view(id);
 }
 
 module.exports = {
   enqueueUrl,
   enqueueFile,
+  enqueueSummarize,
   view,
   snapshot,
   MAX_QUEUE,

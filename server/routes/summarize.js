@@ -9,6 +9,7 @@ const { readMeta, jobDir } = require('../services/extractAudio');
 const {
   enqueueUrl,
   enqueueFile,
+  enqueueSummarize,
   view,
   snapshot,
 } = require('../services/summarizeQueue');
@@ -37,9 +38,17 @@ router.get('/queue', (_req, res) => {
   res.json(snapshot());
 });
 
+function truthy(v) {
+  return v === true || v === 'true' || v === '1' || v === 'on';
+}
+
 router.post('/from-url', (req, res, next) => {
   try {
-    res.json(enqueueUrl(req.body && req.body.url));
+    res.json(
+      enqueueUrl(req.body && req.body.url, {
+        audioOnly: truthy(req.body && req.body.audioOnly),
+      })
+    );
   } catch (err) {
     next(err);
   }
@@ -60,7 +69,21 @@ router.post('/upload', upload.single('file'), (req, res, next) => {
     const sourceFile = path.join(dir, `source${ext}`);
     fs.renameSync(req.file.path, sourceFile);
 
-    res.json(enqueueFile({ id, sourceTitle: originalName }));
+    res.json(
+      enqueueFile({
+        id,
+        sourceTitle: originalName,
+        audioOnly: truthy(req.body && req.body.audioOnly),
+      })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/jobs/:id/summarize', (req, res, next) => {
+  try {
+    res.json(enqueueSummarize(req.params.id));
   } catch (err) {
     next(err);
   }
@@ -87,6 +110,9 @@ router.get('/jobs/:id/audio', (req, res) => {
       ? 'audio/mp4'
       : 'audio/wav';
   res.setHeader('Content-Type', mime);
+  if (req.query.download) {
+    res.setHeader('Content-Disposition', `attachment; filename="${meta.audioFile || 'audio.wav'}"`);
+  }
   res.sendFile(file);
 });
 

@@ -14,6 +14,11 @@
   const micStatusText = document.getElementById('mic-status-text');
   const micTimer = document.getElementById('mic-timer');
   const processBtn = document.getElementById('process-btn');
+  const processBtnLabel = document.getElementById('process-btn-label');
+  const audioOnlyEl = document.getElementById('audio-only');
+  const audioReadyBar = document.getElementById('audio-ready-bar');
+  const continueSummarizeBtn = document.getElementById('continue-summarize-btn');
+  const downloadAudioLink = document.getElementById('download-audio-link');
 
   const runLog = document.getElementById('run-log');
   const runLogTitle = document.getElementById('run-log-title');
@@ -86,10 +91,36 @@
     errorEl.textContent = text || '';
   }
 
+  function isAudioOnly() {
+    return Boolean(audioOnlyEl && audioOnlyEl.checked);
+  }
+
+  function syncProcessLabel() {
+    if (!processBtnLabel) return;
+    processBtnLabel.textContent = isAudioOnly()
+      ? 'Получить аудио'
+      : 'Запустить суммаризацию';
+  }
+
+  function hideAudioReadyBar() {
+    if (audioReadyBar) audioReadyBar.hidden = true;
+    if (continueSummarizeBtn) continueSummarizeBtn.disabled = false;
+  }
+
+  function showAudioReadyBar(job) {
+    if (!audioReadyBar) return;
+    audioReadyBar.hidden = false;
+    if (downloadAudioLink && job.audioUrl) {
+      downloadAudioLink.href = job.audioUrl + (job.audioUrl.includes('?') ? '&' : '?') + 'download=1';
+    }
+    if (continueSummarizeBtn) continueSummarizeBtn.disabled = false;
+  }
+
   function stepBadge(status) {
     if (status === 'active') return 'выполняется сейчас';
     if (status === 'done') return 'готово';
     if (status === 'failed') return 'ошибка';
+    if (status === 'skipped') return 'пропущен';
     return 'ещё не начался';
   }
 
@@ -97,6 +128,7 @@
     if (status === 'active') return 'Команда, которая выполняется сейчас';
     if (status === 'done') return 'Команда, которой это было сделано';
     if (status === 'failed') return 'Команда, на которой остановились';
+    if (status === 'skipped') return 'Команда, которой это можно сделать позже';
     return 'Команда, которой это будет сделано';
   }
 
@@ -108,86 +140,109 @@
     ].join('\n');
   }
 
-  function previewUrlSteps(url) {
-    return [
-      {
-        n: 1,
-        id: 'download',
-        title: 'Скачивание видео',
-        tool: 'yt-dlp',
-        why: 'Шаг качает ролик через yt-dlp (видео+аудио). Ниже — живой этап: соединение это или уже байты файла, плюс скорость.',
-        command: `yt-dlp --js-runtimes node --cookies-from-browser firefox --force-ipv4 --ffmpeg-location ffmpeg -f bestvideo+bestaudio/best --no-playlist --newline --progress --no-mtime -o source.%(ext)s ${url}`,
-        status: 'pending',
-        progress: 0,
-        waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
-        detail: 'Ставим задачу и сразу показываем весь план шагов.',
-        stats: {
-          phase: 'pending',
-          phaseLabel: 'Ещё не начался. После запуска здесь появятся этап, скорость и размер.',
-          items: [
-            { key: 'speed', label: 'Скорость', value: '—' },
-            { key: 'size', label: 'Скачано', value: '—' },
-            { key: 'eta', label: 'Осталось', value: '—' },
-            { key: 'elapsed', label: 'Прошло', value: '—' },
-          ],
-          log: [],
-        },
-      },
-      {
-        n: 2,
-        id: 'ffmpeg',
-        title: 'Извлечение звука',
-        tool: 'ffmpeg',
-        why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
-        command: 'ffmpeg -y -i source.* -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav',
-        status: 'pending',
-        progress: 0,
-        waitHint: 'Ещё не начался. Стартует сразу после скачивания.',
-        detail: 'Ждёт файл source.* от yt-dlp.',
-      },
-      {
-        n: 3,
-        id: 'summarize',
-        title: 'Распознавание речи и суммаризация',
-        tool: 'Gemini',
-        why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
-        command: geminiPreviewCommand(),
-        status: 'pending',
-        progress: 0,
-        waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
-        detail: 'Ждёт audio.wav после ffmpeg.',
-      },
-    ];
+  function applyAudioOnlyToSteps(steps, audioOnly) {
+    if (!audioOnly) return steps;
+    return steps.map((s) => {
+      if (s.id !== 'summarize') return s;
+      return {
+        ...s,
+        status: 'skipped',
+        waitHint: 'Пропущен: выбрано «только аудио». Можно запустить позже, не качая заново.',
+        detail: 'Автоматически не стартует. Кнопка появится, когда будет audio.wav.',
+      };
+    });
   }
 
-  function previewFileSteps(filename) {
+  function previewUrlSteps(url, audioOnly) {
+    return applyAudioOnlyToSteps(
+      [
+        {
+          n: 1,
+          id: 'download',
+          title: 'Скачивание видео',
+          tool: 'yt-dlp',
+          why: 'Шаг качает ролик через yt-dlp (видео+аудио). Ниже — живой этап: соединение это или уже байты файла, плюс скорость.',
+          command: `yt-dlp --js-runtimes node --cookies-from-browser firefox --force-ipv4 --ffmpeg-location ffmpeg -f bestvideo+bestaudio/best --no-playlist --newline --progress --no-mtime -o source.%(ext)s ${url}`,
+          status: 'pending',
+          progress: 0,
+          waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+          detail: 'Ставим задачу и сразу показываем весь план шагов.',
+          stats: {
+            phase: 'pending',
+            phaseLabel: 'Ещё не начался. После запуска здесь появятся этап, скорость и размер.',
+            items: [
+              { key: 'speed', label: 'Скорость', value: '—' },
+              { key: 'size', label: 'Скачано', value: '—' },
+              { key: 'eta', label: 'Осталось', value: '—' },
+              { key: 'elapsed', label: 'Прошло', value: '—' },
+            ],
+            log: [],
+          },
+        },
+        {
+          n: 2,
+          id: 'ffmpeg',
+          title: 'Извлечение звука',
+          tool: 'ffmpeg',
+          why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
+          command: 'ffmpeg -y -i source.* -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav',
+          status: 'pending',
+          progress: 0,
+          waitHint: audioOnly
+            ? 'После этого шага остановимся: суммаризация не запустится сама.'
+            : 'Ещё не начался. Стартует сразу после скачивания.',
+          detail: 'Ждёт файл source.* от yt-dlp.',
+        },
+        {
+          n: 3,
+          id: 'summarize',
+          title: 'Распознавание речи и суммаризация',
+          tool: 'Gemini',
+          why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
+          command: geminiPreviewCommand(),
+          status: 'pending',
+          progress: 0,
+          waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+          detail: 'Ждёт audio.wav после ffmpeg.',
+        },
+      ],
+      audioOnly
+    );
+  }
+
+  function previewFileSteps(filename, audioOnly) {
     const src = filename || 'source.*';
-    return [
-      {
-        n: 1,
-        id: 'ffmpeg',
-        title: 'Извлечение звука',
-        tool: 'ffmpeg',
-        why: 'Из загруженного файла вырежем дорожку и сделаем WAV 16 kHz mono.',
-        command: `ffmpeg -y -i ${src} -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav`,
-        status: 'pending',
-        progress: 0,
-        waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
-        detail: 'Ставим задачу и сразу показываем весь план шагов.',
-      },
-      {
-        n: 2,
-        id: 'summarize',
-        title: 'Распознавание речи и суммаризация',
-        tool: 'Gemini',
-        why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
-        command: geminiPreviewCommand(),
-        status: 'pending',
-        progress: 0,
-        waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
-        detail: 'Ждёт audio.wav после ffmpeg.',
-      },
-    ];
+    return applyAudioOnlyToSteps(
+      [
+        {
+          n: 1,
+          id: 'ffmpeg',
+          title: 'Извлечение звука',
+          tool: 'ffmpeg',
+          why: 'Из загруженного файла вырежем дорожку и сделаем WAV 16 kHz mono.',
+          command: `ffmpeg -y -i ${src} -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav`,
+          status: 'pending',
+          progress: 0,
+          waitHint: audioOnly
+            ? 'После этого шага остановимся: суммаризация не запустится сама.'
+            : 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+          detail: 'Ставим задачу и сразу показываем весь план шагов.',
+        },
+        {
+          n: 2,
+          id: 'summarize',
+          title: 'Распознавание речи и суммаризация',
+          tool: 'Gemini',
+          why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
+          command: geminiPreviewCommand(),
+          status: 'pending',
+          progress: 0,
+          waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+          detail: 'Ждёт audio.wav после ffmpeg.',
+        },
+      ],
+      audioOnly
+    );
   }
 
   function updateRunLogHead(steps, jobStatus) {
@@ -200,6 +255,11 @@
     if (failed) {
       runLogTitle.textContent = 'План выполнения — остановка';
       runLogLead.textContent = 'Один из шагов завершился с ошибкой. Ниже видно, на какой команде остановились.';
+      return;
+    }
+    if (jobStatus === 'audio_ready') {
+      runLogTitle.textContent = 'Аудио готово · суммаризация на паузе';
+      runLogLead.textContent = 'Скачивание и извлечение звука закончены. Распознавание не запускалось — его можно включить кнопкой ниже.';
       return;
     }
     if (jobStatus === 'ready' || (total && doneCount === total)) {
@@ -236,6 +296,7 @@
     let pctLabel = 'ожидает';
     if (status === 'done') pctLabel = '100%';
     else if (status === 'failed') pctLabel = pct != null ? pct + '%' : 'ошибка';
+    else if (status === 'skipped') pctLabel = 'стоп';
     else if (indeterminate) pctLabel = 'идёт…';
     else if (status === 'active' && pct != null) pctLabel = pct + '%';
 
@@ -249,7 +310,7 @@
       liveDetail:
         step.stats && step.stats.phaseLabel
           ? ''
-          : status === 'pending'
+          : status === 'pending' || status === 'skipped'
             ? step.waitHint || step.detail || ''
             : step.detail || '',
       title: step.title || '',
@@ -769,6 +830,7 @@
     applyJobView(job);
 
     if (job.status === 'queued') {
+      hideAudioReadyBar();
       renderQueue(job);
       showStatus(`Вы в очереди — №${job.queue?.position || '…'}. Ниже план команд.`);
       pollTimer = setTimeout(() => {
@@ -781,6 +843,7 @@
     }
 
     if (job.status === 'running') {
+      hideAudioReadyBar();
       renderQueue(job);
       const active = (job.steps || []).find((s) => s.status === 'active');
       if (active) {
@@ -808,18 +871,31 @@
 
     queueCard.hidden = true;
     if (job.status === 'failed') {
+      hideAudioReadyBar();
       showStatus('');
       throw new Error(job.error || 'Задача не выполнилась');
     }
 
     applyJobView(job);
-    showStatus('Суммаризация готова!');
-    currentSummaryData = job.summary || {};
     currentJobData = {
       sourceTitle: job.title,
       audioUrl: job.audioUrl,
       jobId: job.id,
     };
+
+    if (job.status === 'audio_ready' || (job.canSummarize && !job.summary)) {
+      showStatus('Аудио готово. Распознавание не запускалось.');
+      currentSummaryData = null;
+      renderAudioOnlyResult(job);
+      showAudioReadyBar(job);
+      processBtn.disabled = false;
+      checkTools();
+      return;
+    }
+
+    hideAudioReadyBar();
+    showStatus('Суммаризация готова!');
+    currentSummaryData = job.summary || {};
     renderResults(currentSummaryData, currentJobData);
     processBtn.disabled = false;
     checkTools();
@@ -830,6 +906,7 @@
     showStatus('');
     resultSection.hidden = true;
     queueCard.hidden = true;
+    hideAudioReadyBar();
     stopPolling();
 
     const activeTab = document.querySelector('.summarize-tab.is-active').dataset.target;
@@ -846,10 +923,11 @@
     }
 
     processBtn.disabled = true;
+    const audioOnly = isAudioOnly();
     const preview =
       activeTab === 'panel-url'
-        ? previewUrlSteps(url)
-        : previewFileSteps(targetFile && targetFile.name);
+        ? previewUrlSteps(url, audioOnly)
+        : previewFileSteps(targetFile && targetFile.name, audioOnly);
     renderRunSteps(preview, 'queued');
     if (runLog) {
       runLog.hidden = false;
@@ -859,11 +937,15 @@
     try {
       let job;
       if (activeTab === 'panel-url') {
-        showStatus('Ставим задачу в очередь. Ниже уже виден весь план шагов.');
+        showStatus(
+          audioOnly
+            ? 'Ставим задачу: скачать и извлечь аудио, без распознавания.'
+            : 'Ставим задачу в очередь. Ниже уже виден весь план шагов.'
+        );
         const res = await fetch('/api/summarize/from-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, audioOnly }),
         });
         job = await res.json();
         if (!res.ok) throw new Error(job.error || 'Ошибка постановки в очередь');
@@ -871,6 +953,7 @@
         showStatus('Загружаем файл. Ниже уже виден весь план шагов.');
         const fd = new FormData();
         fd.append('file', targetFile);
+        fd.append('audioOnly', audioOnly ? 'true' : 'false');
         const res = await fetch('/api/summarize/upload', {
           method: 'POST',
           body: fd,
@@ -890,8 +973,23 @@
     }
   });
 
+  function renderAudioOnlyResult(job) {
+    resultSection.hidden = false;
+    resultSection.classList.add('is-audio-only');
+    resultTitle.textContent = job.title || job.sourceTitle || 'Аудио готово';
+    resultMetaTags.innerHTML = `
+      <span class="summarize-tag">Только аудио</span>
+      <span class="summarize-tag" style="color:var(--sm-accent)">Без распознавания</span>
+    `;
+    if (job.audioUrl) {
+      player.src = job.audioUrl;
+    }
+    resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   function renderResults(summary, job) {
     resultSection.hidden = false;
+    resultSection.classList.remove('is-audio-only');
     resultTitle.textContent = summary.title || job.sourceTitle || 'Результат суммаризации';
 
     // Meta tags
@@ -1061,5 +1159,44 @@
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  if (audioOnlyEl) {
+    audioOnlyEl.addEventListener('change', syncProcessLabel);
+  }
+
+  if (continueSummarizeBtn) {
+    continueSummarizeBtn.addEventListener('click', async () => {
+      const jobId = currentJobData && currentJobData.jobId;
+      if (!jobId) {
+        showError('Нет готового аудио для суммаризации');
+        return;
+      }
+      showError('');
+      continueSummarizeBtn.disabled = true;
+      processBtn.disabled = true;
+      hideAudioReadyBar();
+      showStatus('Ставим суммаризацию в очередь. Аудио уже есть, скачивать не будем.');
+      try {
+        const res = await fetch('/api/summarize/jobs/' + encodeURIComponent(jobId) + '/summarize', {
+          method: 'POST',
+        });
+        const job = await res.json();
+        if (!res.ok) throw new Error(job.error || 'Не удалось запустить суммаризацию');
+        renderQueue(job);
+        applyJobView(job);
+        await pollJob(job.id);
+      } catch (err) {
+        queueCard.hidden = true;
+        showAudioReadyBar({
+          audioUrl: currentJobData.audioUrl,
+        });
+        showError(err.message || 'Ошибка суммаризации');
+        showStatus('');
+        processBtn.disabled = false;
+        continueSummarizeBtn.disabled = false;
+      }
+    });
+  }
+
   checkTools();
+  syncProcessLabel();
 })();
