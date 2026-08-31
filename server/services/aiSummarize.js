@@ -58,8 +58,11 @@ async function summarizeWithGemini(options = {}) {
   const { audioPath, audioMime = 'audio/wav', transcriptText = '' } = options;
 
   if (!config.geminiApiKey) {
-    // Generate intelligent structured mock fallback if no API key configured
-    return createMockSummary(transcriptText || 'Аудиозапись');
+    return {
+      provider: 'mock',
+      model: 'mock',
+      summary: createMockSummary(transcriptText || 'Аудиозапись'),
+    };
   }
 
   const models = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];

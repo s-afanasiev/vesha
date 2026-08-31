@@ -15,10 +15,12 @@
   const micTimer = document.getElementById('mic-timer');
   const processBtn = document.getElementById('process-btn');
 
-  const pipeline = document.getElementById('pipeline');
-  const stepExtract = document.getElementById('step-extract');
-  const stepStt = document.getElementById('step-stt');
-  const stepAi = document.getElementById('step-ai');
+  const runLog = document.getElementById('run-log');
+  const runSteps = document.getElementById('run-steps');
+  const queueCard = document.getElementById('queue-card');
+  const queueTitle = document.getElementById('queue-title');
+  const queueLead = document.getElementById('queue-lead');
+  const queueRunning = document.getElementById('queue-running');
   const statusEl = document.getElementById('status');
   const errorEl = document.getElementById('error');
 
@@ -50,6 +52,7 @@
   let recordedChunks = [];
   let recordTimerInterval = null;
   let recordSeconds = 0;
+  let pollTimer = null;
 
   // Format helpers
   function formatBytes(bytes) {
@@ -78,10 +81,37 @@
     errorEl.textContent = text || '';
   }
 
-  function setPipelineStep(stepEl, state) {
-    stepEl.classList.remove('is-active', 'is-done');
-    if (state === 'active') stepEl.classList.add('is-active');
-    if (state === 'done') stepEl.classList.add('is-done');
+  function stepBadge(status) {
+    if (status === 'active') return 'сейчас';
+    if (status === 'done') return 'готово';
+    if (status === 'failed') return 'ошибка';
+    return 'далее';
+  }
+
+  function renderRunSteps(steps) {
+    if (!runLog || !runSteps) return;
+    if (!Array.isArray(steps) || !steps.length) {
+      runLog.hidden = true;
+      return;
+    }
+    runLog.hidden = false;
+    runSteps.innerHTML = steps
+      .map((step) => {
+        const pct = Number.isFinite(step.progress) ? Math.max(0, Math.min(100, step.progress)) : null;
+        const showBar = step.status === 'active' || step.status === 'done' || pct != null;
+        return `
+          <article class="run-step is-${escapeHtml(step.status || 'pending')}">
+            <div class="run-step__head">
+              <h3>${escapeHtml(step.title || '')}</h3>
+              <span class="run-step__badge">${stepBadge(step.status)}${pct != null ? ' · ' + pct + '%' : ''}</span>
+            </div>
+            ${showBar ? `<div class="run-step__bar"><i style="width:${pct != null ? pct : step.status === 'active' ? 8 : 0}%"></i></div>` : ''}
+            <pre class="run-step__cmd">${escapeHtml(step.command || '')}</pre>
+            ${step.detail ? `<p class="run-step__detail">${escapeHtml(step.detail)}</p>` : ''}
+          </article>
+        `;
+      })
+      .join('');
   }
 
   // Load server tool availability
@@ -89,11 +119,15 @@
     try {
       const res = await fetch('/api/summarize/tools');
       const data = await res.json();
+      const q = data.queue;
+      const qText = q
+        ? ` · очередь ${q.total || 0} (ждёт ${q.waiting || 0})`
+        : '';
       if (data.ready) {
-        toolsStatusEl.textContent = `yt-dlp ${data.ytdlp?.version || ''} · ffmpeg готов · AI: ${data.geminiConfigured ? 'Gemini active' : 'demo mode'}`;
+        toolsStatusEl.textContent = `yt-dlp ${data.ytdlp?.version || ''} · ffmpeg готов · AI: ${data.geminiConfigured ? 'Gemini active' : 'demo mode'}${qText}`;
         toolsStatusEl.style.color = '#34d399';
       } else {
-        toolsStatusEl.textContent = 'Локальные бинарники: не установлены (работает браузерный режим)';
+        toolsStatusEl.textContent = 'Локальные бинарники: не установлены (работает браузерный режим)' + qText;
       }
     } catch {
       toolsStatusEl.textContent = 'Серверные инструменты: оффлайн';
@@ -368,113 +402,147 @@
     });
   }
 
-  // Pipeline Processing Flow
+  function stopPolling() {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function applyJobView(job) {
+    renderRunSteps(job.steps || []);
+  }
+
+  function renderQueue(job) {
+    const q = job.queue || {};
+    queueCard.hidden = false;
+    if (q.you === 'running') {
+      queueTitle.textContent = 'Ваша задача выполняется';
+      queueLead.textContent = 'Сейчас обрабатываем её. Остальные ждут в общей очереди.';
+      queueRunning.textContent = q.waiting
+        ? `После вас в очереди: ${q.waiting}`
+        : 'Очередь за вами пустая.';
+      return;
+    }
+    const pos = q.position || 2;
+    queueTitle.textContent = `Вы в очереди — №${pos}`;
+    queueLead.textContent = 'Задача поставлена. Сервер делает только одну суммаризацию за раз.';
+    const running = q.running && q.running.label ? q.running.label : 'другая задача';
+    const ahead = q.ahead || 0;
+    queueRunning.textContent =
+      `Сейчас выполняется ${running}. Перед вами ${ahead} ${ahead === 1 ? 'задача' : 'задач(и)'}.`;
+  }
+
+  async function pollJob(jobId) {
+    const res = await fetch('/api/summarize/jobs/' + encodeURIComponent(jobId));
+    const job = await res.json();
+    if (!res.ok) throw new Error(job.error || 'Не удалось узнать статус');
+
+    applyJobView(job);
+
+    if (job.status === 'queued') {
+      renderQueue(job);
+      showStatus(`Вы в очереди — №${job.queue?.position || '…'}. Ниже план команд.`);
+      pollTimer = setTimeout(() => {
+        pollJob(jobId).catch((err) => {
+          showError(err.message || 'Ошибка очереди');
+          processBtn.disabled = false;
+        });
+      }, 1200);
+      return;
+    }
+
+    if (job.status === 'running') {
+      renderQueue(job);
+      const active = (job.steps || []).find((s) => s.status === 'active');
+      if (active) {
+        const pct = Number.isFinite(active.progress) ? ` ${active.progress}%` : '';
+        showStatus(`Сейчас: ${active.title}${pct}`);
+      } else if (job.phase === 'downloading') showStatus('Скачиваем видео…');
+      else if (job.phase === 'extracting') showStatus('Извлекаем звук…');
+      else if (job.phase === 'summarizing') showStatus('Распознаём речь и суммаризируем…');
+      else showStatus('Задача выполняется…');
+      pollTimer = setTimeout(() => {
+        pollJob(jobId).catch((err) => {
+          showError(err.message || 'Ошибка очереди');
+          processBtn.disabled = false;
+        });
+      }, 800);
+      return;
+    }
+
+    queueCard.hidden = true;
+    if (job.status === 'failed') {
+      showStatus('');
+      throw new Error(job.error || 'Задача не выполнилась');
+    }
+
+    applyJobView(job);
+    showStatus('Суммаризация готова!');
+    currentSummaryData = job.summary || {};
+    currentJobData = {
+      sourceTitle: job.title,
+      audioUrl: job.audioUrl,
+      jobId: job.id,
+    };
+    renderResults(currentSummaryData, currentJobData);
+    processBtn.disabled = false;
+    checkTools();
+  }
+
   processBtn.addEventListener('click', async () => {
     showError('');
     showStatus('');
     resultSection.hidden = true;
+    queueCard.hidden = true;
+    stopPolling();
 
     const activeTab = document.querySelector('.summarize-tab.is-active').dataset.target;
-    const mode = document.querySelector('input[name="proc-mode"]:checked').value;
-
-    let targetFile = currentFile;
-    let url = urlInput.value.trim();
+    const targetFile = currentFile;
+    const url = urlInput.value.trim();
 
     if (activeTab === 'panel-url' && !url) {
       showError('Укажите корректную ссылку на видео или аудио');
       return;
     }
-    if (activeTab === 'panel-file' && !targetFile) {
+    if ((activeTab === 'panel-file' || activeTab === 'panel-mic') && !targetFile) {
       showError('Выберите или перетащите видео/аудио файл');
       return;
     }
 
     processBtn.disabled = true;
-    pipeline.hidden = false;
-    setPipelineStep(stepExtract, 'active');
-    setPipelineStep(stepStt, 'pending');
-    setPipelineStep(stepAi, 'pending');
+    if (runLog) runLog.hidden = false;
 
     try {
-      let audioUrl = '';
-      let jobId = null;
-      let transcriptText = '';
-      let sourceTitle = targetFile ? targetFile.name : url;
-
-      // STEP 1: Extract Audio
-      showStatus('Шаг 1: Извлечение звука…');
-
+      let job;
       if (activeTab === 'panel-url') {
+        showStatus('Ставим задачу в очередь…');
         const res = await fetch('/api/summarize/from-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Ошибка загрузки по ссылке');
-        jobId = data.id;
-        audioUrl = data.audioUrl;
-        sourceTitle = data.title || url;
+        job = await res.json();
+        if (!res.ok) throw new Error(job.error || 'Ошибка постановки в очередь');
       } else {
-        // If file provided: extract locally or upload to server
-        if (mode === 'client' && targetFile.type.includes('video')) {
-          showStatus('Шаг 1: Извлечение аудио из видео в браузере (WebAudio)…');
-          const wavBlob = await extractAudioInBrowser(targetFile);
-          currentAudioBlob = wavBlob;
-          audioUrl = URL.createObjectURL(wavBlob);
-        } else {
-          showStatus('Шаг 1: Загрузка и конвертация аудио на сервере…');
-          const fd = new FormData();
-          fd.append('file', targetFile);
-          const res = await fetch('/api/summarize/upload', {
-            method: 'POST',
-            body: fd,
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Ошибка загрузки файла');
-          jobId = data.id;
-          audioUrl = data.audioUrl;
-          sourceTitle = data.title || targetFile.name;
-        }
+        showStatus('Загружаем файл и ставим в очередь…');
+        const fd = new FormData();
+        fd.append('file', targetFile);
+        const res = await fetch('/api/summarize/upload', {
+          method: 'POST',
+          body: fd,
+        });
+        job = await res.json();
+        if (!res.ok) throw new Error(job.error || 'Ошибка загрузки файла');
       }
 
-      setPipelineStep(stepExtract, 'done');
-      setPipelineStep(stepStt, 'active');
-
-      // STEP 2: Speech-to-Text / Audio Processing
-      showStatus('Шаг 2: Распознавание речи…');
-      if (mode === 'client' && currentAudioBlob) {
-        transcriptText = await transcribeLocally(currentAudioBlob);
-      }
-
-      setPipelineStep(stepStt, 'done');
-      setPipelineStep(stepAi, 'active');
-
-      // STEP 3: AI Summarization
-      showStatus('Шаг 3: Генерация структурированной суммаризации и таймкодов…');
-      const aiRes = await fetch('/api/summarize/ai-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobId,
-          transcriptText,
-          mode,
-        }),
-      });
-      const aiData = await aiRes.json();
-      if (!aiRes.ok) throw new Error(aiData.error || 'Ошибка суммаризации');
-
-      setPipelineStep(stepAi, 'done');
-      showStatus('Суммаризация готова!');
-
-      // Render Results
-      currentSummaryData = aiData.summary || {};
-      currentJobData = { sourceTitle, audioUrl, jobId };
-      renderResults(currentSummaryData, currentJobData);
+      renderQueue(job);
+      applyJobView(job);
+      await pollJob(job.id);
     } catch (err) {
+      queueCard.hidden = true;
       showError(err.message || 'Ошибка обработки');
       showStatus('');
-    } finally {
       processBtn.disabled = false;
     }
   });

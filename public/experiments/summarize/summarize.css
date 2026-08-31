@@ -341,6 +341,144 @@ body.page-experiments {
   justify-content: flex-end;
 }
 
+.summarize-queue {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-accent-border);
+  border-radius: var(--sm-radius-md);
+}
+
+.summarize-queue__spin {
+  width: 28px;
+  height: 28px;
+  margin-top: 0.15rem;
+  border: 3px solid rgba(6, 182, 212, 0.2);
+  border-top-color: var(--sm-accent);
+  border-radius: 50%;
+  animation: summarize-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.summarize-queue__body h2 {
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+}
+
+.summarize-queue__body p {
+  font-size: 0.9rem;
+  color: var(--sm-muted);
+  margin: 0.2rem 0 0;
+}
+
+@keyframes summarize-spin {
+  to { transform: rotate(360deg); }
+}
+
+.run-log {
+  margin-bottom: 1.5rem;
+}
+
+.run-log__title {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.run-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.run-step {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--sm-border);
+  background: var(--sm-surface);
+  border-radius: var(--sm-radius-md);
+  opacity: 0.55;
+}
+
+.run-step.is-active {
+  opacity: 1;
+  border-color: var(--sm-accent-border);
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.12);
+}
+
+.run-step.is-done {
+  opacity: 0.92;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.run-step.is-failed {
+  opacity: 1;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.run-step__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.run-step__head h3 {
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.run-step__badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sm-muted);
+}
+
+.run-step.is-active .run-step__badge { color: var(--sm-accent); }
+.run-step.is-done .run-step__badge { color: var(--sm-green); }
+.run-step.is-failed .run-step__badge { color: #fca5a5; }
+
+.run-step__bar {
+  height: 6px;
+  background: #222;
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 0.45rem 0 0.55rem;
+}
+
+.run-step__bar > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--sm-accent);
+  transition: width 0.25s ease;
+}
+
+.run-step.is-done .run-step__bar > i {
+  background: var(--sm-green);
+}
+
+.run-step__cmd {
+  margin: 0.35rem 0 0;
+  padding: 0.55rem 0.65rem;
+  background: #0b0b0b;
+  border: 1px solid #222;
+  border-radius: 6px;
+  color: #cbd5e1;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.run-step__detail {
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--sm-muted);
+}
+
 /* Pipeline Steps */
 
 .summarize-pipeline {

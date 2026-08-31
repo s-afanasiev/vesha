@@ -104,32 +104,19 @@
       </div>
     </section>
 
-    <!-- Pipeline Steps Indicator -->
-    <div class="summarize-pipeline" id="pipeline" hidden>
-      <div class="pipeline-step" id="step-extract" data-status="pending">
-        <div class="pipeline-step__num">1</div>
-        <div class="pipeline-step__info">
-          <strong>Звук</strong>
-          <span>Извлечение аудио</span>
-        </div>
+    <section class="summarize-queue" id="queue-card" hidden>
+      <div class="summarize-queue__spin" aria-hidden="true"></div>
+      <div class="summarize-queue__body">
+        <h2 id="queue-title">Очередь</h2>
+        <p id="queue-lead"></p>
+        <p id="queue-running"></p>
       </div>
-      <div class="pipeline-arrow">→</div>
-      <div class="pipeline-step" id="step-stt" data-status="pending">
-        <div class="pipeline-step__num">2</div>
-        <div class="pipeline-step__info">
-          <strong>Текст</strong>
-          <span>Распознавание речи</span>
-        </div>
-      </div>
-      <div class="pipeline-arrow">→</div>
-      <div class="pipeline-step" id="step-ai" data-status="pending">
-        <div class="pipeline-step__num">3</div>
-        <div class="pipeline-step__info">
-          <strong>AI Анализ</strong>
-          <span>Суммаризация</span>
-        </div>
-      </div>
-    </div>
+    </section>
+
+    <section class="run-log" id="run-log" hidden>
+      <h2 class="run-log__title">Ход задачи</h2>
+      <div id="run-steps" class="run-steps"></div>
+    </section>
 
     <!-- Status & Alerts -->
     <p id="status" class="summarize-status" hidden></p>

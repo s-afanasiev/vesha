@@ -32,7 +32,7 @@ function getPaths() {
   };
 }
 
-function run(cmd, args, { timeoutMs = 10 * 60 * 1000, cwd } = {}) {
+function run(cmd, args, { timeoutMs = 10 * 60 * 1000, cwd, onOutput } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd,
@@ -41,12 +41,20 @@ function run(cmd, args, { timeoutMs = 10 * 60 * 1000, cwd } = {}) {
     });
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (d) => {
-      stdout += d;
-    });
-    child.stderr.on('data', (d) => {
-      stderr += d;
-    });
+    const handle = (chunk, stream) => {
+      const text = chunk.toString();
+      if (stream === 'stdout') stdout += text;
+      else stderr += text;
+      if (onOutput) {
+        try {
+          onOutput(text, stream);
+        } catch (_) {
+          // progress hooks must not kill the process
+        }
+      }
+    };
+    child.stdout.on('data', (d) => handle(d, 'stdout'));
+    child.stderr.on('data', (d) => handle(d, 'stderr'));
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       const err = new Error('Таймаут запуска ' + path.basename(cmd));
@@ -118,9 +126,9 @@ async function getToolStatus() {
   };
 }
 
-function requireBins() {
+function requireBins({ needYtdlp = true } = {}) {
   const paths = getPaths();
-  if (!paths.ytdlp || !paths.ffmpeg) {
+  if ((needYtdlp && !paths.ytdlp) || !paths.ffmpeg) {
     const err = new Error('Нет yt-dlp/ffmpeg. Запустите npm run media-bins');
     err.status = 500;
     throw err;
