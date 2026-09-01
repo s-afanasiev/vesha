@@ -5,23 +5,51 @@ const config = require('../config');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-function exe(name) {
-  return process.platform === 'win32' ? `${name}.exe` : name;
+function fileNamesFor(name) {
+  const names = [name, `${name}.exe`];
+  if (name === 'yt-dlp') names.push('yt-dlp_linux', 'yt-dlp_macos');
+  return [...new Set(names)];
 }
 
-function firstExisting(candidates) {
+function firstExistingFile(candidates) {
   for (const p of candidates) {
-    if (p && fs.existsSync(p)) return p;
+    if (!p) continue;
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+    } catch (_) {
+      // skip
+    }
   }
   return null;
 }
 
+function ensureExecutable(file) {
+  if (!file || process.platform === 'win32') return file;
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+  } catch {
+    try {
+      fs.chmodSync(file, 0o755);
+    } catch (_) {
+      // may be owned by another user; spawn will fail later
+    }
+  }
+  return file;
+}
+
 function resolveBin(name, envPath) {
-  return firstExisting([
-    envPath,
-    path.join(config.mediaBinDir, exe(name)),
-    path.join(ROOT, 'bin', exe(name)),
-  ]);
+  const dirs = [...new Set([config.mediaBinDir, path.join(ROOT, 'bin')].filter(Boolean))];
+  const candidates = [];
+  if (envPath) candidates.push(envPath);
+  for (const dir of dirs) {
+    for (const fileName of fileNamesFor(name)) {
+      candidates.push(path.join(dir, fileName));
+    }
+  }
+  if (process.platform !== 'win32') {
+    candidates.push(`/usr/local/bin/${name}`, `/usr/bin/${name}`);
+  }
+  return ensureExecutable(firstExistingFile(candidates));
 }
 
 function getPaths() {
@@ -126,10 +154,26 @@ async function getToolStatus() {
   };
 }
 
+function listBinDir() {
+  const dir = path.join(ROOT, 'bin');
+  try {
+    return fs.readdirSync(dir).join(', ');
+  } catch {
+    return '(папка bin/ не читается)';
+  }
+}
+
 function requireBins({ needYtdlp = true } = {}) {
   const paths = getPaths();
-  if ((needYtdlp && !paths.ytdlp) || !paths.ffmpeg) {
-    const err = new Error('Нет yt-dlp/ffmpeg. Запустите npm run media-bins');
+  const missing = [];
+  if (needYtdlp && !paths.ytdlp) missing.push('yt-dlp');
+  if (!paths.ffmpeg) missing.push('ffmpeg');
+  if (missing.length) {
+    const err = new Error(
+      `Нет ${missing.join(' и ')} для Linux. Ищем файлы без .exe: bin/yt-dlp, bin/ffmpeg, bin/ffprobe. ` +
+        `Сейчас в bin/: ${listBinDir()}. Если там yt-dlp.exe — это Windows-сборка, на VDS она не запускается. ` +
+        `На сервере: npm run media-bins`
+    );
     err.status = 500;
     throw err;
   }
