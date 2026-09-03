@@ -69,6 +69,7 @@
   let elapsedTimer = null;
   let latestSteps = [];
   let latestJobStatus = '';
+  let latestJob = null;
 
   // Format helpers
   function formatBytes(bytes) {
@@ -371,7 +372,8 @@
 
     if (failed) {
       runLogTitle.textContent = 'План выполнения — остановка';
-      runLogLead.textContent = 'Один из шагов завершился с ошибкой. Ниже видно, на какой команде остановились.';
+      runLogLead.textContent =
+        'Один из шагов завершился с ошибкой. Готовые файлы из предыдущих блоков можно скачать прямо в карточке шага.';
       return;
     }
     if (jobStatus === 'audio_ready') {
@@ -461,6 +463,113 @@
       .join('')}</ol>`;
   }
 
+  function withQuery(url, extra) {
+    if (!url) return '';
+    return url + (url.includes('?') ? '&' : '?') + extra;
+  }
+
+  function stepActionsInner(step, job) {
+    if (!job || !step) return '';
+    const status = step.status || 'pending';
+    if (status !== 'done' && status !== 'failed' && status !== 'skipped') return '';
+    const bits = [];
+    const hasDownloadStep = (job.steps || []).some((s) => s.id === 'download');
+
+    if (step.id === 'download' && status === 'done' && job.videoUrl) {
+      bits.push(
+        `<a class="vesha-btn vesha-btn--sm vesha-btn--primary" href="${escapeHtml(withQuery(job.videoUrl, 'download=1'))}">Скачать видео</a>`
+      );
+    }
+
+    if (step.id === 'ffmpeg' && (status === 'done' || job.audioUrl)) {
+      if (job.audioUrl && status === 'done') {
+        bits.push(
+          `<audio class="run-step__player" controls preload="metadata" src="${escapeHtml(mediaSrc(job.audioUrl, job))}"></audio>`
+        );
+        bits.push(
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(withQuery(job.audioUrl, 'download=1'))}">Скачать аудио</a>`
+        );
+      }
+      if (job.videoUrl && !hasDownloadStep && status === 'done') {
+        bits.push(
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(withQuery(job.videoUrl, 'download=1'))}">Скачать исходный файл</a>`
+        );
+      }
+    }
+
+    if (step.id === 'summarize') {
+      if (status === 'done' && job.summary) {
+        const title = job.summary.title || '';
+        const tldr = job.summary.tldr || '';
+        if (title || tldr) {
+          bits.push(
+            `<div class="run-step__summary">${title ? `<strong>${escapeHtml(title)}</strong>` : ''}${
+              tldr ? `${title ? '<br>' : ''}${escapeHtml(tldr)}` : ''
+            }</div>`
+          );
+        }
+        bits.push(
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--primary" href="/api/summarize/jobs/${encodeURIComponent(job.id)}/summary.txt">Скачать текст</a>`
+        );
+      }
+      if ((status === 'failed' || status === 'skipped') && job.canSummarize) {
+        bits.push(
+          `<button type="button" class="vesha-btn vesha-btn--sm vesha-btn--primary" data-retry-summarize>Получить суммаризацию</button>`
+        );
+      }
+    }
+
+    return bits.join('');
+  }
+
+  function actionsKey(step, job) {
+    if (!step) return '';
+    if (step.id === 'download') {
+      return ['download', step.status, job && job.videoUrl ? 'v' : ''].join('|');
+    }
+    if (step.id === 'ffmpeg') {
+      return [
+        'ffmpeg',
+        step.status,
+        job && job.audioUrl ? 'a' : '',
+        job && job.videoUrl ? 'v' : '',
+      ].join('|');
+    }
+    if (step.id === 'summarize') {
+      return [
+        'summarize',
+        step.status,
+        job && job.summary ? 's' : '',
+        job && job.canSummarize ? 'c' : '',
+      ].join('|');
+    }
+    return [step.id, step.status].join('|');
+  }
+
+  function stepActionsBlock(step, job) {
+    const inner = stepActionsInner(step, job);
+    if (!inner) return '';
+    return `<div class="run-step__actions" data-key="${escapeHtml(actionsKey(step, job))}">${inner}</div>`;
+  }
+
+  function fillActions(article, step, job) {
+    const inner = stepActionsInner(step, job);
+    let box = article.querySelector('.run-step__actions');
+    const key = actionsKey(step, job);
+    if (!inner) {
+      if (box) box.remove();
+      return;
+    }
+    if (box && box.dataset.key === key) return;
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'run-step__actions';
+      article.querySelector('.run-step__card').appendChild(box);
+    }
+    box.dataset.key = key;
+    box.innerHTML = inner;
+  }
+
   function fillLive(article, stats) {
     const card = article.querySelector('.run-step__card');
     if (!card) return;
@@ -504,6 +613,7 @@
     setText(article.querySelector('.run-step__cmd-label'), cmdLabel(v.status));
     setText(article.querySelector('.run-step__cmd'), v.command);
     fillLive(article, v.stats);
+    fillActions(article, step, latestJob);
     let detailEl = article.querySelector('.run-step__detail');
     if (v.liveDetail) {
       if (!detailEl) {
@@ -549,6 +659,7 @@
             <pre class="run-step__cmd">${escapeHtml(v.command)}</pre>
           </div>
           ${v.liveDetail ? `<p class="run-step__detail">${escapeHtml(v.liveDetail)}</p>` : ''}
+          ${stepActionsBlock(step, latestJob)}
         </div>
       </article>
     `;
@@ -917,7 +1028,63 @@
   }
 
   function applyJobView(job) {
+    latestJob = job || null;
     renderRunSteps(job.steps || [], job.status);
+  }
+
+  function rememberJob(job) {
+    currentJobData = {
+      id: job.id,
+      jobId: job.id,
+      sourceTitle: job.title,
+      audioUrl: job.audioUrl,
+      bytes: job.bytes,
+      provider: job.provider,
+      model: job.model,
+    };
+  }
+
+  function setRetrySummarizeBusy(busy) {
+    if (continueSummarizeBtn) continueSummarizeBtn.disabled = busy;
+    if (runSteps) {
+      runSteps.querySelectorAll('[data-retry-summarize]').forEach((btn) => {
+        btn.disabled = busy;
+      });
+    }
+  }
+
+  async function requestSummarize() {
+    const jobId = currentJobData && currentJobData.jobId;
+    if (!jobId) {
+      showError('Нет готового аудио для суммаризации');
+      return;
+    }
+    showError('');
+    setRetrySummarizeBusy(true);
+    processBtn.disabled = true;
+    hideAudioReadyBar();
+    showStatus('Ставим суммаризацию в очередь. Аудио уже есть, скачивать не будем.');
+    try {
+      const res = await fetch('/api/summarize/jobs/' + encodeURIComponent(jobId) + '/summarize', {
+        method: 'POST',
+      });
+      const job = await res.json();
+      if (!res.ok) throw new Error(job.error || 'Не удалось запустить суммаризацию');
+      renderQueue(job);
+      applyJobView(job);
+      await pollJob(job.id);
+    } catch (err) {
+      queueCard.hidden = true;
+      if (currentJobData && currentJobData.audioUrl) {
+        showAudioReadyBar({
+          audioUrl: currentJobData.audioUrl,
+        });
+      }
+      showError(err.message || 'Ошибка суммаризации');
+      showStatus('');
+      processBtn.disabled = false;
+      setRetrySummarizeBusy(false);
+    }
   }
 
   function renderQueue(job) {
@@ -1008,20 +1175,19 @@
     if (job.status === 'failed') {
       hideAudioReadyBar();
       showStatus('');
+      rememberJob(job);
+      currentSummaryData = null;
+      if (resultSection && !job.summary) resultSection.hidden = true;
+      showError(job.error || job.aiError || 'Задача не выполнилась');
+      processBtn.disabled = false;
+      setRetrySummarizeBusy(false);
+      checkTools();
       refreshHistoryIfOpen();
-      throw new Error(job.error || 'Задача не выполнилась');
+      return;
     }
 
     applyJobView(job);
-    currentJobData = {
-      id: job.id,
-      jobId: job.id,
-      sourceTitle: job.title,
-      audioUrl: job.audioUrl,
-      bytes: job.bytes,
-      provider: job.provider,
-      model: job.model,
-    };
+    rememberJob(job);
 
     if (job.status === 'audio_ready' || (job.canSummarize && !job.summary)) {
       showStatus('Аудио готово. Распознавание не запускалось.');
@@ -1477,37 +1643,17 @@
     audioOnlyEl.addEventListener('change', syncProcessLabel);
   }
 
+  if (runSteps) {
+    runSteps.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-retry-summarize]');
+      if (!btn || btn.disabled) return;
+      requestSummarize();
+    });
+  }
+
   if (continueSummarizeBtn) {
-    continueSummarizeBtn.addEventListener('click', async () => {
-      const jobId = currentJobData && currentJobData.jobId;
-      if (!jobId) {
-        showError('Нет готового аудио для суммаризации');
-        return;
-      }
-      showError('');
-      continueSummarizeBtn.disabled = true;
-      processBtn.disabled = true;
-      hideAudioReadyBar();
-      showStatus('Ставим суммаризацию в очередь. Аудио уже есть, скачивать не будем.');
-      try {
-        const res = await fetch('/api/summarize/jobs/' + encodeURIComponent(jobId) + '/summarize', {
-          method: 'POST',
-        });
-        const job = await res.json();
-        if (!res.ok) throw new Error(job.error || 'Не удалось запустить суммаризацию');
-        renderQueue(job);
-        applyJobView(job);
-        await pollJob(job.id);
-      } catch (err) {
-        queueCard.hidden = true;
-        showAudioReadyBar({
-          audioUrl: currentJobData.audioUrl,
-        });
-        showError(err.message || 'Ошибка суммаризации');
-        showStatus('');
-        processBtn.disabled = false;
-        continueSummarizeBtn.disabled = false;
-      }
+    continueSummarizeBtn.addEventListener('click', () => {
+      requestSummarize();
     });
   }
 

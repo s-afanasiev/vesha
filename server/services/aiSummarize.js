@@ -102,6 +102,45 @@ function formatMb(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1);
 }
 
+function isGeminiLocationError(text) {
+  return /location is not supported|FAILED_PRECONDITION/i.test(String(text || ''));
+}
+
+function geminiLocationMessage() {
+  return (
+    'Gemini API недоступен с IP этого сервера (Google: User location is not supported). ' +
+    'Нужен прокси из поддерживаемой страны: GEMINI_HTTPS_PROXY=http://user:pass@host:port в .env, ' +
+    'либо OPENAI_API_KEY для запасной суммаризации через Whisper.'
+  );
+}
+
+let proxyDispatcher = null;
+function getGeminiDispatcher() {
+  if (!config.geminiHttpsProxy) return undefined;
+  if (!proxyDispatcher) {
+    const { ProxyAgent } = require('undici');
+    proxyDispatcher = new ProxyAgent(config.geminiHttpsProxy);
+  }
+  return proxyDispatcher;
+}
+
+function geminiUrl(pathname) {
+  const pathPart = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  return `${config.geminiApiBase}${pathPart}`;
+}
+
+function geminiFetch(url, options = {}) {
+  const dispatcher = getGeminiDispatcher();
+  return fetch(url, dispatcher ? { ...options, dispatcher } : options);
+}
+
+function throwIfGeminiLocation(payload) {
+  const raw = typeof payload === 'string' ? payload : JSON.stringify(payload || '');
+  if (isGeminiLocationError(raw)) {
+    throw new Error(geminiLocationMessage());
+  }
+}
+
 async function compressForGemini(audioPath, report) {
   const dest = path.join(path.dirname(audioPath), 'audio.gemini.mp3');
   try {
@@ -136,8 +175,8 @@ async function uploadGeminiFile(apiKey, filePath, mimeType, report) {
   report({
     detail: `Загружаем ${path.basename(filePath)} (${formatMb(size)} МБ) в Gemini Files API…`,
   });
-  const start = await fetch(
-    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`,
+  const start = await geminiFetch(
+    geminiUrl(`/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`),
     {
       method: 'POST',
       headers: {
@@ -153,13 +192,14 @@ async function uploadGeminiFile(apiKey, filePath, mimeType, report) {
   );
   if (!start.ok) {
     const text = await start.text();
+    throwIfGeminiLocation(text);
     throw new Error(`Gemini upload start HTTP ${start.status}: ${text.slice(0, 240)}`);
   }
   const uploadUrl = start.headers.get('x-goog-upload-url');
   if (!uploadUrl) throw new Error('Gemini не вернул URL загрузки файла');
 
   const body = fs.readFileSync(filePath);
-  const put = await fetch(uploadUrl, {
+  const put = await geminiFetch(uploadUrl, {
     method: 'POST',
     headers: {
       'Content-Length': String(size),
@@ -194,9 +234,9 @@ async function waitFileActive(apiKey, file, report) {
       throw new Error('Gemini upload: нет имени файла');
     }
     const url = name.startsWith('files/')
-      ? `https://generativelanguage.googleapis.com/v1beta/${name}?key=${encodeURIComponent(apiKey)}`
-      : `https://generativelanguage.googleapis.com/v1beta/files/${encodeURIComponent(name)}?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      ? geminiUrl(`/v1beta/${name}?key=${encodeURIComponent(apiKey)}`)
+      : geminiUrl(`/v1beta/files/${encodeURIComponent(name)}?key=${encodeURIComponent(apiKey)}`);
+    const res = await geminiFetch(url, { signal: AbortSignal.timeout(15000) });
     info = await readJsonResponse(res, 'Gemini file status');
     if (!res.ok) {
       throw new Error(info.error?.message || `Gemini file status HTTP ${res.status}`);
@@ -242,6 +282,10 @@ async function summarizeWithGemini(options = {}) {
     if (typeof onProgress === 'function') onProgress(patch);
   };
 
+  if (!config.geminiApiKey && config.openaiApiKey) {
+    return summarizeWithOpenAI({ audioPath, transcriptText, report });
+  }
+
   if (!config.geminiApiKey) {
     if (config.summarizeMock) {
       report({ detail: 'SUMMARIZE_MOCK=1 и нет ключа — демонстрационный ответ.' });
@@ -256,13 +300,34 @@ async function summarizeWithGemini(options = {}) {
 
   if (!audioPath || !fs.existsSync(audioPath)) {
     if (transcriptText) {
-      return requestGemini([{ text: SUMMARIZE_PROMPT }, { text: `Расшифровка:\n\n${transcriptText}` }], report);
+      try {
+        return await requestGemini(
+          [{ text: SUMMARIZE_PROMPT }, { text: `Расшифровка:\n\n${transcriptText}` }],
+          report
+        );
+      } catch (err) {
+        if (config.openaiApiKey && /недоступен с IP|location is not supported/i.test(err.message)) {
+          return summarizeWithOpenAI({ audioPath, transcriptText, report });
+        }
+        throw err;
+      }
     }
     throw new Error('Нет audio.wav для суммаризации — Gemini не вызывался.');
   }
 
-  const audioPart = await prepareAudioPart(audioPath, report);
-  return requestGemini([{ text: SUMMARIZE_PROMPT }, audioPart], report);
+  try {
+    const audioPart = await prepareAudioPart(audioPath, report);
+    return await requestGemini([{ text: SUMMARIZE_PROMPT }, audioPart], report);
+  } catch (err) {
+    if (config.openaiApiKey && /недоступен с IP|location is not supported/i.test(err.message)) {
+      report({ detail: err.message + ' Переключаемся на OpenAI.' });
+      return summarizeWithOpenAI({ audioPath, transcriptText, report });
+    }
+    if (/недоступен с IP|location is not supported/i.test(err.message)) {
+      throw new Error(geminiLocationMessage());
+    }
+    throw err;
+  }
 }
 
 async function requestGemini(parts, report) {
@@ -279,10 +344,10 @@ async function requestGemini(parts, report) {
         ].join('\n'),
       });
       const url =
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
+        geminiUrl(`/v1beta/models/${model}:generateContent`) +
         `?key=${encodeURIComponent(config.geminiApiKey)}`;
 
-      const res = await fetch(url, {
+      const res = await geminiFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -296,7 +361,9 @@ async function requestGemini(parts, report) {
       });
 
       const data = await readJsonResponse(res, model);
+      throwIfGeminiLocation(data);
       if (!res.ok) {
+        throwIfGeminiLocation(data.error?.message);
         throw new Error(`[${model}] ` + (data.error?.message || `HTTP ${res.status}`));
       }
 
@@ -315,6 +382,7 @@ async function requestGemini(parts, report) {
       report({
         detail: `${model} не сработал: ${err.message}. Пробуем следующую модель…`,
       });
+      if (/недоступен с IP|location is not supported/i.test(err.message)) break;
     }
   }
 
@@ -323,6 +391,71 @@ async function requestGemini(parts, report) {
       ? `Gemini не суммаризировал аудио: ${lastErr.message}`
       : 'Gemini не суммаризировал аудио'
   );
+}
+
+async function summarizeWithOpenAI({ audioPath, transcriptText = '', report }) {
+  if (!config.openaiApiKey) {
+    throw new Error('OPENAI_API_KEY не задан');
+  }
+  let transcript = transcriptText;
+  if ((!transcript || transcript.length < 20) && audioPath && fs.existsSync(audioPath)) {
+    let sendPath = audioPath;
+    const mime = mimeFromPath(audioPath);
+    if (mime === 'audio/wav' || fs.statSync(audioPath).size > INLINE_LIMIT) {
+      sendPath = await compressForGemini(audioPath, report);
+    }
+    report({
+      detail: `Gemini с этого IP недоступен. Отправляем ${path.basename(sendPath)} в OpenAI Whisper…`,
+    });
+    const fileName = path.basename(sendPath);
+    const file = new File([buf], fileName, { type: mimeFromPath(sendPath) });
+    const form = new FormData();
+    form.append('file', file);
+    form.append('model', 'whisper-1');
+    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.openaiApiKey}` },
+      body: form,
+      signal: AbortSignal.timeout(config.summarizeTimeoutMs),
+    });
+    const data = await readJsonResponse(res, 'OpenAI Whisper');
+    if (!res.ok) {
+      throw new Error(data.error?.message || `Whisper HTTP ${res.status}`);
+    }
+    transcript = data.text || '';
+    if (!transcript) throw new Error('Whisper вернул пустую расшифровку');
+  }
+  if (!transcript) {
+    throw new Error('Нет текста для суммаризации через OpenAI');
+  }
+  report({ detail: 'Суммаризируем расшифровку через OpenAI…' });
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.openaiApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: SUMMARIZE_PROMPT },
+        { role: 'user', content: `Расшифровка записи:\n\n${transcript}` },
+      ],
+    }),
+    signal: AbortSignal.timeout(config.summarizeTimeoutMs),
+  });
+  const data = await readJsonResponse(res, 'OpenAI chat');
+  if (!res.ok) {
+    throw new Error(data.error?.message || `OpenAI HTTP ${res.status}`);
+  }
+  const parsed = parseJsonLoose(data.choices?.[0]?.message?.content || '');
+  return {
+    provider: 'openai',
+    model: 'whisper-1 + gpt-4o-mini',
+    summary: parsed,
+  };
 }
 
 function createMockSummary(context = '') {

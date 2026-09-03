@@ -52,6 +52,8 @@ function findSourceFile(dir) {
       (n) =>
         n.startsWith('source.') &&
         !n.endsWith('.json') &&
+        !n.endsWith('.part') &&
+        !n.endsWith('.ytdl') &&
         !/^source\.f\d+/i.test(n) &&
         n !== 'source.wav'
     );
@@ -230,14 +232,6 @@ async function extractAudioFromFile(id, opts = {}) {
       report({ steps, phase: 'extracting' });
     },
   });
-
-  if (sourcePath !== wavPath) {
-    try {
-      fs.unlinkSync(sourcePath);
-    } catch (_) {
-      // keep wav
-    }
-  }
 
   steps = markDone(steps, 'ffmpeg', 'Звук извлечён, WAV 16 kHz mono готов.');
   meta.audioFile = 'audio.wav';
@@ -418,12 +412,6 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
       },
     });
 
-    try {
-      fs.unlinkSync(sourcePath);
-    } catch (_) {
-      // keep wav
-    }
-
     steps = markDone(steps, 'ffmpeg', 'Звук извлечён, WAV 16 kHz mono готов.');
     const stat = fs.statSync(wavPath);
     if (!opts.leaveStatus) meta.status = 'ready';
@@ -449,6 +437,15 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
 
 function publicJob(meta) {
   if (!meta) return null;
+  const dir = jobDir(meta.id);
+  let sourcePath = null;
+  try {
+    if (fs.existsSync(dir)) sourcePath = findSourceFile(dir);
+  } catch (_) {
+    sourcePath = null;
+  }
+  const audioPath = meta.audioFile ? path.join(dir, meta.audioFile) : null;
+  const audioExists = Boolean(audioPath && fs.existsSync(audioPath));
   return {
     id: meta.id,
     url: meta.url,
@@ -461,17 +458,20 @@ function publicJob(meta) {
     error: meta.error || null,
     aiError: meta.aiError || null,
     createdAt: meta.createdAt,
-    audioUrl: meta.audioFile ? `/api/summarize/jobs/${meta.id}/audio` : null,
+    videoUrl: sourcePath ? `/api/summarize/jobs/${meta.id}/video` : null,
+    videoName: sourcePath ? path.basename(sourcePath) : null,
+    audioUrl: audioExists ? `/api/summarize/jobs/${meta.id}/audio` : null,
     summary: meta.summary || null,
     provider: meta.provider || null,
     model: meta.model || null,
     steps: meta.steps || [],
     audioOnly: Boolean(meta.audioOnly),
     canSummarize: Boolean(
-      meta.audioFile &&
+      audioExists &&
         !meta.summary &&
         (meta.status === 'audio_ready' ||
-          (meta.steps || []).some((s) => s.id === 'summarize' && s.status === 'skipped'))
+          meta.status === 'failed' ||
+          (meta.steps || []).some((s) => s.id === 'summarize' && (s.status === 'skipped' || s.status === 'failed')))
     ),
   };
 }
@@ -482,6 +482,7 @@ module.exports = {
   readMeta,
   writeMeta,
   jobDir,
+  findSourceFile,
   publicJob,
   assertHttpUrl,
 };

@@ -734,6 +734,39 @@ body.page-experiments {
 .run-step.is-active .run-step__detail { color: #a5f3fc; }
 .run-step.is-failed .run-step__detail { color: #fca5a5; }
 
+.run-step__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+}
+
+.run-step__player {
+  display: block;
+  width: 100%;
+  height: 40px;
+  flex: 1 1 100%;
+}
+
+.run-step__summary {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 8px;
+  color: #d1fae5;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.run-step__summary strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #ecfdf5;
+}
+
 .run-step__live {
   margin: 0.15rem 0 0.85rem;
 }

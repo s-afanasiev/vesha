@@ -26,6 +26,8 @@ const config = {
   dbConfig,
   sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
+  geminiApiBase: (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com').replace(/\/$/, ''),
+  geminiHttpsProxy: process.env.GEMINI_HTTPS_PROXY || process.env.HTTPS_PROXY || '',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   serpapiApiKey: process.env.SERPAPI_API_KEY || '',
   replicateApiToken: process.env.REPLICATE_API_TOKEN || '',

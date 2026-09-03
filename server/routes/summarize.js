@@ -5,7 +5,7 @@ const multer = require('multer');
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const { getToolStatus } = require('../services/mediaBins');
-const { readMeta, jobDir } = require('../services/extractAudio');
+const { readMeta, jobDir, findSourceFile } = require('../services/extractAudio');
 const {
   enqueueUrl,
   enqueueFile,
@@ -38,6 +38,42 @@ router.get('/tools', async (_req, res, next) => {
 router.get('/queue', (_req, res) => {
   res.json(snapshot());
 });
+
+function downloadName(name, fallback) {
+  const raw = String(name || fallback || 'file');
+  const safe = raw.replace(/[^\w.\-а-яА-ЯёЁ]+/gi, '_').slice(0, 120);
+  return safe || fallback || 'file';
+}
+
+function sourceMime(file) {
+  const ext = path.extname(file).toLowerCase();
+  if (ext === '.mp4') return 'video/mp4';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.mkv') return 'video/x-matroska';
+  if (ext === '.mov') return 'video/quicktime';
+  if (ext === '.avi') return 'video/x-msvideo';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.m4a') return 'audio/mp4';
+  return 'application/octet-stream';
+}
+
+function summaryPlainText(summary, title) {
+  const s = summary || {};
+  let text = `СУММАРИЗАЦИЯ: ${s.title || title || ''}\n\n`;
+  text += `КРАТКАЯ СУТЬ:\n${s.tldr || ''}\n\n`;
+  if (Array.isArray(s.key_points) && s.key_points.length) {
+    text += `ТЕЗИСЫ:\n${s.key_points.map((p) => `- ${p}`).join('\n')}\n\n`;
+  }
+  if (Array.isArray(s.timeline) && s.timeline.length) {
+    text += `ТАЙМКОДЫ:\n${s.timeline.map((t) => `- ${t.time || ''} ${t.title || ''}: ${t.summary || ''}`).join('\n')}\n\n`;
+  }
+  if (Array.isArray(s.action_items) && s.action_items.length) {
+    text += `ЗАДАЧИ:\n${s.action_items.map((a) => `- ${a}`).join('\n')}\n\n`;
+  }
+  if (s.transcript) text += `РАСШИФРОВКА:\n${s.transcript}\n`;
+  return text;
+}
 
 function truthy(v) {
   return v === true || v === 'true' || v === '1' || v === 'on';
@@ -127,16 +163,46 @@ router.get('/jobs/:id/audio', (req, res) => {
   if (!fs.existsSync(file)) {
     return res.status(404).json({ error: 'Файл аудио пропал' });
   }
-  const mime = file.endsWith('.mp3')
-    ? 'audio/mp3'
-    : file.endsWith('.m4a')
-      ? 'audio/mp4'
-      : 'audio/wav';
+  const mime = sourceMime(file);
   res.setHeader('Content-Type', mime);
   if (req.query.download) {
-    res.setHeader('Content-Disposition', `attachment; filename="${meta.audioFile || 'audio.wav'}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${downloadName(meta.audioFile, 'audio.wav')}"`
+    );
   }
   res.sendFile(file);
+});
+
+router.get('/jobs/:id/video', (req, res) => {
+  const meta = readMeta(req.params.id);
+  if (!meta) return res.status(404).json({ error: 'Задание не найдено' });
+  const file = findSourceFile(jobDir(meta.id));
+  if (!file || !fs.existsSync(file)) {
+    return res.status(404).json({ error: 'Видео ещё нет или уже удалено' });
+  }
+  res.setHeader('Content-Type', sourceMime(file));
+  if (req.query.download !== '0') {
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${downloadName(path.basename(file), 'video.mp4')}"`
+    );
+  }
+  res.sendFile(file);
+});
+
+router.get('/jobs/:id/summary.txt', (req, res) => {
+  const meta = readMeta(req.params.id);
+  if (!meta || !meta.summary) {
+    return res.status(404).json({ error: 'Суммаризации ещё нет' });
+  }
+  const body = summaryPlainText(meta.summary, meta.title);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${downloadName((meta.summary.title || 'summary') + '.txt', 'summary.txt')}"`
+  );
+  res.send(body);
 });
 
 module.exports = router;

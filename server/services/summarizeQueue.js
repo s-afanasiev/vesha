@@ -165,7 +165,7 @@ async function runSummarizePhase(id) {
     },
   });
 
-  if (ai.provider !== 'gemini' && !config.summarizeMock) {
+  if (!['gemini', 'openai'].includes(ai.provider) && !config.summarizeMock) {
     throw new Error(ai.error || 'Суммаризация не от Gemini — заглушка отключена');
   }
 
