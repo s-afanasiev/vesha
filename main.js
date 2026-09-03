@@ -59,6 +59,13 @@ async function start() {
     if (hashed) console.log('Backfilled image hashes:', hashed);
     const removed = await cleanupDuplicateLooks();
     if (removed) console.log('Removed duplicate looks:', removed);
+    try {
+      const { ensureSummarizeJobsTable } = require('./server/services/summarizeHistory');
+      await ensureSummarizeJobsTable();
+      console.log('summarize_jobs table ready');
+    } catch (histErr) {
+      console.warn('summarize_jobs table missing/unavailable:', histErr.message);
+    }
   } catch (err) {
     console.warn('DB migrate skipped/failed:', err.message);
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');

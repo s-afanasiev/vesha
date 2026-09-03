@@ -45,8 +45,14 @@ function truthy(v) {
 
 router.get('/history', async (req, res, next) => {
   try {
-    const items = await listForOwner(ownerFromReq(req));
-    res.json({ items });
+    const owner = ownerFromReq(req);
+    const { items, warning } = await listForOwner(owner);
+    res.json({
+      items,
+      warning,
+      guestId: owner.guestId,
+      userId: owner.userId,
+    });
   } catch (err) {
     next(err);
   }

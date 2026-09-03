@@ -993,11 +993,16 @@
     parent.appendChild(tag);
   }
 
-  function renderHistory(items) {
+  function renderHistory(items, warning) {
     historyList.innerHTML = '';
     if (historyError) {
-      historyError.hidden = true;
-      historyError.textContent = '';
+      if (warning) {
+        historyError.hidden = false;
+        historyError.textContent = warning;
+      } else {
+        historyError.hidden = true;
+        historyError.textContent = '';
+      }
     }
     if (!items.length) {
       if (historyEmpty) historyEmpty.hidden = false;
@@ -1087,7 +1092,7 @@
       const res = await fetch('/api/summarize/history', { credentials: 'same-origin' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Не удалось загрузить историю');
-      renderHistory(Array.isArray(data.items) ? data.items : []);
+      renderHistory(Array.isArray(data.items) ? data.items : [], data.warning || null);
     } catch (err) {
       historyList.innerHTML = '';
       if (historyEmpty) historyEmpty.hidden = true;
