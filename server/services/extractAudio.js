@@ -459,6 +459,7 @@ function publicJob(meta) {
     phase: meta.phase || null,
     bytes: meta.bytes || null,
     error: meta.error || null,
+    aiError: meta.aiError || null,
     createdAt: meta.createdAt,
     audioUrl: meta.audioFile ? `/api/summarize/jobs/${meta.id}/audio` : null,
     summary: meta.summary || null,

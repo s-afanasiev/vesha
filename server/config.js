@@ -52,6 +52,7 @@ const config = {
   summarizeMaxDurationSec: intEnv('SUMMARIZE_MAX_DURATION_SEC', 3 * 60 * 60),
   summarizeTimeoutMs: intEnv('SUMMARIZE_TIMEOUT_MS', 10 * 60 * 1000),
   summarizeMaxFilesize: process.env.SUMMARIZE_MAX_FILESIZE || '80M',
+  summarizeMock: ['1', 'true', 'yes'].includes(String(process.env.SUMMARIZE_MOCK || '').toLowerCase()),
   extractAudioDir:
     process.env.EXTRACT_AUDIO_DIR ||
     require('path').join(

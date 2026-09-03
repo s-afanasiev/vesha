@@ -11,6 +11,7 @@ const {
   assertHttpUrl,
 } = require('./extractAudio');
 const { summarizeWithGemini } = require('./aiSummarize');
+const config = require('../config');
 const { skipSummarizeStep, patchStep, markDone, geminiCommand, buildUrlSteps, buildFileSteps } = require('./jobSteps');
 const { touchHistory } = require('./summarizeHistory');
 
@@ -130,7 +131,16 @@ async function runSummarizePhase(id) {
     command: geminiCommand(),
     detail: 'Отправляем audio.wav в Gemini…',
   });
-  persist(id, { status: 'running', phase: 'summarizing', audioOnly: false, steps });
+  persist(id, {
+    status: 'running',
+    phase: 'summarizing',
+    audioOnly: false,
+    summary: null,
+    provider: null,
+    model: null,
+    aiError: null,
+    steps,
+  });
 
   const audioPath = afterExtract.audioFile
     ? path.join(jobDir(id), afterExtract.audioFile)
@@ -155,6 +165,10 @@ async function runSummarizePhase(id) {
     },
   });
 
+  if (ai.provider !== 'gemini' && !config.summarizeMock) {
+    throw new Error(ai.error || 'Суммаризация не от Gemini — заглушка отключена');
+  }
+
   steps = markDone(steps, 'summarize', ai.model ? `Готово (${ai.provider} / ${ai.model})` : 'Готово');
   persist(id, {
     status: 'ready',
@@ -175,6 +189,10 @@ async function runJob(job) {
       status: 'running',
       phase: job.kind === 'url' ? 'downloading' : 'extracting',
       error: null,
+      summary: null,
+      provider: null,
+      model: null,
+      aiError: null,
       startedAt: new Date().toISOString(),
     });
 
@@ -281,6 +299,11 @@ function enqueue(input) {
     userId: input.userId || null,
     guestId: input.guestId || null,
     createdAt: job.createdAt,
+    summary: null,
+    provider: null,
+    model: null,
+    aiError: null,
+    error: null,
     steps:
       job.kind === 'url'
         ? buildUrlSteps(job.url, { audioOnly: job.audioOnly })
@@ -355,6 +378,10 @@ function enqueueSummarize(id) {
     phase: 'queued',
     audioOnly: false,
     error: null,
+    summary: null,
+    provider: null,
+    model: null,
+    aiError: null,
     steps: patchStep(meta.steps || [], 'summarize', {
       status: 'pending',
       progress: 0,

@@ -130,6 +130,29 @@
     errorEl.textContent = text || '';
   }
 
+  function mediaSrc(url, job) {
+    if (!url) return '';
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}v=${encodeURIComponent((job && job.id) || '')}-${(job && job.bytes) || 0}`;
+  }
+
+  function resetResultView() {
+    currentSummaryData = null;
+    currentJobData = null;
+    resultSection.hidden = true;
+    resultTitle.textContent = 'Результат суммаризации';
+    resultMetaTags.innerHTML = '';
+    outputTldr.textContent = '';
+    outputKeypoints.innerHTML = '';
+    outputTimeline.innerHTML = '';
+    outputActions.innerHTML = '';
+    outputTranscript.textContent = '';
+    try {
+      player.removeAttribute('src');
+      player.load();
+    } catch (_) {}
+  }
+
   function isAudioOnly() {
     return Boolean(audioOnlyEl && audioOnlyEl.checked);
   }
@@ -918,9 +941,13 @@
 
     applyJobView(job);
     currentJobData = {
+      id: job.id,
+      jobId: job.id,
       sourceTitle: job.title,
       audioUrl: job.audioUrl,
-      jobId: job.id,
+      bytes: job.bytes,
+      provider: job.provider,
+      model: job.model,
     };
 
     if (job.status === 'audio_ready' || (job.canSummarize && !job.summary)) {
@@ -1112,7 +1139,7 @@
   processBtn.addEventListener('click', async () => {
     showError('');
     showStatus('');
-    resultSection.hidden = true;
+    resetResultView();
     queueCard.hidden = true;
     hideAudioReadyBar();
     stopPolling();
@@ -1190,7 +1217,7 @@
       <span class="summarize-tag" style="color:var(--sm-accent)">Без распознавания</span>
     `;
     if (job.audioUrl) {
-      player.src = job.audioUrl;
+      player.src = mediaSrc(job.audioUrl, job);
     }
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1205,12 +1232,13 @@
       <span class="summarize-tag">Язык: ${summary.language || 'ru'}</span>
       ${summary.timeline?.length ? `<span class="summarize-tag">Главы: ${summary.timeline.length}</span>` : ''}
       ${summary.key_points?.length ? `<span class="summarize-tag">Тезисы: ${summary.key_points.length}</span>` : ''}
+      ${job.model ? `<span class="summarize-tag">${escapeHtml(job.provider || 'AI')}: ${escapeHtml(job.model)}</span>` : ''}
       <span class="summarize-tag" style="color:var(--sm-accent)">Готово</span>
     `;
 
     // Audio player
     if (job.audioUrl) {
-      player.src = job.audioUrl;
+      player.src = mediaSrc(job.audioUrl, job);
     }
 
     // View: TLDR
