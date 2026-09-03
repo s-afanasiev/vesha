@@ -130,6 +130,61 @@
     errorEl.textContent = text || '';
   }
 
+  function htmlToError(status, text) {
+    const plain = String(text || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 160);
+    if (status === 504 || /504|Gateway Time/i.test(text)) {
+      return {
+        message:
+          'Прокси оборвал ожидание (504). В nginx поставьте proxy_read_timeout 600s; задача на сервере могла продолжиться — откройте историю через минуту.',
+        retryable: true,
+      };
+    }
+    if (status === 502 || status === 503 || /Bad Gateway/i.test(text)) {
+      return {
+        message: 'Сервер временно не ответил (502/503). Если суммаризация ещё идёт, продолжаем ждать…',
+        retryable: true,
+      };
+    }
+    return {
+      message: `Сервер вернул HTML вместо JSON (HTTP ${status || '?'}). ${plain}`,
+      retryable: false,
+    };
+  }
+
+  async function fetchJson(url, options) {
+    const res = await fetch(url, options);
+    const raw = await res.text();
+    const trimmed = String(raw || '').trim();
+    if (trimmed.startsWith('<') || /^<!doctype html/i.test(trimmed)) {
+      const info = htmlToError(res.status, trimmed);
+      const err = new Error(info.message);
+      err.retryable = info.retryable;
+      err.status = res.status;
+      throw err;
+    }
+    let data = {};
+    if (trimmed) {
+      try {
+        data = JSON.parse(trimmed);
+      } catch (err) {
+        const wrapped = new Error('Ответ сервера не JSON: ' + err.message);
+        wrapped.retryable = res.status >= 502;
+        throw wrapped;
+      }
+    }
+    if (!res.ok) {
+      const err = new Error((data && data.error) || 'Ошибка запроса');
+      err.status = res.status;
+      err.retryable = res.status === 502 || res.status === 503 || res.status === 504;
+      throw err;
+    }
+    return data;
+  }
+
   function mediaSrc(url, job) {
     if (!url) return '';
     const sep = url.includes('?') ? '&' : '?';
@@ -857,6 +912,7 @@
       clearTimeout(pollTimer);
       pollTimer = null;
     }
+    pollRetries = 0;
     stopElapsedClock();
   }
 
@@ -884,10 +940,27 @@
       `Сейчас выполняется ${running}. Перед вами ${ahead} ${ahead === 1 ? 'задача' : 'задач(и)'}.`;
   }
 
+  let pollRetries = 0;
+
   async function pollJob(jobId) {
-    const res = await fetch('/api/summarize/jobs/' + encodeURIComponent(jobId));
-    const job = await res.json();
-    if (!res.ok) throw new Error(job.error || 'Не удалось узнать статус');
+    let job;
+    try {
+      job = await fetchJson('/api/summarize/jobs/' + encodeURIComponent(jobId));
+      pollRetries = 0;
+    } catch (err) {
+      if (err.retryable && pollRetries < 40) {
+        pollRetries += 1;
+        showStatus(err.message || 'Нет связи с сервером, повторяем запрос статуса…');
+        pollTimer = setTimeout(() => {
+          pollJob(jobId).catch((waitErr) => {
+            showError(waitErr.message || 'Ошибка очереди');
+            processBtn.disabled = false;
+          });
+        }, 2000);
+        return;
+      }
+      throw err;
+    }
 
     applyJobView(job);
 

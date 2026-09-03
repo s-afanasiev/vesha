@@ -43,7 +43,38 @@ const SUMMARIZE_PROMPT = `Ты эксперт по анализу и сумма�
 - Таймкоды должны быть правдоподобными и соответствовать таймингу записи.
 - Не выдумывай тему: опирайся только на это аудио. Если речь неразборчива — так и напиши.`;
 
-function parseJsonLoose(text) {
+function htmlErrorMessage(status, text) {
+  const plain = String(text || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  if (status === 413 || /too large|request entity/i.test(text)) {
+    return `Слишком большой запрос к Gemini (HTTP ${status}).`;
+  }
+  if (status === 502 || status === 503 || status === 504 || /Bad Gateway|Gateway Time|504/i.test(text)) {
+    return `Шлюз вернул HTML ${status || ''} вместо JSON (таймаут nginx/прокси или Google недоступен).`.replace('  ', ' ');
+  }
+  return `Ответ не JSON (HTTP ${status || '?'}): ${plain || 'HTML-страница'}`;
+}
+
+async function readJsonResponse(res, label) {
+  const raw = await res.text();
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) {
+    if (!res.ok) throw new Error(`${label}: пустой ответ HTTP ${res.status}`);
+    return {};
+  }
+  if (trimmed.startsWith('<') || /^<!doctype html/i.test(trimmed)) {
+    throw new Error(htmlErrorMessage(res.status, trimmed));
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch (err) {
+    throw new Error(`${label}: ${htmlErrorMessage(res.status, trimmed)} (${err.message})`);
+  }
+}
   if (!text) throw new Error('Пустой ответ модели');
   const trimmed = String(text).trim();
   try {
@@ -136,7 +167,7 @@ async function uploadGeminiFile(apiKey, filePath, mimeType, report) {
     body,
     signal: AbortSignal.timeout(config.summarizeTimeoutMs),
   });
-  const data = await put.json().catch(() => ({}));
+  const data = await readJsonResponse(put, 'Gemini upload');
   if (!put.ok) {
     throw new Error(data.error?.message || `Gemini upload HTTP ${put.status}`);
   }
@@ -164,7 +195,7 @@ async function waitFileActive(apiKey, file, report) {
       ? `https://generativelanguage.googleapis.com/v1beta/${name}?key=${encodeURIComponent(apiKey)}`
       : `https://generativelanguage.googleapis.com/v1beta/files/${encodeURIComponent(name)}?key=${encodeURIComponent(apiKey)}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    info = await res.json();
+    info = await readJsonResponse(res, 'Gemini file status');
     if (!res.ok) {
       throw new Error(info.error?.message || `Gemini file status HTTP ${res.status}`);
     }
@@ -188,17 +219,9 @@ async function prepareAudioPart(audioPath, report) {
     }
   }
   const size = fs.statSync(sendPath).size;
-  if (size <= INLINE_LIMIT) {
-    report({
-      detail: `Читаем ${path.basename(sendPath)} (${formatMb(size)} МБ) и кодируем для Gemini…`,
-    });
-    return {
-      inlineData: {
-        mimeType: mime,
-        data: fs.readFileSync(sendPath).toString('base64'),
-      },
-    };
-  }
+  report({
+    detail: `Аудио ${path.basename(sendPath)} (${formatMb(size)} МБ) отправим через Gemini Files API, без огромного JSON.`,
+  });
   const file = await uploadGeminiFile(config.geminiApiKey, sendPath, mime, report);
   const ready = await waitFileActive(config.geminiApiKey, file, report);
   const fileUri = ready.uri || ready.name;
@@ -270,7 +293,7 @@ async function requestGemini(parts, report) {
         signal: AbortSignal.timeout(config.summarizeTimeoutMs),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse(res, model);
       if (!res.ok) {
         throw new Error(`[${model}] ` + (data.error?.message || `HTTP ${res.status}`));
       }
