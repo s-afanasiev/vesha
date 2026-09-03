@@ -11,14 +11,8 @@ const {
   assertHttpUrl,
 } = require('./extractAudio');
 const { summarizeWithGemini } = require('./aiSummarize');
-const {
-  buildUrlSteps,
-  buildFileSteps,
-  skipSummarizeStep,
-  patchStep,
-  markDone,
-  geminiCommand,
-} = require('./jobSteps');
+const { skipSummarizeStep, patchStep, markDone, geminiCommand, buildUrlSteps, buildFileSteps } = require('./jobSteps');
+const { touchHistory } = require('./summarizeHistory');
 
 const MAX_QUEUE = 30;
 
@@ -95,17 +89,34 @@ function view(id) {
   };
 }
 
+const lastHistoryKey = new Map();
+
 function persist(id, patch) {
   const dir = jobDir(id);
   fs.mkdirSync(dir, { recursive: true });
   const prev = readMeta(id) || { id, createdAt: new Date().toISOString() };
   const next = { ...prev, ...patch, id };
+  if (!next.userId) next.userId = prev.userId || null;
+  if (!next.guestId) next.guestId = prev.guestId || null;
   writeMeta(id, next);
   const mem = live.get(id);
   if (mem) {
     if (patch.status) mem.status = patch.status;
     if (patch.phase) mem.phase = patch.phase;
     if (patch.title) mem.title = patch.title;
+  }
+  const histKey = [
+    next.status,
+    next.audioOnly ? 1 : 0,
+    next.audioFile || '',
+    next.bytes || 0,
+    Math.round(next.duration || 0),
+    next.error || '',
+    next.summary ? 1 : 0,
+  ].join('|');
+  if (lastHistoryKey.get(id) !== histKey) {
+    lastHistoryKey.set(id, histKey);
+    touchHistory(id, { userId: next.userId, guestId: next.guestId });
   }
   return next;
 }
@@ -164,6 +175,7 @@ async function runJob(job) {
       status: 'running',
       phase: job.kind === 'url' ? 'downloading' : 'extracting',
       error: null,
+      startedAt: new Date().toISOString(),
     });
 
     const onProgress = (meta) => persist(job.id, meta);
@@ -214,6 +226,7 @@ async function pump() {
           status: 'failed',
           phase: 'failed',
           error: err.message || 'Ошибка обработки',
+          completedAt: new Date().toISOString(),
           steps: active
             ? patchStep(meta.steps, active.id, { status: 'failed', detail: err.message })
             : meta && meta.steps,
@@ -229,6 +242,12 @@ async function pump() {
   }
 }
 
+function inferHistoryKind(kind, sourceTitle) {
+  if (kind === 'url') return 'url';
+  if (kind === 'mic' || /^mic_record/i.test(sourceTitle || '')) return 'mic';
+  return 'file';
+}
+
 function enqueue(input) {
   if (waiting.length + (runningId ? 1 : 0) >= MAX_QUEUE) {
     const err = new Error('Очередь переполнена, попробуйте позже');
@@ -237,6 +256,7 @@ function enqueue(input) {
   }
 
   const id = input.id || randomUUID();
+  const historyKind = inferHistoryKind(input.kind, input.sourceTitle);
   const job = {
     id,
     kind: input.kind,
@@ -252,10 +272,14 @@ function enqueue(input) {
     status: 'queued',
     phase: 'queued',
     kind: job.kind,
+    historyKind,
     url: job.url,
     title: job.title,
     audioOnly: job.audioOnly,
     sourceTitle: input.sourceTitle || job.title,
+    sourceBytes: input.sourceBytes || null,
+    userId: input.userId || null,
+    guestId: input.guestId || null,
     createdAt: job.createdAt,
     steps:
       job.kind === 'url'
@@ -267,7 +291,7 @@ function enqueue(input) {
   return view(id);
 }
 
-function enqueueUrl(rawUrl, { audioOnly = false } = {}) {
+function enqueueUrl(rawUrl, { audioOnly = false, userId = null, guestId = null } = {}) {
   const url = assertHttpUrl(rawUrl);
   let title = 'Ссылка';
   try {
@@ -275,16 +299,19 @@ function enqueueUrl(rawUrl, { audioOnly = false } = {}) {
   } catch (_) {
     // keep default
   }
-  return enqueue({ kind: 'url', url, title, audioOnly });
+  return enqueue({ kind: 'url', url, title, audioOnly, userId, guestId });
 }
 
-function enqueueFile({ id, sourceTitle, audioOnly = false }) {
+function enqueueFile({ id, sourceTitle, audioOnly = false, sourceBytes, userId = null, guestId = null }) {
   return enqueue({
     id,
-    kind: 'file',
+    kind: /^mic_record/i.test(sourceTitle || '') ? 'mic' : 'file',
     title: sourceTitle || 'Файл',
     sourceTitle,
+    sourceBytes,
     audioOnly,
+    userId,
+    guestId,
   });
 }
 

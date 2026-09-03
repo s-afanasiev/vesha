@@ -48,6 +48,12 @@
   const copyMdBtn = document.getElementById('copy-md-btn');
   const downloadTxtBtn = document.getElementById('download-txt-btn');
   const copyTranscriptBtn = document.getElementById('copy-transcript-btn');
+  const historyBtn = document.getElementById('history-btn');
+  const historyClose = document.getElementById('history-close');
+  const historyPanel = document.getElementById('history-panel');
+  const historyList = document.getElementById('history-list');
+  const historyEmpty = document.getElementById('history-empty');
+  const historyError = document.getElementById('history-error');
 
   // State
   let currentFile = null;
@@ -79,6 +85,39 @@
     const m = Math.floor(s / 60);
     const r = s % 60;
     return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+
+  function formatClock(sec) {
+    if (!Number.isFinite(sec) || sec < 0) return '—';
+    const s = Math.round(sec);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    if (h) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+
+  function formatElapsedMs(ms) {
+    if (!Number.isFinite(ms) || ms < 0) return null;
+    const sec = Math.round(ms / 1000);
+    if (sec < 60) return `${sec} с`;
+    const m = Math.floor(sec / 60);
+    const r = sec % 60;
+    if (m < 60) return r ? `${m} мин ${r} с` : `${m} мин`;
+    const h = Math.floor(m / 60);
+    return `${h} ч ${m % 60} мин`;
+  }
+
+  function formatWhen(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   function showStatus(text) {
@@ -873,6 +912,7 @@
     if (job.status === 'failed') {
       hideAudioReadyBar();
       showStatus('');
+      refreshHistoryIfOpen();
       throw new Error(job.error || 'Задача не выполнилась');
     }
 
@@ -890,6 +930,7 @@
       showAudioReadyBar(job);
       processBtn.disabled = false;
       checkTools();
+      refreshHistoryIfOpen();
       return;
     }
 
@@ -899,6 +940,173 @@
     renderResults(currentSummaryData, currentJobData);
     processBtn.disabled = false;
     checkTools();
+    refreshHistoryIfOpen();
+  }
+
+  function historyKindLabel(kind) {
+    if (kind === 'url') return 'Ссылка';
+    if (kind === 'mic') return 'Микрофон';
+    return 'Файл';
+  }
+
+  function historyStatusLabel(item) {
+    if (item.status === 'ready') return { text: 'Суммаризация готова', cls: 'is-ok' };
+    if (item.status === 'audio_ready') return { text: 'Только аудио', cls: 'is-ok' };
+    if (item.status === 'failed') return { text: 'Ошибка', cls: 'is-fail' };
+    if (item.status === 'running') return { text: 'Выполняется', cls: 'is-wait' };
+    if (item.status === 'queued') return { text: 'В очереди', cls: 'is-wait' };
+    return { text: item.status || '—', cls: '' };
+  }
+
+  function addHistoryTag(parent, text, cls) {
+    if (!text) return;
+    const tag = document.createElement('span');
+    tag.className = 'history-tag' + (cls ? ' ' + cls : '');
+    tag.textContent = text;
+    parent.appendChild(tag);
+  }
+
+  function renderHistory(items) {
+    historyList.innerHTML = '';
+    if (historyError) {
+      historyError.hidden = true;
+      historyError.textContent = '';
+    }
+    if (!items.length) {
+      if (historyEmpty) historyEmpty.hidden = false;
+      return;
+    }
+    if (historyEmpty) historyEmpty.hidden = true;
+
+    items.forEach((item) => {
+      const card = document.createElement('article');
+      card.className = 'history-card';
+
+      const top = document.createElement('div');
+      top.className = 'history-card__top';
+      const title = document.createElement('h3');
+      title.className = 'history-card__title';
+      title.textContent = item.summaryTitle || item.sourceTitle || item.sourceHost || 'Конвертация';
+      const when = document.createElement('span');
+      when.className = 'history-card__when';
+      when.textContent = formatWhen(item.createdAt);
+      top.appendChild(title);
+      top.appendChild(when);
+      card.appendChild(top);
+
+      if (item.sourceUrl) {
+        const link = document.createElement('a');
+        link.className = 'history-card__url';
+        link.href = item.sourceUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = item.sourceUrl;
+        card.appendChild(link);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'history-card__meta';
+      const st = historyStatusLabel(item);
+      addHistoryTag(meta, historyKindLabel(item.kind));
+      addHistoryTag(meta, st.text, st.cls);
+      addHistoryTag(
+        meta,
+        item.hasSummary ? 'С суммаризацией' : item.audioOnly ? 'Только аудио' : null
+      );
+      addHistoryTag(meta, item.durationSec != null ? `Длительность ${formatClock(item.durationSec)}` : null);
+      addHistoryTag(meta, item.audioBytes != null ? `Аудио ${formatBytes(item.audioBytes)}` : null);
+      addHistoryTag(meta, item.sourceBytes != null ? `Исходник ${formatBytes(item.sourceBytes)}` : null);
+      addHistoryTag(meta, item.language ? `Язык ${item.language}` : null);
+      addHistoryTag(
+        meta,
+        item.model ? `${item.provider || 'модель'}: ${item.model}` : null
+      );
+      addHistoryTag(meta, item.elapsedMs >= 1000 ? `Обработка ${formatElapsedMs(item.elapsedMs)}` : null);
+      addHistoryTag(meta, item.hasFiles ? null : 'Файлы уже удалены');
+      card.appendChild(meta);
+
+      if (item.error) {
+        const err = document.createElement('p');
+        err.className = 'history-card__error';
+        err.textContent = item.error;
+        card.appendChild(err);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'history-card__actions';
+      if (item.hasFiles) {
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'vesha-btn vesha-btn--sm vesha-btn--primary';
+        openBtn.textContent = item.hasSummary ? 'Открыть результат' : 'Открыть';
+        openBtn.addEventListener('click', () => openHistoryJob(item.id));
+        actions.appendChild(openBtn);
+      }
+      if (item.audioUrl) {
+        const dl = document.createElement('a');
+        dl.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
+        dl.href = item.audioUrl + (item.audioUrl.includes('?') ? '&' : '?') + 'download=1';
+        dl.textContent = 'Скачать аудио';
+        dl.setAttribute('download', '');
+        actions.appendChild(dl);
+      }
+      if (actions.childNodes.length) card.appendChild(actions);
+      historyList.appendChild(card);
+    });
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch('/api/summarize/history', { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Не удалось загрузить историю');
+      renderHistory(Array.isArray(data.items) ? data.items : []);
+    } catch (err) {
+      historyList.innerHTML = '';
+      if (historyEmpty) historyEmpty.hidden = true;
+      if (historyError) {
+        historyError.hidden = false;
+        historyError.textContent = err.message || 'История недоступна (нет подключения к БД).';
+      }
+    }
+  }
+
+  function refreshHistoryIfOpen() {
+    if (historyPanel && !historyPanel.hidden) loadHistory();
+  }
+
+  async function openHistoryJob(jobId) {
+    showError('');
+    showStatus('');
+    queueCard.hidden = true;
+    hideAudioReadyBar();
+    stopPolling();
+    processBtn.disabled = true;
+    if (runLog) runLog.hidden = false;
+    try {
+      await pollJob(jobId);
+      if (runLog) runLog.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      showError(err.message || 'Не удалось открыть конвертацию');
+      showStatus('');
+      processBtn.disabled = false;
+    }
+  }
+
+  if (historyBtn && historyPanel) {
+    historyBtn.addEventListener('click', async () => {
+      const willShow = historyPanel.hidden;
+      historyPanel.hidden = !willShow;
+      if (willShow) {
+        await loadHistory();
+        historyPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+  if (historyClose && historyPanel) {
+    historyClose.addEventListener('click', () => {
+      historyPanel.hidden = true;
+    });
   }
 
   processBtn.addEventListener('click', async () => {

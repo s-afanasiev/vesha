@@ -13,6 +13,7 @@ const {
   view,
   snapshot,
 } = require('../services/summarizeQueue');
+const { ownerFromReq, listForOwner } = require('../services/summarizeHistory');
 
 const router = express.Router();
 
@@ -42,11 +43,23 @@ function truthy(v) {
   return v === true || v === 'true' || v === '1' || v === 'on';
 }
 
+router.get('/history', async (req, res, next) => {
+  try {
+    const items = await listForOwner(ownerFromReq(req));
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/from-url', (req, res, next) => {
   try {
+    const owner = ownerFromReq(req);
     res.json(
       enqueueUrl(req.body && req.body.url, {
         audioOnly: truthy(req.body && req.body.audioOnly),
+        userId: owner.userId,
+        guestId: owner.guestId,
       })
     );
   } catch (err) {
@@ -69,11 +82,15 @@ router.post('/upload', upload.single('file'), (req, res, next) => {
     const sourceFile = path.join(dir, `source${ext}`);
     fs.renameSync(req.file.path, sourceFile);
 
+    const owner = ownerFromReq(req);
     res.json(
       enqueueFile({
         id,
         sourceTitle: originalName,
+        sourceBytes: req.file.size,
         audioOnly: truthy(req.body && req.body.audioOnly),
+        userId: owner.userId,
+        guestId: owner.guestId,
       })
     );
   } catch (err) {

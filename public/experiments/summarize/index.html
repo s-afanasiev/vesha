@@ -35,7 +35,25 @@
         </div>
       </div>
       <div class="summarize-tools-pill" id="tools-status">Проверка инструментов…</div>
+      <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="history-btn">
+        История конвертаций
+      </button>
     </div>
+
+    <section class="summarize-history" id="history-panel" hidden>
+      <div class="summarize-history__head">
+        <div>
+          <h2>История конвертаций</h2>
+          <p class="summarize-history__hint">
+            Сохраняется для этого браузера и для аккаунта, если вы вошли. Можно открыть готовый результат, пока файлы ещё на диске.
+          </p>
+        </div>
+        <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="history-close">Закрыть</button>
+      </div>
+      <p class="summarize-history__empty" id="history-empty" hidden>Пока нет ни одной конвертации.</p>
+      <p class="summarize-history__error" id="history-error" hidden></p>
+      <div class="summarize-history__list" id="history-list"></div>
+    </section>
 
     <!-- Input Mode Tabs -->
     <section class="summarize-input-card">

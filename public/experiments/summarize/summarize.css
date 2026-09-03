@@ -1210,3 +1210,133 @@ body.page-experiments {
   white-space: pre-wrap;
   scrollbar-width: thin;
 }
+
+.summarize-history {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.15rem 1.15rem;
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-md);
+}
+
+.summarize-history__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.summarize-history__head h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.summarize-history__hint,
+.summarize-history__empty,
+.summarize-history__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--sm-muted);
+  line-height: 1.45;
+}
+
+.summarize-history__error {
+  color: #fca5a5;
+  margin-bottom: 0.75rem;
+}
+
+.summarize-history__empty {
+  padding: 0.75rem 0;
+}
+
+.summarize-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.history-card {
+  padding: 0.85rem 0.95rem;
+  background: var(--sm-surface-2);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-md);
+}
+
+.history-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.history-card__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.history-card__when {
+  font-size: 0.78rem;
+  color: var(--sm-muted);
+}
+
+.history-card__url {
+  display: block;
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  color: var(--sm-accent);
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.history-card__url:hover {
+  text-decoration: underline;
+}
+
+.history-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.7rem;
+}
+
+.history-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.history-card__error {
+  margin: 0 0 0.65rem;
+  font-size: 0.8rem;
+  color: #fca5a5;
+}
+
+.history-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--sm-border);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.72rem;
+  color: #cbd5e1;
+}
+
+.history-tag.is-ok {
+  color: var(--sm-green);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.history-tag.is-fail {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.history-tag.is-wait {
+  color: var(--sm-accent);
+  border-color: var(--sm-accent-border);
+}
