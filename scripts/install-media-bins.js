@@ -28,6 +28,24 @@ function exe(name) {
   return process.platform === 'win32' ? `${name}.exe` : name;
 }
 
+function isWindowsPe(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(2);
+    fs.readSync(fd, buf, 0, 2, 0);
+    fs.closeSync(fd);
+    return buf[0] === 0x4d && buf[1] === 0x5a;
+  } catch {
+    return false;
+  }
+}
+
+function needsInstall(file) {
+  if (!fs.existsSync(file)) return true;
+  if (process.platform !== 'win32' && isWindowsPe(file)) return true;
+  return false;
+}
+
 function fail(message) {
   console.error(message);
   process.exit(1);
@@ -100,11 +118,10 @@ function copyTool(extractedDir, toolName) {
   console.log('Installed', dest);
 }
 
-async function main() {
-  const force = process.argv.includes('--force');
+async function ensureMediaBins({ force = false, quietIfOk = false } = {}) {
   const platform = process.platform;
   if (!YTDLP_URL[platform] || !FFMPEG_URL[platform]) {
-    fail(`Нет готовых бинарей для ${platform}`);
+    throw new Error(`Нет готовых бинарей для ${platform}`);
   }
 
   fs.mkdirSync(BIN, { recursive: true });
@@ -114,17 +131,37 @@ async function main() {
   const ffmpegDest = path.join(BIN, exe('ffmpeg'));
   const ffprobeDest = path.join(BIN, exe('ffprobe'));
 
-  if (!force && fs.existsSync(ytdlpDest) && fs.existsSync(ffmpegDest) && fs.existsSync(ffprobeDest)) {
-    console.log('Бинарники уже лежат в bin/. Переустановка: npm run media-bins -- --force');
-    return;
+  if (platform !== 'win32') {
+    for (const leftover of ['yt-dlp.exe', 'ffmpeg.exe', 'ffprobe.exe']) {
+      const p = path.join(BIN, leftover);
+      if (fs.existsSync(p)) {
+        console.warn(
+          `В bin/ лежит ${leftover} с Windows. На Linux он не запускается — рядом скачаем Linux-файлы без .exe.`
+        );
+      }
+    }
   }
 
-  if (force || !fs.existsSync(ytdlpDest)) {
+  if (
+    !force &&
+    !needsInstall(ytdlpDest) &&
+    !needsInstall(ffmpegDest) &&
+    !needsInstall(ffprobeDest)
+  ) {
+    if (!quietIfOk) {
+      console.log('Бинарники уже лежат в bin/. Переустановка: npm run media-bins -- --force');
+    }
+    return { installed: false };
+  }
+
+  console.log(`Скачиваем yt-dlp и ffmpeg для ${platform} в bin/ …`);
+
+  if (force || needsInstall(ytdlpDest)) {
     await download(YTDLP_URL[platform], ytdlpDest);
     if (platform !== 'win32') fs.chmodSync(ytdlpDest, 0o755);
   }
 
-  if (force || !fs.existsSync(ffmpegDest) || !fs.existsSync(ffprobeDest)) {
+  if (force || needsInstall(ffmpegDest) || needsInstall(ffprobeDest)) {
     const archiveName = path.basename(new URL(FFMPEG_URL[platform]).pathname);
     const archivePath = path.join(TMP, archiveName);
     await download(FFMPEG_URL[platform], archivePath);
@@ -143,6 +180,13 @@ async function main() {
     const mb = (fs.statSync(p).size / 1024 / 1024).toFixed(1);
     console.log(`  ${name}  ${mb} MB`);
   }
+  return { installed: true };
 }
 
-main().catch((err) => fail(err.stack || err.message));
+if (require.main === module) {
+  ensureMediaBins({ force: process.argv.includes('--force') }).catch((err) =>
+    fail(err.stack || err.message)
+  );
+}
+
+module.exports = { ensureMediaBins };

@@ -5,17 +5,54 @@ const config = require('../config');
 
 const ROOT = path.join(__dirname, '..', '..');
 
+function peekMagic(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(4);
+    const n = fs.readSync(fd, buf, 0, 4, 0);
+    fs.closeSync(fd);
+    return buf.subarray(0, n);
+  } catch {
+    return null;
+  }
+}
+
+function isWindowsPe(file) {
+  const buf = peekMagic(file);
+  return Boolean(buf && buf.length >= 2 && buf[0] === 0x4d && buf[1] === 0x5a);
+}
+
+function isElf(file) {
+  const buf = peekMagic(file);
+  return Boolean(
+    buf &&
+      buf.length >= 4 &&
+      buf[0] === 0x7f &&
+      buf[1] === 0x45 &&
+      buf[2] === 0x4c &&
+      buf[3] === 0x46
+  );
+}
+
+function isUsableOnThisOs(file) {
+  if (process.platform === 'win32') return !isElf(file);
+  if (isWindowsPe(file)) return false;
+  if (path.extname(file).toLowerCase() === '.exe') return false;
+  return true;
+}
+
 function fileNamesFor(name) {
-  const names = [name, `${name}.exe`];
-  if (name === 'yt-dlp') names.push('yt-dlp_linux', 'yt-dlp_macos');
-  return [...new Set(names)];
+  if (process.platform === 'win32') return [`${name}.exe`, name];
+  const names = [name];
+  if (name === 'yt-dlp') names.push('yt-dlp_linux');
+  return names;
 }
 
 function firstExistingFile(candidates) {
   for (const p of candidates) {
     if (!p) continue;
     try {
-      if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+      if (fs.existsSync(p) && fs.statSync(p).isFile() && isUsableOnThisOs(p)) return p;
     } catch (_) {
       // skip
     }
@@ -157,7 +194,13 @@ async function getToolStatus() {
 function listBinDir() {
   const dir = path.join(ROOT, 'bin');
   try {
-    return fs.readdirSync(dir).join(', ');
+    return fs.readdirSync(dir)
+      .map((name) => {
+        const full = path.join(dir, name);
+        if (isWindowsPe(full)) return `${name} (Windows .exe, на Linux не запустится)`;
+        return name;
+      })
+      .join(', ');
   } catch {
     return '(папка bin/ не читается)';
   }
@@ -170,9 +213,10 @@ function requireBins({ needYtdlp = true } = {}) {
   if (!paths.ffmpeg) missing.push('ffmpeg');
   if (missing.length) {
     const err = new Error(
-      `Нет ${missing.join(' и ')} для Linux. Ищем файлы без .exe: bin/yt-dlp, bin/ffmpeg, bin/ffprobe. ` +
-        `Сейчас в bin/: ${listBinDir()}. Если там yt-dlp.exe — это Windows-сборка, на VDS она не запускается. ` +
-        `На сервере: npm run media-bins`
+      `Нет Linux-бинарей: ${missing.join(' и ')}. ` +
+        `Файл yt-dlp.exe / ffmpeg.exe с Windows через WinSCP не подойдёт — это PE (заголовок MZ), Linux его не запускает. ` +
+        `Нужны ELF: bin/yt-dlp, bin/ffmpeg, bin/ffprobe. Сейчас в bin/: ${listBinDir()}. ` +
+        `На VDS выполните: npm run media-bins -- --force`
     );
     err.status = 500;
     throw err;

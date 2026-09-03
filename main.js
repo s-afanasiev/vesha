@@ -40,6 +40,16 @@ app.use((err, _req, res, _next) => {
 
 async function start() {
   try {
+    const { ensureMediaBins } = require('./scripts/install-media-bins');
+    await ensureMediaBins({ quietIfOk: true });
+  } catch (err) {
+    console.warn('media-bins skipped/failed:', err.message);
+    console.warn(
+      'На Linux нужны ELF-файлы bin/yt-dlp, bin/ffmpeg, bin/ffprobe. Windows .exe из WinSCP не подойдут.'
+    );
+  }
+
+  try {
     await migrate();
     const {
       backfillImageHashes,
