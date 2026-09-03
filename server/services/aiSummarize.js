@@ -75,6 +75,8 @@ async function readJsonResponse(res, label) {
     throw new Error(`${label}: ${htmlErrorMessage(res.status, trimmed)} (${err.message})`);
   }
 }
+
+function parseJsonLoose(text) {
   if (!text) throw new Error('Пустой ответ модели');
   const trimmed = String(text).trim();
   try {

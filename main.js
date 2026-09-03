@@ -39,15 +39,9 @@ app.use((err, _req, res, _next) => {
 });
 
 async function start() {
-  try {
-    const { ensureMediaBins } = require('./scripts/install-media-bins');
-    await ensureMediaBins({ quietIfOk: true });
-  } catch (err) {
-    console.warn('media-bins skipped/failed:', err.message);
-    console.warn(
-      'На Linux нужны ELF-файлы bin/yt-dlp, bin/ffmpeg, bin/ffprobe. Windows .exe из WinSCP не подойдут.'
-    );
-  }
+  app.listen(config.port, () => {
+    console.log(`Server running at http://localhost:${config.port}`);
+  });
 
   try {
     await migrate();
@@ -71,9 +65,15 @@ async function start() {
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');
   }
 
-  app.listen(config.port, () => {
-    console.log(`Server running at http://localhost:${config.port}`);
-  });
+  try {
+    const { ensureMediaBins } = require('./scripts/install-media-bins');
+    await ensureMediaBins({ quietIfOk: true });
+  } catch (err) {
+    console.warn('media-bins skipped/failed:', err.message);
+    console.warn(
+      'На Linux нужны ELF-файлы bin/yt-dlp, bin/ffmpeg, bin/ffprobe. Windows .exe из WinSCP не подойдут.'
+    );
+  }
 }
 
 start();
