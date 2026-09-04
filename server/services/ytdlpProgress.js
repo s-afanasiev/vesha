@@ -402,7 +402,7 @@ function createYtdlpTracker({ cookiesBrowser, startedAt }) {
     };
   }
 
-  return { ingest, snapshot };
+  return { ingest, snapshot, title: () => state.title || null };
 }
 
 module.exports = {

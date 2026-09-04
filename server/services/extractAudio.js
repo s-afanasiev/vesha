@@ -254,6 +254,7 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
   const prev = readMeta(id) || {};
   const report = createReporter(id, opts.onProgress);
   let steps = prev.steps || [];
+  let ytdlpTitle = null;
   const meta = {
     ...prev,
     id,
@@ -311,6 +312,7 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
         cwd: dir,
         onOutput: (text) => {
           tracker.ingest(text);
+          ytdlpTitle = tracker.title() || ytdlpTitle;
           flush(false);
         },
       });
@@ -336,6 +338,7 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
 
     const sourcePath = findSourceFile(dir);
     if (!sourcePath) throw new Error('yt-dlp не сохранил видео');
+    if (ytdlpTitle) meta.title = ytdlpTitle;
 
     const durationSec = await probeDuration(sourcePath, bins);
     if (durationSec && durationSec > config.summarizeMaxDurationSec) {

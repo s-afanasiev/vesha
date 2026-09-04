@@ -14,6 +14,7 @@ const {
   snapshot,
 } = require('../services/summarizeQueue');
 const { ownerFromReq, listForOwner } = require('../services/summarizeHistory');
+const { listStoredMedia, jobDisplayTitle } = require('../services/summarizeFiles');
 
 const router = express.Router();
 
@@ -43,6 +44,10 @@ function downloadName(name, fallback) {
   const raw = String(name || fallback || 'file');
   const safe = raw.replace(/[^\w.\-а-яА-ЯёЁ]+/gi, '_').slice(0, 120);
   return safe || fallback || 'file';
+}
+
+function jobFileBase(meta, fallback) {
+  return downloadName(jobDisplayTitle(meta) || fallback, fallback);
 }
 
 function sourceMime(file) {
@@ -78,6 +83,10 @@ function summaryPlainText(summary, title) {
 function truthy(v) {
   return v === true || v === 'true' || v === '1' || v === 'on';
 }
+
+router.get('/files', (_req, res) => {
+  res.json(listStoredMedia());
+});
 
 router.get('/history', async (req, res, next) => {
   try {
@@ -166,9 +175,10 @@ router.get('/jobs/:id/audio', (req, res) => {
   const mime = sourceMime(file);
   res.setHeader('Content-Type', mime);
   if (req.query.download) {
+    const ext = path.extname(file) || '.wav';
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${downloadName(meta.audioFile, 'audio.wav')}"`
+      `attachment; filename="${jobFileBase(meta, 'audio')}${ext === '.wav' ? '.wav' : ext}"`
     );
   }
   res.sendFile(file);
@@ -183,9 +193,10 @@ router.get('/jobs/:id/video', (req, res) => {
   }
   res.setHeader('Content-Type', sourceMime(file));
   if (req.query.download !== '0') {
+    const ext = path.extname(file) || '.mp4';
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${downloadName(path.basename(file), 'video.mp4')}"`
+      `attachment; filename="${jobFileBase(meta, 'video')}${ext}"`
     );
   }
   res.sendFile(file);

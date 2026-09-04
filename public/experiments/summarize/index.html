@@ -35,9 +35,14 @@
         </div>
       </div>
       <div class="summarize-tools-pill" id="tools-status">Проверка инструментов…</div>
-      <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="history-btn">
-        История конвертаций
-      </button>
+      <div class="summarize-controls-actions">
+        <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="files-btn">
+          Файлы на сервере
+        </button>
+        <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="history-btn">
+          История конвертаций
+        </button>
+      </div>
     </div>
 
     <section class="summarize-history" id="history-panel" hidden>
@@ -212,6 +217,27 @@
       </div>
     </section>
   </main>
+
+  <div class="files-modal" id="files-modal" hidden>
+    <div class="files-modal__backdrop" data-close-files></div>
+    <div class="files-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="files-modal-title">
+      <button type="button" class="files-modal__close" data-close-files aria-label="Закрыть">×</button>
+      <div class="files-modal__head">
+        <h2 id="files-modal-title">Файлы на сервере</h2>
+        <p class="files-modal__hint" id="files-modal-hint">
+          На диске файлы лежат как source.* и audio.wav. Ниже — человеческие имена из задания: название ролика, исходный файл или заголовок суммаризации.
+        </p>
+      </div>
+      <div class="files-modal__filters" role="tablist">
+        <button type="button" class="files-modal__filter is-active" data-files-filter="all">Все</button>
+        <button type="button" class="files-modal__filter" data-files-filter="video">Видео</button>
+        <button type="button" class="files-modal__filter" data-files-filter="audio">Аудио</button>
+      </div>
+      <p class="files-modal__empty" id="files-modal-empty" hidden>На сервере сейчас нет сохранённых видео и аудио.</p>
+      <p class="files-modal__error" id="files-modal-error" hidden></p>
+      <div class="files-modal__list" id="files-modal-list"></div>
+    </div>
+  </div>
 
   <script src="/auth.js"></script>
   <script src="./summarize.js"></script>

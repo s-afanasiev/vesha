@@ -54,6 +54,12 @@
   const historyList = document.getElementById('history-list');
   const historyEmpty = document.getElementById('history-empty');
   const historyError = document.getElementById('history-error');
+  const filesBtn = document.getElementById('files-btn');
+  const filesModal = document.getElementById('files-modal');
+  const filesModalHint = document.getElementById('files-modal-hint');
+  const filesModalList = document.getElementById('files-modal-list');
+  const filesModalEmpty = document.getElementById('files-modal-empty');
+  const filesModalError = document.getElementById('files-modal-error');
 
   // State
   let currentFile = null;
@@ -1379,6 +1385,171 @@
       historyPanel.hidden = true;
     });
   }
+
+  let filesFilter = 'all';
+  let filesCache = null;
+
+  function fileRoleLabel(file) {
+    if (file.role === 'extracted') return 'Извлечённое аудио';
+    if (file.kind === 'audio') return 'Исходное аудио';
+    return 'Видео';
+  }
+
+  function closeFilesModal() {
+    if (!filesModal) return;
+    filesModal.hidden = true;
+    document.body.classList.remove('vesha-modal-open');
+  }
+
+  function renderFilesModal() {
+    if (!filesModalList) return;
+    const data = filesCache || { jobs: [], totalBytes: 0, videoCount: 0, audioCount: 0 };
+    const jobs = (data.jobs || []).map((job) => ({
+      ...job,
+      files: (job.files || []).filter((f) => filesFilter === 'all' || f.kind === filesFilter),
+    })).filter((job) => job.files.length);
+
+    if (filesModalHint) {
+      filesModalHint.textContent =
+        `На диске это source.* и audio.wav. Имена ниже — из задания: ролик, исходный файл или заголовок суммаризации. ` +
+        `${data.videoCount || 0} видео · ${data.audioCount || 0} аудио · ${formatBytes(data.totalBytes || 0)}.`;
+    }
+
+    document.querySelectorAll('[data-files-filter]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.getAttribute('data-files-filter') === filesFilter);
+    });
+
+    filesModalList.innerHTML = '';
+    if (filesModalError) filesModalError.hidden = true;
+    if (!jobs.length) {
+      if (filesModalEmpty) {
+        filesModalEmpty.hidden = false;
+        filesModalEmpty.textContent = data.jobs && data.jobs.length
+          ? 'Нет файлов выбранного типа.'
+          : 'На сервере сейчас нет сохранённых видео и аудио.';
+      }
+      return;
+    }
+    if (filesModalEmpty) filesModalEmpty.hidden = true;
+
+    jobs.forEach((job) => {
+      const card = document.createElement('article');
+      card.className = 'files-job';
+
+      const top = document.createElement('div');
+      top.className = 'files-job__top';
+      const title = document.createElement('h3');
+      title.className = 'files-job__title';
+      title.textContent = job.title || 'Без названия';
+      const when = document.createElement('span');
+      when.className = 'files-job__when';
+      when.textContent = formatWhen(job.createdAt);
+      top.appendChild(title);
+      top.appendChild(when);
+      card.appendChild(top);
+
+      if (job.sourceUrl) {
+        const link = document.createElement('a');
+        link.className = 'files-job__url';
+        link.href = job.sourceUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = job.sourceUrl;
+        card.appendChild(link);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'files-job__meta';
+      addHistoryTag(meta, job.duration != null ? `Длительность ${formatClock(job.duration)}` : null);
+      addHistoryTag(meta, job.status === 'failed' ? 'Ошибка' : job.status === 'ready' ? 'Готово' : job.status);
+      card.appendChild(meta);
+
+      job.files.forEach((file) => {
+        const row = document.createElement('div');
+        row.className = 'files-row';
+        const label = document.createElement('span');
+        label.className = 'files-row__label';
+        label.textContent = fileRoleLabel(file);
+        const name = document.createElement('span');
+        name.className = 'files-row__name';
+        name.textContent = `${file.diskName} · ${formatBytes(file.bytes)}`;
+        row.appendChild(label);
+        row.appendChild(name);
+        if (file.kind === 'audio') {
+          const playerEl = document.createElement('audio');
+          playerEl.className = 'files-row__player';
+          playerEl.controls = true;
+          playerEl.preload = 'metadata';
+          playerEl.src = file.url + (file.url.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(job.id);
+          row.appendChild(playerEl);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'files-row__actions';
+        const dl = document.createElement('a');
+        dl.className = 'vesha-btn vesha-btn--sm vesha-btn--primary';
+        dl.href = file.downloadUrl;
+        dl.textContent = 'Скачать';
+        actions.appendChild(dl);
+        row.appendChild(actions);
+        card.appendChild(row);
+      });
+
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
+      openBtn.textContent = 'Открыть задачу';
+      openBtn.addEventListener('click', () => {
+        closeFilesModal();
+        openHistoryJob(job.id);
+      });
+      card.appendChild(openBtn);
+
+      filesModalList.appendChild(card);
+    });
+  }
+
+  async function openFilesModal() {
+    if (!filesModal) return;
+    filesModal.hidden = false;
+    document.body.classList.add('vesha-modal-open');
+    if (filesModalEmpty) filesModalEmpty.hidden = true;
+    if (filesModalError) {
+      filesModalError.hidden = true;
+      filesModalError.textContent = '';
+    }
+    filesModalList.innerHTML = '';
+    try {
+      const data = await fetchJson('/api/summarize/files');
+      filesCache = data;
+      renderFilesModal();
+    } catch (err) {
+      filesCache = { jobs: [] };
+      if (filesModalError) {
+        filesModalError.hidden = false;
+        filesModalError.textContent = err.message || 'Не удалось прочитать файлы на сервере';
+      }
+    }
+  }
+
+  if (filesBtn) {
+    filesBtn.addEventListener('click', () => {
+      openFilesModal();
+    });
+  }
+  if (filesModal) {
+    filesModal.addEventListener('click', (event) => {
+      if (event.target && event.target.closest('[data-close-files]')) closeFilesModal();
+    });
+    filesModal.querySelectorAll('[data-files-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        filesFilter = btn.getAttribute('data-files-filter') || 'all';
+        renderFilesModal();
+      });
+    });
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && filesModal && !filesModal.hidden) closeFilesModal();
+  });
 
   processBtn.addEventListener('click', async () => {
     showError('');
