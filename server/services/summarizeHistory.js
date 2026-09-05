@@ -88,7 +88,10 @@ function publicFromMeta(meta) {
   if (!meta || !meta.id) return null;
   const bits = summaryBits(meta.summary);
   const terminal =
-    meta.status === 'ready' || meta.status === 'audio_ready' || meta.status === 'failed';
+    meta.status === 'ready' ||
+    meta.status === 'audio_ready' ||
+    meta.status === 'transcript_ready' ||
+    meta.status === 'failed';
   return publicRow({
     id: meta.id,
     kind: inferKind(meta),
@@ -208,7 +211,10 @@ async function upsertFromMeta(meta, owner = {}) {
     meta.startedAt ||
     (meta.status && meta.status !== 'queued' ? meta.createdAt : null);
   const terminal =
-    meta.status === 'ready' || meta.status === 'audio_ready' || meta.status === 'failed';
+    meta.status === 'ready' ||
+    meta.status === 'audio_ready' ||
+    meta.status === 'transcript_ready' ||
+    meta.status === 'failed';
   const completedAt = terminal
     ? meta.completedAt || new Date().toISOString()
     : null;
@@ -251,7 +257,7 @@ async function upsertFromMeta(meta, owner = {}) {
          error = EXCLUDED.error,
          started_at = COALESCE(summarize_jobs.started_at, EXCLUDED.started_at),
          completed_at = CASE
-           WHEN EXCLUDED.status IN ('ready', 'audio_ready', 'failed')
+           WHEN EXCLUDED.status IN ('ready', 'audio_ready', 'transcript_ready', 'failed')
              THEN COALESCE(EXCLUDED.completed_at, now())
            WHEN EXCLUDED.status IN ('queued', 'running') THEN NULL
            ELSE summarize_jobs.completed_at

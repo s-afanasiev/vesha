@@ -16,7 +16,7 @@ fs.mkdirSync(config.uploadDir, { recursive: true });
 fs.mkdirSync(config.summarizeDir, { recursive: true });
 fs.mkdirSync(config.extractAudioDir, { recursive: true });
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 

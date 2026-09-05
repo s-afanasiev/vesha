@@ -16,7 +16,12 @@
   const processBtn = document.getElementById('process-btn');
   const processBtnLabel = document.getElementById('process-btn-label');
   const audioOnlyEl = document.getElementById('audio-only');
+  const transcriptOnlyEl = document.getElementById('transcript-only');
+  const sttApiKeyEl = document.getElementById('stt-api-key');
+  const summarizeApiKeyEl = document.getElementById('summarize-api-key');
   const audioReadyBar = document.getElementById('audio-ready-bar');
+  const audioReadyLead = document.getElementById('audio-ready-lead');
+  const continueTranscribeBtn = document.getElementById('continue-transcribe-btn');
   const continueSummarizeBtn = document.getElementById('continue-summarize-btn');
   const downloadAudioLink = document.getElementById('download-audio-link');
 
@@ -215,29 +220,126 @@
     } catch (_) {}
   }
 
+  const KEYS_STORAGE = 'vesha-summarize-ai-keys';
+
+  function radioValue(name, fallback) {
+    const el = document.querySelector('input[name="' + name + '"]:checked');
+    return (el && el.value) || fallback;
+  }
+
+  function setRadioValue(name, value) {
+    const el = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
+    if (el) el.checked = true;
+  }
+
+  function loadSavedKeys() {
+    try {
+      const raw = localStorage.getItem(KEYS_STORAGE);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data.sttProvider) setRadioValue('stt-provider', data.sttProvider);
+      if (data.summarizeProvider) setRadioValue('summarize-provider', data.summarizeProvider);
+      if (sttApiKeyEl && data.sttApiKey) sttApiKeyEl.value = data.sttApiKey;
+      if (summarizeApiKeyEl && data.summarizeApiKey) summarizeApiKeyEl.value = data.summarizeApiKey;
+    } catch (_) {}
+  }
+
+  function saveKeys() {
+    try {
+      localStorage.setItem(
+        KEYS_STORAGE,
+        JSON.stringify({
+          sttProvider: radioValue('stt-provider', 'whisper'),
+          summarizeProvider: radioValue('summarize-provider', 'gemini'),
+          sttApiKey: sttApiKeyEl ? sttApiKeyEl.value : '',
+          summarizeApiKey: summarizeApiKeyEl ? summarizeApiKeyEl.value : '',
+        })
+      );
+    } catch (_) {}
+  }
+
+  function collectAiOptions() {
+    saveKeys();
+    return {
+      sttProvider: radioValue('stt-provider', 'whisper'),
+      sttApiKey: sttApiKeyEl ? sttApiKeyEl.value.trim() : '',
+      summarizeProvider: radioValue('summarize-provider', 'gemini'),
+      summarizeApiKey: summarizeApiKeyEl ? summarizeApiKeyEl.value.trim() : '',
+    };
+  }
+
   function isAudioOnly() {
     return Boolean(audioOnlyEl && audioOnlyEl.checked);
   }
 
+  function isTranscriptOnly() {
+    return Boolean(transcriptOnlyEl && transcriptOnlyEl.checked);
+  }
+
+  function stopMode() {
+    if (isAudioOnly()) return 'audio';
+    if (isTranscriptOnly()) return 'transcript';
+    return 'full';
+  }
+
+  function syncStopChecks(changed) {
+    if (changed === 'audio' && isAudioOnly() && transcriptOnlyEl) transcriptOnlyEl.checked = false;
+    if (changed === 'transcript' && isTranscriptOnly() && audioOnlyEl) audioOnlyEl.checked = false;
+    syncProcessLabel();
+  }
+
   function syncProcessLabel() {
     if (!processBtnLabel) return;
-    processBtnLabel.textContent = isAudioOnly()
-      ? 'Получить аудио'
-      : 'Запустить суммаризацию';
+    const mode = stopMode();
+    processBtnLabel.textContent =
+      mode === 'audio' ? 'Получить аудио' : mode === 'transcript' ? 'Распознать текст' : 'Запустить суммаризацию';
   }
 
   function hideAudioReadyBar() {
     if (audioReadyBar) audioReadyBar.hidden = true;
     if (continueSummarizeBtn) continueSummarizeBtn.disabled = false;
+    if (continueTranscribeBtn) continueTranscribeBtn.disabled = false;
+    if (downloadAudioLink) downloadAudioLink.textContent = 'Скачать WAV';
   }
 
   function showAudioReadyBar(job) {
     if (!audioReadyBar) return;
     audioReadyBar.hidden = false;
-    if (downloadAudioLink && job.audioUrl) {
-      downloadAudioLink.href = job.audioUrl + (job.audioUrl.includes('?') ? '&' : '?') + 'download=1';
+    if (audioReadyLead) audioReadyLead.textContent = 'Аудио готово. Распознавание речи не запускалось.';
+    if (continueTranscribeBtn) {
+      continueTranscribeBtn.hidden = false;
+      continueTranscribeBtn.disabled = false;
     }
-    if (continueSummarizeBtn) continueSummarizeBtn.disabled = false;
+    if (continueSummarizeBtn) continueSummarizeBtn.hidden = true;
+    if (downloadAudioLink) {
+      downloadAudioLink.textContent = 'Скачать WAV';
+      if (job && job.audioUrl) {
+        downloadAudioLink.href = job.audioUrl + (job.audioUrl.includes('?') ? '&' : '?') + 'download=1';
+        downloadAudioLink.hidden = false;
+      }
+    }
+  }
+
+  function showTranscriptReadyBar(job) {
+    if (!audioReadyBar) return;
+    audioReadyBar.hidden = false;
+    if (audioReadyLead) audioReadyLead.textContent = 'Расшифровка готова. Суммаризация не запускалась.';
+    if (continueTranscribeBtn) continueTranscribeBtn.hidden = true;
+    if (continueSummarizeBtn) {
+      continueSummarizeBtn.hidden = false;
+      continueSummarizeBtn.disabled = false;
+    }
+    if (downloadAudioLink) {
+      if (job.transcriptUrl) {
+        downloadAudioLink.href = job.transcriptUrl;
+        downloadAudioLink.textContent = 'Скачать текст';
+        downloadAudioLink.hidden = false;
+      } else if (job.audioUrl) {
+        downloadAudioLink.href = job.audioUrl + (job.audioUrl.includes('?') ? '&' : '?') + 'download=1';
+        downloadAudioLink.textContent = 'Скачать WAV';
+        downloadAudioLink.hidden = false;
+      }
+    }
   }
 
   function stepBadge(status) {
@@ -257,28 +359,59 @@
   }
 
   function geminiPreviewCommand() {
+    if (radioValue('summarize-provider', 'gemini') === 'openai') {
+      return [
+        'POST https://api.openai.com/v1/chat/completions',
+        '  model: gpt-4o-mini',
+        '  messages: prompt + transcript',
+      ].join('\n');
+    }
     return [
       'POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
       '  Content-Type: application/json',
-      '  parts: prompt (суммаризация на русском) + inlineData audio.wav',
+      '  parts: prompt (тезисы на русском) + transcript',
     ].join('\n');
   }
 
-  function applyAudioOnlyToSteps(steps, audioOnly) {
-    if (!audioOnly) return steps;
+  function sttPreviewCommand() {
+    if (radioValue('stt-provider', 'whisper') === 'gemini') {
+      return [
+        'POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        '  Content-Type: application/json',
+        '  parts: prompt (только расшифровка) + audio.wav',
+      ].join('\n');
+    }
+    return [
+      'POST https://api.openai.com/v1/audio/transcriptions',
+      '  model: whisper-1',
+      '  file: audio.wav',
+    ].join('\n');
+  }
+
+  function applyStopModeToSteps(steps, mode) {
     return steps.map((s) => {
-      if (s.id !== 'summarize') return s;
-      return {
-        ...s,
-        status: 'skipped',
-        waitHint: 'Пропущен: выбрано «только аудио». Можно запустить позже, не качая заново.',
-        detail: 'Автоматически не стартует. Кнопка появится, когда будет audio.wav.',
-      };
+      if (mode === 'audio' && (s.id === 'stt' || s.id === 'summarize')) {
+        return {
+          ...s,
+          status: 'skipped',
+          waitHint: 'Пропущен: выбрано «только аудио». Можно запустить позже.',
+          detail: 'Автоматически не стартует.',
+        };
+      }
+      if (mode === 'transcript' && s.id === 'summarize') {
+        return {
+          ...s,
+          status: 'skipped',
+          waitHint: 'Пропущен: выбрано «распознать текст, но не суммаризировать».',
+          detail: 'Автоматически не стартует.',
+        };
+      }
+      return s;
     });
   }
 
-  function previewUrlSteps(url, audioOnly) {
-    return applyAudioOnlyToSteps(
+  function previewUrlSteps(url, mode) {
+    return applyStopModeToSteps(
       [
         {
           n: 1,
@@ -312,31 +445,44 @@
           command: 'ffmpeg -y -i source.* -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav',
           status: 'pending',
           progress: 0,
-          waitHint: audioOnly
-            ? 'После этого шага остановимся: суммаризация не запустится сама.'
-            : 'Ещё не начался. Стартует сразу после скачивания.',
+          waitHint:
+            mode === 'audio'
+              ? 'После этого шага остановимся: распознавание не запустится само.'
+              : 'Ещё не начался. Стартует сразу после скачивания.',
           detail: 'Ждёт файл source.* от yt-dlp.',
         },
         {
           n: 3,
-          id: 'summarize',
-          title: 'Распознавание речи и суммаризация',
-          tool: 'Gemini',
-          why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
-          command: geminiPreviewCommand(),
+          id: 'stt',
+          title: 'Распознавание речи',
+          tool: 'Whisper / Gemini',
+          why: 'Из WAV получим текст. Результат появится в этом блоке — его можно поправить перед суммаризацией.',
+          command: sttPreviewCommand(),
           status: 'pending',
           progress: 0,
           waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
           detail: 'Ждёт audio.wav после ffmpeg.',
         },
+        {
+          n: 4,
+          id: 'summarize',
+          title: 'Суммаризация текста',
+          tool: 'Gemini / OpenAI',
+          why: 'В нейросеть уйдёт только расшифровка. На выходе — заголовок, тезисы, таймкоды и задачи.',
+          command: geminiPreviewCommand(),
+          status: 'pending',
+          progress: 0,
+          waitHint: 'Ещё не начался. Стартует, когда будет готов текст расшифровки.',
+          detail: 'Ждёт текст из блока распознавания речи.',
+        },
       ],
-      audioOnly
+      mode
     );
   }
 
-  function previewFileSteps(filename, audioOnly) {
+  function previewFileSteps(filename, mode) {
     const src = filename || 'source.*';
-    return applyAudioOnlyToSteps(
+    return applyStopModeToSteps(
       [
         {
           n: 1,
@@ -347,25 +493,38 @@
           command: `ffmpeg -y -i ${src} -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav`,
           status: 'pending',
           progress: 0,
-          waitHint: audioOnly
-            ? 'После этого шага остановимся: суммаризация не запустится сама.'
-            : 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
+          waitHint:
+            mode === 'audio'
+              ? 'После этого шага остановимся: распознавание не запустится само.'
+              : 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
           detail: 'Ставим задачу и сразу показываем весь план шагов.',
         },
         {
           n: 2,
-          id: 'summarize',
-          title: 'Распознавание речи и суммаризация',
-          tool: 'Gemini',
-          why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
-          command: geminiPreviewCommand(),
+          id: 'stt',
+          title: 'Распознавание речи',
+          tool: 'Whisper / Gemini',
+          why: 'Из WAV получим текст. Результат появится в этом блоке — его можно поправить перед суммаризацией.',
+          command: sttPreviewCommand(),
           status: 'pending',
           progress: 0,
           waitHint: 'Ещё не начался. Стартует, когда будет готов audio.wav.',
           detail: 'Ждёт audio.wav после ffmpeg.',
         },
+        {
+          n: 3,
+          id: 'summarize',
+          title: 'Суммаризация текста',
+          tool: 'Gemini / OpenAI',
+          why: 'В нейросеть уйдёт только расшифровка. На выходе — заголовок, тезисы, таймкоды и задачи.',
+          command: geminiPreviewCommand(),
+          status: 'pending',
+          progress: 0,
+          waitHint: 'Ещё не начался. Стартует, когда будет готов текст расшифровки.',
+          detail: 'Ждёт текст из блока распознавания речи.',
+        },
       ],
-      audioOnly
+      mode
     );
   }
 
@@ -383,8 +542,14 @@
       return;
     }
     if (jobStatus === 'audio_ready') {
-      runLogTitle.textContent = 'Аудио готово · суммаризация на паузе';
-      runLogLead.textContent = 'Скачивание и извлечение звука закончены. Распознавание не запускалось — его можно включить кнопкой ниже.';
+      runLogTitle.textContent = 'Аудио готово · распознавание на паузе';
+      runLogLead.textContent =
+        'Скачивание и извлечение звука закончены. Распознавание не запускалось — его можно включить в третьем блоке.';
+      return;
+    }
+    if (jobStatus === 'transcript_ready') {
+      runLogTitle.textContent = 'Расшифровка готова · суммаризация на паузе';
+      runLogLead.textContent = 'Текст уже есть в третьем блоке. Тезисы можно запросить отдельно.';
       return;
     }
     if (jobStatus === 'ready' || (total && doneCount === total)) {
@@ -503,6 +668,27 @@
       }
     }
 
+    if (step.id === 'stt') {
+      if ((status === 'done' || status === 'skipped') && job.transcript) {
+        bits.push(
+          `<textarea class="run-step__transcript" data-transcript rows="8">${escapeHtml(job.transcript)}</textarea>`
+        );
+        bits.push(
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="/api/summarize/jobs/${encodeURIComponent(job.id)}/transcript.txt">Скачать текст</a>`
+        );
+        if (job.canSummarize) {
+          bits.push(
+            `<button type="button" class="vesha-btn vesha-btn--sm vesha-btn--primary" data-retry-summarize>Суммаризировать</button>`
+          );
+        }
+      }
+      if ((status === 'failed' || status === 'skipped') && job.canTranscribe) {
+        bits.push(
+          `<button type="button" class="vesha-btn vesha-btn--sm vesha-btn--primary" data-retry-transcribe>Распознать текст</button>`
+        );
+      }
+    }
+
     if (step.id === 'summarize') {
       if (status === 'done' && job.summary) {
         const title = job.summary.title || '';
@@ -520,7 +706,7 @@
       }
       if ((status === 'failed' || status === 'skipped') && job.canSummarize) {
         bits.push(
-          `<button type="button" class="vesha-btn vesha-btn--sm vesha-btn--primary" data-retry-summarize>Получить суммаризацию</button>`
+          `<button type="button" class="vesha-btn vesha-btn--sm vesha-btn--primary" data-retry-summarize>Суммаризировать</button>`
         );
       }
     }
@@ -539,6 +725,15 @@
         step.status,
         job && job.audioUrl ? 'a' : '',
         job && job.videoUrl ? 'v' : '',
+      ].join('|');
+    }
+    if (step.id === 'stt') {
+      return [
+        'stt',
+        step.status,
+        job && job.transcript ? 't' : '',
+        job && job.canTranscribe ? 'c' : '',
+        job && job.canSummarize ? 's' : '',
       ].join('|');
     }
     if (step.id === 'summarize') {
@@ -567,6 +762,9 @@
       return;
     }
     if (box && box.dataset.key === key) return;
+    const prevTa = box && box.querySelector('[data-transcript]');
+    const prevVal = prevTa ? prevTa.value : null;
+    const prevFocused = Boolean(prevTa && document.activeElement === prevTa);
     if (!box) {
       box = document.createElement('div');
       box.className = 'run-step__actions';
@@ -574,6 +772,13 @@
     }
     box.dataset.key = key;
     box.innerHTML = inner;
+    if (prevVal != null) {
+      const nextTa = box.querySelector('[data-transcript]');
+      if (nextTa) {
+        nextTa.value = prevVal;
+        if (prevFocused) nextTa.focus();
+      }
+    }
   }
 
   function fillLive(article, stats) {
@@ -1044,35 +1249,95 @@
       jobId: job.id,
       sourceTitle: job.title,
       audioUrl: job.audioUrl,
+      transcript: job.transcript || null,
+      transcriptUrl: job.transcriptUrl || null,
       bytes: job.bytes,
       provider: job.provider,
       model: job.model,
     };
   }
 
-  function setRetrySummarizeBusy(busy) {
-    if (continueSummarizeBtn) continueSummarizeBtn.disabled = busy;
+  function currentTranscriptText() {
+    const ta = runSteps && runSteps.querySelector('[data-transcript]');
+    if (ta && ta.value.trim()) return ta.value;
+    if (latestJob && latestJob.transcript) return latestJob.transcript;
+    if (currentJobData && currentJobData.transcript) return currentJobData.transcript;
+    return '';
+  }
+
+  function setRetryButtonsBusy(attr, busy) {
     if (runSteps) {
-      runSteps.querySelectorAll('[data-retry-summarize]').forEach((btn) => {
+      runSteps.querySelectorAll(attr).forEach((btn) => {
         btn.disabled = busy;
       });
+    }
+  }
+
+  function setRetrySummarizeBusy(busy) {
+    if (continueSummarizeBtn) continueSummarizeBtn.disabled = busy;
+    setRetryButtonsBusy('[data-retry-summarize]', busy);
+  }
+
+  function setRetryTranscribeBusy(busy) {
+    if (continueTranscribeBtn) continueTranscribeBtn.disabled = busy;
+    setRetryButtonsBusy('[data-retry-transcribe]', busy);
+  }
+
+  async function requestTranscribe() {
+    const jobId = currentJobData && currentJobData.jobId;
+    if (!jobId) {
+      showError('Нет готового аудио для распознавания');
+      return;
+    }
+    showError('');
+    setRetryTranscribeBusy(true);
+    processBtn.disabled = true;
+    hideAudioReadyBar();
+    showStatus('Ставим распознавание в очередь. Аудио уже есть, скачивать не будем.');
+    try {
+      const res = await fetch('/api/summarize/jobs/' + encodeURIComponent(jobId) + '/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(collectAiOptions()),
+      });
+      const job = await res.json();
+      if (!res.ok) throw new Error(job.error || 'Не удалось запустить распознавание');
+      renderQueue(job);
+      applyJobView(job);
+      await pollJob(job.id);
+    } catch (err) {
+      queueCard.hidden = true;
+      if (currentJobData && currentJobData.audioUrl) {
+        showAudioReadyBar({
+          audioUrl: currentJobData.audioUrl,
+        });
+      }
+      showError(err.message || 'Ошибка распознавания');
+      showStatus('');
+      processBtn.disabled = false;
+      setRetryTranscribeBusy(false);
     }
   }
 
   async function requestSummarize() {
     const jobId = currentJobData && currentJobData.jobId;
     if (!jobId) {
-      showError('Нет готового аудио для суммаризации');
+      showError('Нет расшифровки для суммаризации');
       return;
     }
     showError('');
     setRetrySummarizeBusy(true);
     processBtn.disabled = true;
     hideAudioReadyBar();
-    showStatus('Ставим суммаризацию в очередь. Аудио уже есть, скачивать не будем.');
+    showStatus('Ставим суммаризацию в очередь. Текст уже есть, аудио заново не отправляем.');
     try {
       const res = await fetch('/api/summarize/jobs/' + encodeURIComponent(jobId) + '/summarize', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...collectAiOptions(),
+          transcript: currentTranscriptText(),
+        }),
       });
       const job = await res.json();
       if (!res.ok) throw new Error(job.error || 'Не удалось запустить суммаризацию');
@@ -1081,7 +1346,12 @@
       await pollJob(job.id);
     } catch (err) {
       queueCard.hidden = true;
-      if (currentJobData && currentJobData.audioUrl) {
+      if (currentJobData && (currentJobData.transcript || currentTranscriptText())) {
+        showTranscriptReadyBar({
+          audioUrl: currentJobData.audioUrl,
+          transcriptUrl: currentJobData.transcriptUrl,
+        });
+      } else if (currentJobData && currentJobData.audioUrl) {
         showAudioReadyBar({
           audioUrl: currentJobData.audioUrl,
         });
@@ -1166,7 +1436,8 @@
         );
       } else if (job.phase === 'downloading') showStatus('Скачиваем видео…');
       else if (job.phase === 'extracting') showStatus('Извлекаем звук…');
-      else if (job.phase === 'summarizing') showStatus('Распознаём речь и суммаризируем…');
+      else if (job.phase === 'transcribing') showStatus('Распознаём речь…');
+      else if (job.phase === 'summarizing') showStatus('Суммаризируем текст…');
       else showStatus('Задача выполняется…');
       pollTimer = setTimeout(() => {
         pollJob(jobId).catch((err) => {
@@ -1187,6 +1458,7 @@
       showError(job.error || job.aiError || 'Задача не выполнилась');
       processBtn.disabled = false;
       setRetrySummarizeBusy(false);
+      setRetryTranscribeBusy(false);
       checkTools();
       refreshHistoryIfOpen();
       return;
@@ -1195,12 +1467,27 @@
     applyJobView(job);
     rememberJob(job);
 
-    if (job.status === 'audio_ready' || (job.canSummarize && !job.summary)) {
+    if (job.status === 'audio_ready' || job.canTranscribe) {
       showStatus('Аудио готово. Распознавание не запускалось.');
       currentSummaryData = null;
       renderAudioOnlyResult(job);
       showAudioReadyBar(job);
       processBtn.disabled = false;
+      setRetryTranscribeBusy(false);
+      setRetrySummarizeBusy(false);
+      checkTools();
+      refreshHistoryIfOpen();
+      return;
+    }
+
+    if (job.status === 'transcript_ready' || job.canSummarize) {
+      showStatus('Расшифровка готова. Суммаризация не запускалась.');
+      currentSummaryData = null;
+      renderTranscriptReadyResult(job);
+      showTranscriptReadyBar(job);
+      processBtn.disabled = false;
+      setRetryTranscribeBusy(false);
+      setRetrySummarizeBusy(false);
       checkTools();
       refreshHistoryIfOpen();
       return;
@@ -1211,6 +1498,8 @@
     currentSummaryData = job.summary || {};
     renderResults(currentSummaryData, currentJobData);
     processBtn.disabled = false;
+    setRetryTranscribeBusy(false);
+    setRetrySummarizeBusy(false);
     checkTools();
     refreshHistoryIfOpen();
   }
@@ -1224,6 +1513,7 @@
   function historyStatusLabel(item) {
     if (item.status === 'ready') return { text: 'Суммаризация готова', cls: 'is-ok' };
     if (item.status === 'audio_ready') return { text: 'Только аудио', cls: 'is-ok' };
+    if (item.status === 'transcript_ready') return { text: 'Только расшифровка', cls: 'is-ok' };
     if (item.status === 'failed') return { text: 'Ошибка', cls: 'is-fail' };
     if (item.status === 'running') return { text: 'Выполняется', cls: 'is-wait' };
     if (item.status === 'queued') return { text: 'В очереди', cls: 'is-wait' };
@@ -1288,7 +1578,13 @@
       addHistoryTag(meta, st.text, st.cls);
       addHistoryTag(
         meta,
-        item.hasSummary ? 'С суммаризацией' : item.audioOnly ? 'Только аудио' : null
+        item.hasSummary
+          ? 'С суммаризацией'
+          : item.status === 'transcript_ready'
+            ? 'Только расшифровка'
+            : item.audioOnly
+              ? 'Только аудио'
+              : null
       );
       addHistoryTag(meta, item.durationSec != null ? `Длительность ${formatClock(item.durationSec)}` : null);
       addHistoryTag(meta, item.audioBytes != null ? `Аудио ${formatBytes(item.audioBytes)}` : null);
@@ -1461,7 +1757,18 @@
       const meta = document.createElement('div');
       meta.className = 'files-job__meta';
       addHistoryTag(meta, job.duration != null ? `Длительность ${formatClock(job.duration)}` : null);
-      addHistoryTag(meta, job.status === 'failed' ? 'Ошибка' : job.status === 'ready' ? 'Готово' : job.status);
+      addHistoryTag(
+        meta,
+        job.status === 'failed'
+          ? 'Ошибка'
+          : job.status === 'ready'
+            ? 'Готово'
+            : job.status === 'audio_ready'
+              ? 'Только аудио'
+              : job.status === 'transcript_ready'
+                ? 'Только расшифровка'
+                : job.status
+      );
       card.appendChild(meta);
 
       job.files.forEach((file) => {
@@ -1573,11 +1880,15 @@
     }
 
     processBtn.disabled = true;
-    const audioOnly = isAudioOnly();
+    latestJob = null;
+    const mode = stopMode();
+    const audioOnly = mode === 'audio';
+    const transcriptOnly = mode === 'transcript';
+    const aiOpts = collectAiOptions();
     const preview =
       activeTab === 'panel-url'
-        ? previewUrlSteps(url, audioOnly)
-        : previewFileSteps(targetFile && targetFile.name, audioOnly);
+        ? previewUrlSteps(url, mode)
+        : previewFileSteps(targetFile && targetFile.name, mode);
     renderRunSteps(preview, 'queued');
     if (runLog) {
       runLog.hidden = false;
@@ -1590,20 +1901,33 @@
         showStatus(
           audioOnly
             ? 'Ставим задачу: скачать и извлечь аудио, без распознавания.'
-            : 'Ставим задачу в очередь. Ниже уже виден весь план шагов.'
+            : transcriptOnly
+              ? 'Ставим задачу: скачать, извлечь звук и распознать текст, без суммаризации.'
+              : 'Ставим задачу в очередь. Ниже уже виден весь план шагов.'
         );
         const res = await fetch('/api/summarize/from-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, audioOnly }),
+          body: JSON.stringify({ url, audioOnly, transcriptOnly, ...aiOpts }),
         });
         job = await res.json();
         if (!res.ok) throw new Error(job.error || 'Ошибка постановки в очередь');
       } else {
-        showStatus('Загружаем файл. Ниже уже виден весь план шагов.');
+        showStatus(
+          audioOnly
+            ? 'Загружаем файл. Извлечём аудио, без распознавания.'
+            : transcriptOnly
+              ? 'Загружаем файл. Извлечём звук и распознаем текст, без суммаризации.'
+              : 'Загружаем файл. Ниже уже виден весь план шагов.'
+        );
         const fd = new FormData();
         fd.append('file', targetFile);
         fd.append('audioOnly', audioOnly ? 'true' : 'false');
+        fd.append('transcriptOnly', transcriptOnly ? 'true' : 'false');
+        fd.append('sttProvider', aiOpts.sttProvider);
+        fd.append('sttApiKey', aiOpts.sttApiKey);
+        fd.append('summarizeProvider', aiOpts.summarizeProvider);
+        fd.append('summarizeApiKey', aiOpts.summarizeApiKey);
         const res = await fetch('/api/summarize/upload', {
           method: 'POST',
           body: fd,
@@ -1630,6 +1954,20 @@
     resultMetaTags.innerHTML = `
       <span class="summarize-tag">Только аудио</span>
       <span class="summarize-tag" style="color:var(--sm-accent)">Без распознавания</span>
+    `;
+    if (job.audioUrl) {
+      player.src = mediaSrc(job.audioUrl, job);
+    }
+    resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderTranscriptReadyResult(job) {
+    resultSection.hidden = false;
+    resultSection.classList.add('is-audio-only');
+    resultTitle.textContent = job.title || job.sourceTitle || 'Расшифровка готова';
+    resultMetaTags.innerHTML = `
+      <span class="summarize-tag">Только расшифровка</span>
+      <span class="summarize-tag" style="color:var(--sm-accent)">Без суммаризации</span>
     `;
     if (job.audioUrl) {
       player.src = mediaSrc(job.audioUrl, job);
@@ -1811,14 +2149,34 @@
   }
 
   if (audioOnlyEl) {
-    audioOnlyEl.addEventListener('change', syncProcessLabel);
+    audioOnlyEl.addEventListener('change', () => syncStopChecks('audio'));
   }
+  if (transcriptOnlyEl) {
+    transcriptOnlyEl.addEventListener('change', () => syncStopChecks('transcript'));
+  }
+  if (sttApiKeyEl) sttApiKeyEl.addEventListener('change', saveKeys);
+  if (summarizeApiKeyEl) summarizeApiKeyEl.addEventListener('change', saveKeys);
+  document.querySelectorAll('input[name="stt-provider"], input[name="summarize-provider"]').forEach((el) => {
+    el.addEventListener('change', saveKeys);
+  });
 
   if (runSteps) {
     runSteps.addEventListener('click', (event) => {
-      const btn = event.target.closest('[data-retry-summarize]');
-      if (!btn || btn.disabled) return;
-      requestSummarize();
+      const transcribeBtn = event.target.closest('[data-retry-transcribe]');
+      if (transcribeBtn && !transcribeBtn.disabled) {
+        requestTranscribe();
+        return;
+      }
+      const summarizeBtn = event.target.closest('[data-retry-summarize]');
+      if (summarizeBtn && !summarizeBtn.disabled) {
+        requestSummarize();
+      }
+    });
+  }
+
+  if (continueTranscribeBtn) {
+    continueTranscribeBtn.addEventListener('click', () => {
+      requestTranscribe();
     });
   }
 
@@ -1828,6 +2186,7 @@
     });
   }
 
+  loadSavedKeys();
   checkTools();
   syncProcessLabel();
 })();

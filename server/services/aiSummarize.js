@@ -41,7 +41,11 @@ const SUMMARIZE_PROMPT = `Ты эксперт по анализу и сумма�
 Правила:
 - Пиши грамотно, без лишней «воды», выделяй конкретику, факты, цифры и термины.
 - Таймкоды должны быть правдоподобными и соответствовать таймингу записи.
-- Не выдумывай тему: опирайся только на это аудио. Если речь неразборчива — так и напиши.`;
+- Не выдумывай тему: опирайся только на расшифровку. Если речь неразборчива — так и напиши.
+- Поле transcript скопируй из переданной расшифровки, не сокращай.`;
+
+const TRANSCRIBE_PROMPT =
+  'Распознай речь из этого аудио. Верни ТОЛЬКО сплошной текст расшифровки на языке оригинала. Без JSON, без заголовков, без комментариев и без кавычек вокруг всего текста.';
 
 function htmlErrorMessage(status, text) {
   const plain = String(text || '')
@@ -245,7 +249,14 @@ async function waitFileActive(apiKey, file, report) {
   throw new Error('Gemini слишком долго обрабатывает загруженный файл');
 }
 
-async function prepareAudioPart(audioPath, report) {
+function pickKey(userKey, serverKey) {
+  const v = String(userKey || '').trim();
+  return v || serverKey || '';
+}
+
+async function prepareAudioPart(audioPath, report, apiKey) {
+  const key = pickKey(apiKey, config.geminiApiKey);
+  if (!key) throw new Error('GEMINI_API_KEY не задан');
   let sendPath = audioPath;
   let mime = mimeFromPath(audioPath);
   const rawSize = fs.statSync(audioPath).size;
@@ -264,8 +275,8 @@ async function prepareAudioPart(audioPath, report) {
   report({
     detail: `Аудио ${path.basename(sendPath)} (${formatMb(size)} МБ) отправим через Gemini Files API, без огромного JSON.`,
   });
-  const file = await uploadGeminiFile(config.geminiApiKey, sendPath, mime, report);
-  const ready = await waitFileActive(config.geminiApiKey, file, report);
+  const file = await uploadGeminiFile(key, sendPath, mime, report);
+  const ready = await waitFileActive(key, file, report);
   const fileUri = ready.uri || ready.name;
   if (!fileUri) throw new Error('Gemini upload: нет file.uri');
   return {
@@ -276,107 +287,42 @@ async function prepareAudioPart(audioPath, report) {
   };
 }
 
-async function summarizeWithGemini(options = {}) {
-  const { audioPath, audioMime = 'audio/wav', transcriptText = '', onProgress } = options;
-  const report = (patch) => {
-    if (typeof onProgress === 'function') onProgress(patch);
-  };
-
-  if (!config.geminiApiKey && config.openaiApiKey) {
-    return summarizeWithOpenAI({ audioPath, transcriptText, report });
-  }
-
-  if (!config.geminiApiKey) {
-    if (config.summarizeMock) {
-      report({ detail: 'SUMMARIZE_MOCK=1 и нет ключа — демонстрационный ответ.' });
-      return {
-        provider: 'mock',
-        model: 'mock',
-        summary: createMockSummary(transcriptText || 'Аудиозапись'),
-      };
-    }
-    throw new Error('GEMINI_API_KEY не задан на сервере. Суммаризация не запускалась.');
-  }
-
-  if (!audioPath || !fs.existsSync(audioPath)) {
-    if (transcriptText) {
-      try {
-        return await requestGemini(
-          [{ text: SUMMARIZE_PROMPT }, { text: `Расшифровка:\n\n${transcriptText}` }],
-          report
-        );
-      } catch (err) {
-        if (config.openaiApiKey && /недоступен с IP|location is not supported/i.test(err.message)) {
-          return summarizeWithOpenAI({ audioPath, transcriptText, report });
-        }
-        throw err;
-      }
-    }
-    throw new Error('Нет audio.wav для суммаризации — Gemini не вызывался.');
-  }
-
-  try {
-    const audioPart = await prepareAudioPart(audioPath, report);
-    return await requestGemini([{ text: SUMMARIZE_PROMPT }, audioPart], report);
-  } catch (err) {
-    if (config.openaiApiKey && /недоступен с IP|location is not supported/i.test(err.message)) {
-      report({ detail: err.message + ' Переключаемся на OpenAI.' });
-      return summarizeWithOpenAI({ audioPath, transcriptText, report });
-    }
-    if (/недоступен с IP|location is not supported/i.test(err.message)) {
-      throw new Error(geminiLocationMessage());
-    }
-    throw err;
-  }
-}
-
-async function requestGemini(parts, report) {
+async function requestGeminiText(parts, report, { apiKey, json = false, detailPrefix = 'Gemini' } = {}) {
+  const key = pickKey(apiKey, config.geminiApiKey);
+  if (!key) throw new Error('GEMINI_API_KEY не задан');
   const models = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];
   let lastErr;
   for (const model of models) {
     try {
       report({
-        detail: `Отправляем аудио в ${model} и ждём JSON с расшифровкой. Это может занять минуты, не секунды.`,
+        detail: `${detailPrefix}: ${model}…`,
         command: [
           `POST https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           '  Content-Type: application/json',
-          '  parts: prompt + audio (inline или Files API)',
         ].join('\n'),
       });
       const url =
         geminiUrl(`/v1beta/models/${model}:generateContent`) +
-        `?key=${encodeURIComponent(config.geminiApiKey)}`;
-
+        `?key=${encodeURIComponent(key)}`;
+      const generationConfig = { temperature: 0.2 };
+      if (json) generationConfig.responseMimeType = 'application/json';
       const res = await geminiFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts }],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: 'application/json',
-          },
+          generationConfig,
         }),
         signal: AbortSignal.timeout(config.summarizeTimeoutMs),
       });
-
       const data = await readJsonResponse(res, model);
       throwIfGeminiLocation(data);
       if (!res.ok) {
         throwIfGeminiLocation(data.error?.message);
         throw new Error(`[${model}] ` + (data.error?.message || `HTTP ${res.status}`));
       }
-
       const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
-      const parsed = parseJsonLoose(text);
-      if (!parsed || typeof parsed !== 'object') {
-        throw new Error(`[${model}] ответ без JSON`);
-      }
-      return {
-        provider: 'gemini',
-        model,
-        summary: parsed,
-      };
+      return { provider: 'gemini', model, text };
     } catch (err) {
       lastErr = err;
       report({
@@ -385,54 +331,106 @@ async function requestGemini(parts, report) {
       if (/недоступен с IP|location is not supported/i.test(err.message)) break;
     }
   }
-
-  throw new Error(
-    lastErr?.message
-      ? `Gemini не суммаризировал аудио: ${lastErr.message}`
-      : 'Gemini не суммаризировал аудио'
-  );
+  throw new Error(lastErr?.message || 'Gemini не ответил');
 }
 
-async function summarizeWithOpenAI({ audioPath, transcriptText = '', report }) {
-  if (!config.openaiApiKey) {
-    throw new Error('OPENAI_API_KEY не задан');
+async function transcribeWithWhisper({ audioPath, apiKey, report }) {
+  const key = pickKey(apiKey, config.openaiApiKey);
+  if (!key) throw new Error('OPENAI_API_KEY не задан — Whisper недоступен');
+  if (!audioPath || !fs.existsSync(audioPath)) {
+    throw new Error('Нет audio.wav для распознавания');
   }
-  let transcript = transcriptText;
-  if ((!transcript || transcript.length < 20) && audioPath && fs.existsSync(audioPath)) {
-    let sendPath = audioPath;
-    const mime = mimeFromPath(audioPath);
-    if (mime === 'audio/wav' || fs.statSync(audioPath).size > INLINE_LIMIT) {
-      sendPath = await compressForGemini(audioPath, report);
-    }
-    report({
-      detail: `Gemini с этого IP недоступен. Отправляем ${path.basename(sendPath)} в OpenAI Whisper…`,
-    });
-    const fileName = path.basename(sendPath);
-    const file = new File([buf], fileName, { type: mimeFromPath(sendPath) });
-    const form = new FormData();
-    form.append('file', file);
-    form.append('model', 'whisper-1');
-    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${config.openaiApiKey}` },
-      body: form,
-      signal: AbortSignal.timeout(config.summarizeTimeoutMs),
-    });
-    const data = await readJsonResponse(res, 'OpenAI Whisper');
-    if (!res.ok) {
-      throw new Error(data.error?.message || `Whisper HTTP ${res.status}`);
-    }
-    transcript = data.text || '';
-    if (!transcript) throw new Error('Whisper вернул пустую расшифровку');
+  let sendPath = audioPath;
+  const mime = mimeFromPath(audioPath);
+  if (mime === 'audio/wav' || fs.statSync(audioPath).size > INLINE_LIMIT) {
+    sendPath = await compressForGemini(audioPath, report);
   }
-  if (!transcript) {
-    throw new Error('Нет текста для суммаризации через OpenAI');
+  report({
+    detail: `Отправляем ${path.basename(sendPath)} в OpenAI Whisper…`,
+  });
+  const buf = fs.readFileSync(sendPath);
+  const file = new File([buf], path.basename(sendPath), { type: mimeFromPath(sendPath) });
+  const form = new FormData();
+  form.append('file', file);
+  form.append('model', 'whisper-1');
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}` },
+    body: form,
+    signal: AbortSignal.timeout(config.summarizeTimeoutMs),
+  });
+  const data = await readJsonResponse(res, 'OpenAI Whisper');
+  if (!res.ok) {
+    throw new Error(data.error?.message || `Whisper HTTP ${res.status}`);
   }
+  const transcript = String(data.text || '').trim();
+  if (!transcript) throw new Error('Whisper вернул пустую расшифровку');
+  return { provider: 'whisper', model: 'whisper-1', transcript };
+}
+
+async function transcribeWithGemini({ audioPath, apiKey, report }) {
+  const key = pickKey(apiKey, config.geminiApiKey);
+  if (!key) throw new Error('GEMINI_API_KEY не задан — распознавание через Gemini недоступно');
+  if (!audioPath || !fs.existsSync(audioPath)) {
+    throw new Error('Нет audio.wav для распознавания');
+  }
+  const audioPart = await prepareAudioPart(audioPath, report, key);
+  const result = await requestGeminiText(
+    [{ text: TRANSCRIBE_PROMPT }, audioPart],
+    report,
+    { apiKey: key, json: false, detailPrefix: 'Распознаём речь через Gemini' }
+  );
+  const transcript = String(result.text || '')
+    .replace(/^```[a-z]*\n?|\n?```$/g, '')
+    .trim();
+  if (!transcript) throw new Error('Gemini вернул пустую расшифровку');
+  return { provider: 'gemini', model: result.model, transcript };
+}
+
+async function transcribeAudio(options = {}) {
+  const { audioPath, provider, apiKey, onProgress } = options;
+  const report = (patch) => {
+    if (typeof onProgress === 'function') onProgress(patch);
+  };
+  const kind = String(provider || '').toLowerCase() === 'gemini' ? 'gemini' : 'whisper';
+  if (config.summarizeMock && !pickKey(apiKey, kind === 'gemini' ? config.geminiApiKey : config.openaiApiKey)) {
+    report({ detail: 'SUMMARIZE_MOCK=1 — демонстрационная расшифровка.' });
+    return {
+      provider: 'mock',
+      model: 'mock',
+      transcript: 'Пример расшифровки аудиозаписи для демонстрации пайплайна.',
+    };
+  }
+  if (kind === 'gemini') {
+    return transcribeWithGemini({ audioPath, apiKey, report });
+  }
+  return transcribeWithWhisper({ audioPath, apiKey, report });
+}
+
+async function summarizeTextWithGemini({ transcript, apiKey, report }) {
+  const key = pickKey(apiKey, config.geminiApiKey);
+  if (!key) throw new Error('GEMINI_API_KEY не задан');
+  const result = await requestGeminiText(
+    [{ text: SUMMARIZE_PROMPT }, { text: `Расшифровка:\n\n${transcript}` }],
+    report,
+    { apiKey: key, json: true, detailPrefix: 'Суммаризируем текст через Gemini' }
+  );
+  const parsed = parseJsonLoose(result.text);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Gemini вернул ответ без JSON');
+  }
+  if (!parsed.transcript) parsed.transcript = transcript;
+  return { provider: 'gemini', model: result.model, summary: parsed };
+}
+
+async function summarizeTextWithOpenAI({ transcript, apiKey, report }) {
+  const key = pickKey(apiKey, config.openaiApiKey);
+  if (!key) throw new Error('OPENAI_API_KEY не задан');
   report({ detail: 'Суммаризируем расшифровку через OpenAI…' });
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.openaiApiKey}`,
+      Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -451,11 +449,33 @@ async function summarizeWithOpenAI({ audioPath, transcriptText = '', report }) {
     throw new Error(data.error?.message || `OpenAI HTTP ${res.status}`);
   }
   const parsed = parseJsonLoose(data.choices?.[0]?.message?.content || '');
+  if (!parsed.transcript) parsed.transcript = transcript;
   return {
     provider: 'openai',
-    model: 'whisper-1 + gpt-4o-mini',
+    model: 'gpt-4o-mini',
     summary: parsed,
   };
+}
+
+async function summarizeText(options = {}) {
+  const { transcript = '', provider, apiKey, onProgress } = options;
+  const report = (patch) => {
+    if (typeof onProgress === 'function') onProgress(patch);
+  };
+  const text = String(transcript || '').trim();
+  if (!text) throw new Error('Нет текста для суммаризации');
+  const kind = String(provider || '').toLowerCase() === 'openai' ? 'openai' : 'gemini';
+  if (
+    config.summarizeMock &&
+    !pickKey(apiKey, kind === 'openai' ? config.openaiApiKey : config.geminiApiKey)
+  ) {
+    report({ detail: 'SUMMARIZE_MOCK=1 — демонстрационная суммаризация.' });
+    return { provider: 'mock', model: 'mock', summary: createMockSummary(text) };
+  }
+  if (kind === 'openai') {
+    return summarizeTextWithOpenAI({ transcript: text, apiKey, report });
+  }
+  return summarizeTextWithGemini({ transcript: text, apiKey, report });
 }
 
 function createMockSummary(context = '') {
@@ -499,6 +519,7 @@ function createMockSummary(context = '') {
 }
 
 module.exports = {
-  summarizeWithGemini,
+  transcribeAudio,
+  summarizeText,
   createMockSummary,
 };

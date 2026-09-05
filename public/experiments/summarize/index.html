@@ -120,11 +120,40 @@
         </div>
       </div>
 
+      <div class="summarize-keys">
+        <div class="summarize-key-row">
+          <div class="summarize-key-row__meta">
+            <span class="summarize-key-row__label">Ключ для извлечения текста</span>
+            <div class="summarize-key-row__radios">
+              <label><input type="radio" name="stt-provider" value="whisper" checked /> Whisper</label>
+              <label><input type="radio" name="stt-provider" value="gemini" /> Gemini</label>
+            </div>
+          </div>
+          <input type="password" id="stt-api-key" autocomplete="off" placeholder="Пусто — ключ с сервера" />
+        </div>
+        <div class="summarize-key-row">
+          <div class="summarize-key-row__meta">
+            <span class="summarize-key-row__label">Ключ для суммаризации текста</span>
+            <div class="summarize-key-row__radios">
+              <label><input type="radio" name="summarize-provider" value="gemini" checked /> Gemini</label>
+              <label><input type="radio" name="summarize-provider" value="openai" /> OpenAI</label>
+            </div>
+          </div>
+          <input type="password" id="summarize-api-key" autocomplete="off" placeholder="Пусто — ключ с сервера" />
+        </div>
+      </div>
+
       <div class="summarize-submit-row">
-        <label class="summarize-audio-only" for="audio-only">
-          <input type="checkbox" id="audio-only" />
-          <span>Не распознавать текст, просто получить аудио</span>
-        </label>
+        <div class="summarize-mode-checks">
+          <label class="summarize-audio-only" for="audio-only">
+            <input type="checkbox" id="audio-only" />
+            <span>Не распознавать текст, просто получить аудио</span>
+          </label>
+          <label class="summarize-audio-only" for="transcript-only">
+            <input type="checkbox" id="transcript-only" />
+            <span>Распознавать текст, но не суммаризировать</span>
+          </label>
+        </div>
         <button type="button" class="vesha-btn vesha-btn--primary" id="process-btn">
           <span id="process-btn-label">Запустить суммаризацию</span>
         </button>
@@ -149,7 +178,8 @@
       <div class="summarize-audio-ready" id="audio-ready-bar" hidden>
         <p id="audio-ready-lead">Аудио готово. Распознавание речи не запускалось.</p>
         <div class="summarize-audio-ready__actions">
-          <button type="button" class="vesha-btn vesha-btn--primary" id="continue-summarize-btn">Получить суммаризацию</button>
+          <button type="button" class="vesha-btn vesha-btn--primary" id="continue-transcribe-btn">Распознать текст</button>
+          <button type="button" class="vesha-btn vesha-btn--primary" id="continue-summarize-btn" hidden>Суммаризировать</button>
           <a class="vesha-btn vesha-btn--outline" id="download-audio-link" download>Скачать WAV</a>
         </div>
       </div>

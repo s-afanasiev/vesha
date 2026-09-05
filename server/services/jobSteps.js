@@ -9,13 +9,39 @@ function formatCommand(binName, args) {
   return [binName, ...args.map(quoteArg)].join(' ');
 }
 
-function geminiCommand(model) {
-  const name = model || 'gemini-2.5-flash';
+function sttCommand(provider) {
+  if (provider === 'gemini') {
+    return [
+      'POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+      '  Content-Type: application/json',
+      '  parts: prompt (только расшифровка) + audio.wav',
+    ].join('\n');
+  }
+  return [
+    'POST https://api.openai.com/v1/audio/transcriptions',
+    '  model: whisper-1',
+    '  file: audio.wav',
+  ].join('\n');
+}
+
+function summarizeCommand(provider) {
+  if (provider === 'openai') {
+    return [
+      'POST https://api.openai.com/v1/chat/completions',
+      '  model: gpt-4o-mini',
+      '  messages: prompt + transcript',
+    ].join('\n');
+  }
+  const name = 'gemini-2.5-flash';
   return [
     `POST https://generativelanguage.googleapis.com/v1beta/models/${name}:generateContent`,
     '  Content-Type: application/json',
-    '  parts: prompt (суммаризация на русском) + inlineData audio.wav',
+    '  parts: prompt (тезисы на русском) + transcript',
   ].join('\n');
+}
+
+function geminiCommand(model) {
+  return summarizeCommand('gemini');
 }
 
 function ytdlpShowArgs(url, cookiesBrowser = 'firefox') {
@@ -88,21 +114,78 @@ function makeStep({ n, id, title, tool, why, command, waitHint, detail, stats })
   };
 }
 
-function skipSummarizeStep(steps, detail) {
-  return patchStep(steps, 'summarize', {
+function skipStep(steps, id, detail) {
+  return patchStep(steps, id, {
     status: 'skipped',
     progress: 0,
     indeterminate: false,
-    waitHint:
-      detail ||
-      'Не запускается: выбран режим «только аудио». После извлечения звука можно попросить суммаризацию.',
-    detail:
-      detail ||
-      'Не запускается: выбран режим «только аудио». После извлечения звука можно попросить суммаризацию.',
+    waitHint: detail,
+    detail,
   });
 }
 
-function buildUrlSteps(url, { audioOnly = false } = {}) {
+function applyStopMode(steps, { audioOnly = false, transcriptOnly = false } = {}) {
+  if (audioOnly) {
+    steps = skipStep(
+      steps,
+      'stt',
+      'Пропущен: выбрано «только аудио». Распознавание можно запустить позже.'
+    );
+    steps = skipStep(
+      steps,
+      'summarize',
+      'Пропущен: выбрано «только аудио». Сначала будет расшифровка, потом тезисы.'
+    );
+    return steps;
+  }
+  if (transcriptOnly) {
+    return skipStep(
+      steps,
+      'summarize',
+      'Пропущен: выбрано «распознать текст, но не суммаризировать». Тезисы можно запросить позже.'
+    );
+  }
+  return steps;
+}
+
+function sttStep(n, { audioOnly = false, transcriptOnly = false } = {}) {
+  const skipped = audioOnly;
+  return makeStep({
+    n,
+    id: 'stt',
+    title: 'Распознавание речи',
+    tool: 'Whisper / Gemini',
+    why: 'Из WAV получим текст. Результат появится в этом блоке — его можно поправить перед суммаризацией.',
+    command: sttCommand('whisper'),
+    waitHint: skipped
+      ? 'Пропущен: выбрано «только аудио». Можно запустить позже, не качая заново.'
+      : 'Ещё не начался. Стартует, когда будет готов audio.wav.',
+    detail: skipped
+      ? 'Автоматически не стартует. Кнопка появится, когда будет audio.wav.'
+      : 'Ждёт audio.wav после ffmpeg.',
+  });
+}
+
+function summarizeStep(n, { audioOnly = false, transcriptOnly = false } = {}) {
+  const skipped = audioOnly || transcriptOnly;
+  const whySkip = audioOnly
+    ? 'Пропущен: выбрано «только аудио».'
+    : 'Пропущен: выбрано «распознать текст, но не суммаризировать».';
+  return makeStep({
+    n,
+    id: 'summarize',
+    title: 'Суммаризация текста',
+    tool: 'Gemini / OpenAI',
+    why: 'В нейросеть уйдёт только расшифровка. На выходе — заголовок, тезисы, таймкоды и задачи.',
+    command: summarizeCommand('gemini'),
+    waitHint: skipped ? whySkip : 'Ещё не начался. Стартует, когда будет готов текст расшифровки.',
+    detail: skipped
+      ? 'Автоматически не стартует. Кнопка появится после расшифровки.'
+      : 'Ждёт текст из блока распознавания речи.',
+  });
+}
+
+function buildUrlSteps(url, { audioOnly = false, transcriptOnly = false } = {}) {
   const steps = [
     makeStep({
       n: 1,
@@ -123,29 +206,17 @@ function buildUrlSteps(url, { audioOnly = false } = {}) {
       why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
       command: formatCommand('ffmpeg', ffmpegPreviewArgs('source.*')),
       waitHint: audioOnly
-        ? 'После этого шага остановимся: суммаризация не запустится сама.'
+        ? 'После этого шага остановимся: распознавание не запустится само.'
         : 'Ещё не начался. Стартует сразу после скачивания.',
       detail: 'Ждёт файл source.* от yt-dlp.',
     }),
-    makeStep({
-      n: 3,
-      id: 'summarize',
-      title: 'Распознавание речи и суммаризация',
-      tool: 'Gemini',
-      why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
-      command: geminiCommand(),
-      waitHint: audioOnly
-        ? 'Пропущен: выбрано «только аудио». Можно запустить позже, не качая ролик заново.'
-        : 'Ещё не начался. Стартует, когда будет готов audio.wav.',
-      detail: audioOnly
-        ? 'Автоматически не стартует. Кнопка появится, когда будет audio.wav.'
-        : 'Ждёт audio.wav после ffmpeg.',
-    }),
+    sttStep(3, { audioOnly, transcriptOnly }),
+    summarizeStep(4, { audioOnly, transcriptOnly }),
   ];
-  return audioOnly ? skipSummarizeStep(steps) : steps;
+  return applyStopMode(steps, { audioOnly, transcriptOnly });
 }
 
-function buildFileSteps(filename, { audioOnly = false } = {}) {
+function buildFileSteps(filename, { audioOnly = false, transcriptOnly = false } = {}) {
   const src = filename || 'source.*';
   const steps = [
     makeStep({
@@ -156,26 +227,14 @@ function buildFileSteps(filename, { audioOnly = false } = {}) {
       why: 'Из загруженного файла вырежем дорожку и сделаем WAV 16 kHz mono.',
       command: formatCommand('ffmpeg', ffmpegPreviewArgs(src)),
       waitHint: audioOnly
-        ? 'После этого шага остановимся: суммаризация не запустится сама.'
+        ? 'После этого шага остановимся: распознавание не запустится само.'
         : 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
       detail: 'В очереди. Как только сервер освободится — запустим эту команду.',
     }),
-    makeStep({
-      n: 2,
-      id: 'summarize',
-      title: 'Распознавание речи и суммаризация',
-      tool: 'Gemini',
-      why: 'Модель получит готовый WAV и вернёт расшифровку, тезисы, таймкоды и список задач.',
-      command: geminiCommand(),
-      waitHint: audioOnly
-        ? 'Пропущен: выбрано «только аудио». Можно запустить позже.'
-        : 'Ещё не начался. Стартует, когда будет готов audio.wav.',
-      detail: audioOnly
-        ? 'Автоматически не стартует. Кнопка появится, когда будет audio.wav.'
-        : 'Ждёт audio.wav после ffmpeg.',
-    }),
+    sttStep(2, { audioOnly, transcriptOnly }),
+    summarizeStep(3, { audioOnly, transcriptOnly }),
   ];
-  return audioOnly ? skipSummarizeStep(steps) : steps;
+  return applyStopMode(steps, { audioOnly, transcriptOnly });
 }
 
 function patchStep(steps, id, patch) {
@@ -191,15 +250,27 @@ function markDone(steps, id, detail) {
   });
 }
 
+function skipSummarizeStep(steps, detail) {
+  return skipStep(
+    steps,
+    'summarize',
+    detail || 'Не запускается: выбран режим «только аудио».'
+  );
+}
+
 module.exports = {
   emptyDownloadStats,
   formatCommand,
   geminiCommand,
+  sttCommand,
+  summarizeCommand,
   ytdlpShowArgs,
   ffmpegPreviewArgs,
   buildUrlSteps,
   buildFileSteps,
   skipSummarizeStep,
+  applyStopMode,
+  skipStep,
   patchStep,
   markDone,
 };

@@ -42,7 +42,13 @@ function readMeta(id) {
 }
 
 function writeMeta(id, meta) {
-  fs.writeFileSync(path.join(jobDir(id), 'meta.json'), JSON.stringify(meta, null, 2));
+  const next = { ...(meta || {}), id };
+  delete next.sttApiKey;
+  delete next.summarizeApiKey;
+  delete next.creds;
+  delete next.apiKey;
+  delete next.transcriptOverride;
+  fs.writeFileSync(path.join(jobDir(id), 'meta.json'), JSON.stringify(next, null, 2));
 }
 
 function findSourceFile(dir) {
@@ -464,15 +470,29 @@ function publicJob(meta) {
     videoUrl: sourcePath ? `/api/summarize/jobs/${meta.id}/video` : null,
     videoName: sourcePath ? path.basename(sourcePath) : null,
     audioUrl: audioExists ? `/api/summarize/jobs/${meta.id}/audio` : null,
+    transcript: meta.transcript || null,
+    transcriptUrl: meta.transcript
+      ? `/api/summarize/jobs/${meta.id}/transcript.txt`
+      : null,
     summary: meta.summary || null,
     provider: meta.provider || null,
     model: meta.model || null,
+    sttProvider: meta.sttProvider || null,
+    sttModel: meta.sttModel || null,
     steps: meta.steps || [],
     audioOnly: Boolean(meta.audioOnly),
-    canSummarize: Boolean(
+    transcriptOnly: Boolean(meta.transcriptOnly),
+    canTranscribe: Boolean(
       audioExists &&
-        !meta.summary &&
+        !meta.transcript &&
         (meta.status === 'audio_ready' ||
+          meta.status === 'failed' ||
+          (meta.steps || []).some((s) => s.id === 'stt' && (s.status === 'skipped' || s.status === 'failed')))
+    ),
+    canSummarize: Boolean(
+      meta.transcript &&
+        !meta.summary &&
+        (meta.status === 'transcript_ready' ||
           meta.status === 'failed' ||
           (meta.steps || []).some((s) => s.id === 'summarize' && (s.status === 'skipped' || s.status === 'failed')))
     ),

@@ -9,6 +9,7 @@ const { readMeta, jobDir, findSourceFile } = require('../services/extractAudio')
 const {
   enqueueUrl,
   enqueueFile,
+  enqueueTranscribe,
   enqueueSummarize,
   view,
   snapshot,
@@ -84,6 +85,18 @@ function truthy(v) {
   return v === true || v === 'true' || v === '1' || v === 'on';
 }
 
+function aiOptions(body) {
+  const src = body || {};
+  return {
+    audioOnly: truthy(src.audioOnly),
+    transcriptOnly: truthy(src.transcriptOnly),
+    sttProvider: src.sttProvider,
+    sttApiKey: src.sttApiKey,
+    summarizeProvider: src.summarizeProvider,
+    summarizeApiKey: src.summarizeApiKey,
+  };
+}
+
 router.get('/files', (_req, res) => {
   res.json(listStoredMedia());
 });
@@ -108,7 +121,7 @@ router.post('/from-url', (req, res, next) => {
     const owner = ownerFromReq(req);
     res.json(
       enqueueUrl(req.body && req.body.url, {
-        audioOnly: truthy(req.body && req.body.audioOnly),
+        ...aiOptions(req.body),
         userId: owner.userId,
         guestId: owner.guestId,
       })
@@ -139,7 +152,7 @@ router.post('/upload', upload.single('file'), (req, res, next) => {
         id,
         sourceTitle: originalName,
         sourceBytes: req.file.size,
-        audioOnly: truthy(req.body && req.body.audioOnly),
+        ...aiOptions(req.body),
         userId: owner.userId,
         guestId: owner.guestId,
       })
@@ -149,9 +162,23 @@ router.post('/upload', upload.single('file'), (req, res, next) => {
   }
 });
 
+router.post('/jobs/:id/transcribe', (req, res, next) => {
+  try {
+    res.json(enqueueTranscribe(req.params.id, aiOptions(req.body)));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/jobs/:id/summarize', (req, res, next) => {
   try {
-    res.json(enqueueSummarize(req.params.id));
+    const body = req.body || {};
+    res.json(
+      enqueueSummarize(req.params.id, {
+        ...aiOptions(body),
+        transcript: typeof body.transcript === 'string' ? body.transcript : undefined,
+      })
+    );
   } catch (err) {
     next(err);
   }
@@ -200,6 +227,19 @@ router.get('/jobs/:id/video', (req, res) => {
     );
   }
   res.sendFile(file);
+});
+
+router.get('/jobs/:id/transcript.txt', (req, res) => {
+  const meta = readMeta(req.params.id);
+  if (!meta || !meta.transcript) {
+    return res.status(404).json({ error: 'Расшифровки ещё нет' });
+  }
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${jobFileBase(meta, 'transcript')}.txt"`
+  );
+  res.send(meta.transcript);
 });
 
 router.get('/jobs/:id/summary.txt', (req, res) => {
