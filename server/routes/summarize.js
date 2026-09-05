@@ -5,7 +5,7 @@ const multer = require('multer');
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const { getToolStatus } = require('../services/mediaBins');
-const { readMeta, jobDir, findSourceFile } = require('../services/extractAudio');
+const { readMeta, jobDir, findSourceFile, ensureDownloadMp3 } = require('../services/extractAudio');
 const {
   enqueueUrl,
   enqueueFile,
@@ -209,6 +209,21 @@ router.get('/jobs/:id/audio', (req, res) => {
     );
   }
   res.sendFile(file);
+});
+
+router.get('/jobs/:id/audio.mp3', async (req, res, next) => {
+  try {
+    const file = await ensureDownloadMp3(req.params.id);
+    const meta = readMeta(req.params.id);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${jobFileBase(meta, 'audio')}.mp3"`
+    );
+    res.sendFile(file);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/jobs/:id/video', (req, res) => {

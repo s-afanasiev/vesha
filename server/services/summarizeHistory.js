@@ -81,6 +81,7 @@ function publicRow(row) {
         : null,
     hasFiles,
     audioUrl: audioExists ? `/api/summarize/jobs/${row.id}/audio` : null,
+    audioMp3Url: audioExists ? `/api/summarize/jobs/${row.id}/audio.mp3` : null,
   };
 }
 

@@ -470,6 +470,7 @@ function publicJob(meta) {
     videoUrl: sourcePath ? `/api/summarize/jobs/${meta.id}/video` : null,
     videoName: sourcePath ? path.basename(sourcePath) : null,
     audioUrl: audioExists ? `/api/summarize/jobs/${meta.id}/audio` : null,
+    audioMp3Url: audioExists ? `/api/summarize/jobs/${meta.id}/audio.mp3` : null,
     transcript: meta.transcript || null,
     transcriptUrl: meta.transcript
       ? `/api/summarize/jobs/${meta.id}/transcript.txt`
@@ -499,6 +500,71 @@ function publicJob(meta) {
   };
 }
 
+const mp3Locks = new Map();
+
+async function ensureDownloadMp3(id) {
+  const meta = readMeta(id);
+  if (!meta || !meta.audioFile) {
+    const err = new Error('Аудио ещё нет');
+    err.status = 404;
+    throw err;
+  }
+  const dir = jobDir(id);
+  const wavPath = path.join(dir, meta.audioFile);
+  if (!fs.existsSync(wavPath)) {
+    const err = new Error('Файл аудио пропал');
+    err.status = 404;
+    throw err;
+  }
+
+  const dest = path.join(dir, 'audio.mp3');
+  try {
+    if (
+      fs.existsSync(dest) &&
+      fs.statSync(dest).mtimeMs >= fs.statSync(wavPath).mtimeMs &&
+      fs.statSync(dest).size > 256
+    ) {
+      return dest;
+    }
+  } catch (_) {
+    // recode
+  }
+
+  const pending = mp3Locks.get(id);
+  if (pending) return pending;
+
+  const work = (async () => {
+    const { ffmpeg } = requireBins({ needYtdlp: false });
+    const tmp = path.join(dir, 'audio.download.tmp.mp3');
+    try {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    } catch (_) {}
+    const base = ['-y', '-i', wavPath, '-vn', '-ac', '1', '-ar', '16000'];
+    try {
+      await run(ffmpeg, [...base, '-c:a', 'libmp3lame', '-b:a', '96k', '-f', 'mp3', tmp], {
+        timeoutMs: Math.min(config.summarizeTimeoutMs || 180000, 180000),
+      });
+    } catch (err) {
+      try {
+        if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+      } catch (_) {}
+      await run(ffmpeg, [...base, '-b:a', '96k', '-f', 'mp3', tmp], {
+        timeoutMs: Math.min(config.summarizeTimeoutMs || 180000, 180000),
+      });
+    }
+    if (!fs.existsSync(tmp) || fs.statSync(tmp).size < 256) {
+      throw new Error('Не удалось закодировать MP3');
+    }
+    fs.renameSync(tmp, dest);
+    return dest;
+  })().finally(() => {
+    mp3Locks.delete(id);
+  });
+
+  mp3Locks.set(id, work);
+  return work;
+}
+
 module.exports = {
   extractAudioFromUrl,
   extractAudioFromFile,
@@ -508,4 +574,5 @@ module.exports = {
   findSourceFile,
   publicJob,
   assertHttpUrl,
+  ensureDownloadMp3,
 };

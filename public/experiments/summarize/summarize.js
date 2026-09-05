@@ -23,7 +23,9 @@
   const audioReadyLead = document.getElementById('audio-ready-lead');
   const continueTranscribeBtn = document.getElementById('continue-transcribe-btn');
   const continueSummarizeBtn = document.getElementById('continue-summarize-btn');
-  const downloadAudioLink = document.getElementById('download-audio-link');
+  const downloadWavLink = document.getElementById('download-wav-link');
+  const downloadMp3Link = document.getElementById('download-mp3-link');
+  const downloadTranscriptLink = document.getElementById('download-transcript-link');
 
   const runLog = document.getElementById('run-log');
   const runLogTitle = document.getElementById('run-log-title');
@@ -295,11 +297,46 @@
       mode === 'audio' ? 'Получить аудио' : mode === 'transcript' ? 'Распознать текст' : 'Запустить суммаризацию';
   }
 
+  function audioMp3Href(job) {
+    if (!job) return '';
+    if (job.audioMp3Url) return job.audioMp3Url;
+    if (job.id) return '/api/summarize/jobs/' + encodeURIComponent(job.id) + '/audio.mp3';
+    return '';
+  }
+
+  function setContinueDownloadLinks(job, { transcript = false } = {}) {
+    if (downloadWavLink) {
+      if (job && job.audioUrl) {
+        downloadWavLink.href = job.audioUrl + (job.audioUrl.includes('?') ? '&' : '?') + 'download=1';
+        downloadWavLink.hidden = false;
+      } else {
+        downloadWavLink.hidden = true;
+      }
+    }
+    if (downloadMp3Link) {
+      const mp3 = audioMp3Href(job);
+      if (mp3) {
+        downloadMp3Link.href = mp3;
+        downloadMp3Link.hidden = false;
+      } else {
+        downloadMp3Link.hidden = true;
+      }
+    }
+    if (downloadTranscriptLink) {
+      if (transcript && job && job.transcriptUrl) {
+        downloadTranscriptLink.href = job.transcriptUrl;
+        downloadTranscriptLink.hidden = false;
+      } else {
+        downloadTranscriptLink.hidden = true;
+      }
+    }
+  }
+
   function hideAudioReadyBar() {
     if (audioReadyBar) audioReadyBar.hidden = true;
     if (continueSummarizeBtn) continueSummarizeBtn.disabled = false;
     if (continueTranscribeBtn) continueTranscribeBtn.disabled = false;
-    if (downloadAudioLink) downloadAudioLink.textContent = 'Скачать WAV';
+    setContinueDownloadLinks(null);
   }
 
   function showAudioReadyBar(job) {
@@ -311,13 +348,7 @@
       continueTranscribeBtn.disabled = false;
     }
     if (continueSummarizeBtn) continueSummarizeBtn.hidden = true;
-    if (downloadAudioLink) {
-      downloadAudioLink.textContent = 'Скачать WAV';
-      if (job && job.audioUrl) {
-        downloadAudioLink.href = job.audioUrl + (job.audioUrl.includes('?') ? '&' : '?') + 'download=1';
-        downloadAudioLink.hidden = false;
-      }
-    }
+    setContinueDownloadLinks(job);
   }
 
   function showTranscriptReadyBar(job) {
@@ -329,17 +360,7 @@
       continueSummarizeBtn.hidden = false;
       continueSummarizeBtn.disabled = false;
     }
-    if (downloadAudioLink) {
-      if (job.transcriptUrl) {
-        downloadAudioLink.href = job.transcriptUrl;
-        downloadAudioLink.textContent = 'Скачать текст';
-        downloadAudioLink.hidden = false;
-      } else if (job.audioUrl) {
-        downloadAudioLink.href = job.audioUrl + (job.audioUrl.includes('?') ? '&' : '?') + 'download=1';
-        downloadAudioLink.textContent = 'Скачать WAV';
-        downloadAudioLink.hidden = false;
-      }
-    }
+    setContinueDownloadLinks(job, { transcript: true });
   }
 
   function stepBadge(status) {
@@ -658,7 +679,10 @@
           `<audio class="run-step__player" controls preload="metadata" src="${escapeHtml(mediaSrc(job.audioUrl, job))}"></audio>`
         );
         bits.push(
-          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(withQuery(job.audioUrl, 'download=1'))}">Скачать аудио</a>`
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(withQuery(job.audioUrl, 'download=1'))}">Скачать WAV</a>`
+        );
+        bits.push(
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(audioMp3Href(job))}">Скачать MP3</a>`
         );
       }
       if (job.videoUrl && !hasDownloadStep && status === 'done') {
@@ -1616,12 +1640,18 @@
         actions.appendChild(openBtn);
       }
       if (item.audioUrl) {
-        const dl = document.createElement('a');
-        dl.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
-        dl.href = item.audioUrl + (item.audioUrl.includes('?') ? '&' : '?') + 'download=1';
-        dl.textContent = 'Скачать аудио';
-        dl.setAttribute('download', '');
-        actions.appendChild(dl);
+        const dlWav = document.createElement('a');
+        dlWav.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
+        dlWav.href = item.audioUrl + (item.audioUrl.includes('?') ? '&' : '?') + 'download=1';
+        dlWav.textContent = 'Скачать WAV';
+        dlWav.setAttribute('download', '');
+        actions.appendChild(dlWav);
+        const dlMp3 = document.createElement('a');
+        dlMp3.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
+        dlMp3.href = item.audioMp3Url || '/api/summarize/jobs/' + encodeURIComponent(item.id) + '/audio.mp3';
+        dlMp3.textContent = 'Скачать MP3';
+        dlMp3.setAttribute('download', '');
+        actions.appendChild(dlMp3);
       }
       if (actions.childNodes.length) card.appendChild(actions);
       historyList.appendChild(card);
