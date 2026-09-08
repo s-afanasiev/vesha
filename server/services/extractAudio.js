@@ -51,6 +51,20 @@ function writeMeta(id, meta) {
   fs.writeFileSync(path.join(jobDir(id), 'meta.json'), JSON.stringify(next, null, 2));
 }
 
+const AUDIO_SOURCE_EXT = new Set([
+  '.mp3',
+  '.wav',
+  '.m4a',
+  '.ogg',
+  '.aac',
+  '.flac',
+  '.opus',
+]);
+
+function isAudioSource(filePath) {
+  return AUDIO_SOURCE_EXT.has(path.extname(filePath || '').toLowerCase());
+}
+
 function findSourceFile(dir) {
   const names = fs
     .readdirSync(dir)
@@ -469,6 +483,9 @@ function publicJob(meta) {
     createdAt: meta.createdAt,
     videoUrl: sourcePath ? `/api/summarize/jobs/${meta.id}/video` : null,
     videoName: sourcePath ? path.basename(sourcePath) : null,
+    posterUrl: sourcePath && !isAudioSource(sourcePath)
+      ? `/api/summarize/jobs/${meta.id}/poster.jpg`
+      : null,
     audioUrl: audioExists ? `/api/summarize/jobs/${meta.id}/audio` : null,
     audioMp3Url: audioExists ? `/api/summarize/jobs/${meta.id}/audio.mp3` : null,
     transcript: meta.transcript || null,
@@ -565,6 +582,68 @@ async function ensureDownloadMp3(id) {
   return work;
 }
 
+const posterLocks = new Map();
+
+async function ensureFirstFrameJpg(id) {
+  const meta = readMeta(id);
+  if (!meta) {
+    const err = new Error('Задание не найдено');
+    err.status = 404;
+    throw err;
+  }
+  const dir = jobDir(id);
+  const sourcePath = findSourceFile(dir);
+  if (!sourcePath || !fs.existsSync(sourcePath)) {
+    const err = new Error('Видео ещё нет или уже удалено');
+    err.status = 404;
+    throw err;
+  }
+  if (isAudioSource(sourcePath)) {
+    const err = new Error('В исходнике нет видеоряда — кадр снять нельзя');
+    err.status = 400;
+    throw err;
+  }
+
+  const dest = path.join(dir, 'poster.jpg');
+  try {
+    if (
+      fs.existsSync(dest) &&
+      fs.statSync(dest).mtimeMs >= fs.statSync(sourcePath).mtimeMs &&
+      fs.statSync(dest).size > 256
+    ) {
+      return dest;
+    }
+  } catch (_) {
+    // recode
+  }
+
+  const pending = posterLocks.get(id);
+  if (pending) return pending;
+
+  const work = (async () => {
+    const { ffmpeg } = requireBins({ needYtdlp: false });
+    const tmp = path.join(dir, 'poster.tmp.jpg');
+    try {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    } catch (_) {}
+    await run(
+      ffmpeg,
+      ['-y', '-i', sourcePath, '-an', '-sn', '-frames:v', '1', '-q:v', '2', tmp],
+      { timeoutMs: 60000 }
+    );
+    if (!fs.existsSync(tmp) || fs.statSync(tmp).size < 256) {
+      throw new Error('Не удалось снять первый кадр');
+    }
+    fs.renameSync(tmp, dest);
+    return dest;
+  })().finally(() => {
+    posterLocks.delete(id);
+  });
+
+  posterLocks.set(id, work);
+  return work;
+}
+
 module.exports = {
   extractAudioFromUrl,
   extractAudioFromFile,
@@ -575,4 +654,5 @@ module.exports = {
   publicJob,
   assertHttpUrl,
   ensureDownloadMp3,
+  ensureFirstFrameJpg,
 };

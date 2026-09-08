@@ -671,6 +671,11 @@
       bits.push(
         `<a class="vesha-btn vesha-btn--sm vesha-btn--primary" href="${escapeHtml(withQuery(job.videoUrl, 'download=1'))}">Скачать видео</a>`
       );
+      if (job.posterUrl) {
+        bits.push(
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(job.posterUrl)}" download>Скриншот первого кадра</a>`
+        );
+      }
     }
 
     if (step.id === 'ffmpeg' && (status === 'done' || job.audioUrl)) {
@@ -689,6 +694,11 @@
         bits.push(
           `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(withQuery(job.videoUrl, 'download=1'))}">Скачать исходный файл</a>`
         );
+        if (job.posterUrl) {
+          bits.push(
+            `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(job.posterUrl)}" download>Скриншот первого кадра</a>`
+          );
+        }
       }
     }
 
@@ -741,7 +751,12 @@
   function actionsKey(step, job) {
     if (!step) return '';
     if (step.id === 'download') {
-      return ['download', step.status, job && job.videoUrl ? 'v' : ''].join('|');
+      return [
+        'download',
+        step.status,
+        job && job.videoUrl ? 'v' : '',
+        job && job.posterUrl ? 'p' : '',
+      ].join('|');
     }
     if (step.id === 'ffmpeg') {
       return [
@@ -749,6 +764,7 @@
         step.status,
         job && job.audioUrl ? 'a' : '',
         job && job.videoUrl ? 'v' : '',
+        job && job.posterUrl ? 'p' : '',
       ].join('|');
     }
     if (step.id === 'stt') {

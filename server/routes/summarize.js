@@ -5,7 +5,7 @@ const multer = require('multer');
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const { getToolStatus } = require('../services/mediaBins');
-const { readMeta, jobDir, findSourceFile, ensureDownloadMp3 } = require('../services/extractAudio');
+const { readMeta, jobDir, findSourceFile, ensureDownloadMp3, ensureFirstFrameJpg } = require('../services/extractAudio');
 const {
   enqueueUrl,
   enqueueFile,
@@ -242,6 +242,21 @@ router.get('/jobs/:id/video', (req, res) => {
     );
   }
   res.sendFile(file);
+});
+
+router.get('/jobs/:id/poster.jpg', async (req, res, next) => {
+  try {
+    const file = await ensureFirstFrameJpg(req.params.id);
+    const meta = readMeta(req.params.id);
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${jobFileBase(meta, 'frame')}.jpg"`
+    );
+    res.sendFile(file);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/jobs/:id/transcript.txt', (req, res) => {
