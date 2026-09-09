@@ -4,13 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Эксперименты — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body class="page-experiments">
   <main class="experiments">
     <div class="experiments__nav">
       <a class="back-link" href="/">← Vesha</a>
-      <div data-vesha-auth-widget></div>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+        <div data-vesha-auth-widget></div>
+      </div>
     </div>
     <header class="experiments__header">
       <h1>Эксперименты</h1>
@@ -19,6 +30,7 @@
     <div id="grid" class="tiles" aria-live="polite"></div>
     <p id="status" class="experiments__status" hidden></p>
   </main>
+  <script src="/theme.js"></script>
   <script src="/auth.js"></script>
   <script>
     const grid = document.getElementById('grid');

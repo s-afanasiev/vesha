@@ -1,28 +1,34 @@
 :root {
-  --pb-bg: #0f0f0f;
-  --pb-surface: #141414;
-  --pb-surface-2: #1b1b1b;
-  --pb-surface-hover: #222222;
-  --pb-border: rgba(255, 255, 255, 0.08);
-  --pb-border-focus: rgba(255, 255, 255, 0.25);
-  --pb-text: #f0f0f0;
-  --pb-muted: #888888;
-  --pb-accent: #10b981;
-  --pb-accent-soft: rgba(16, 185, 129, 0.15);
-  --pb-accent-border: rgba(16, 185, 129, 0.35);
-  --pb-danger: #f87171;
+  --pb-bg: var(--bg);
+  --pb-surface: var(--surface);
+  --pb-surface-2: var(--surface-2);
+  --pb-surface-hover: var(--surface-hover);
+  --pb-border: var(--border);
+  --pb-border-focus: var(--border-strong);
+  --pb-text: var(--text);
+  --pb-muted: var(--text-muted);
+  --pb-accent: #059669;
+  --pb-accent-soft: rgba(5, 150, 105, 0.12);
+  --pb-accent-border: rgba(5, 150, 105, 0.32);
+  --pb-danger: var(--danger-text);
   --pb-radius-sm: 6px;
   --pb-radius-md: 10px;
   --pb-radius-lg: 14px;
+}
+
+html[data-theme="sand"] {
+  --pb-accent: #877024;
+  --pb-accent-soft: rgba(135, 112, 36, 0.16);
+  --pb-accent-border: rgba(199, 179, 106, 0.45);
 }
 
 body.page-podborka {
   align-items: flex-start;
   justify-content: flex-start;
   background:
-    radial-gradient(1000px 500px at 50% -10%, rgba(16, 185, 129, 0.06) 0%, transparent 60%),
-    radial-gradient(800px 400px at 90% 20%, rgba(99, 102, 241, 0.04) 0%, transparent 50%),
-    #0f0f0f;
+    radial-gradient(1000px 500px at 50% -10%, var(--pb-accent-soft) 0%, transparent 60%),
+    radial-gradient(800px 400px at 90% 20%, var(--bg-glow) 0%, transparent 50%),
+    var(--bg);
   color: var(--pb-text);
   min-height: 100vh;
 }
@@ -42,7 +48,7 @@ body.page-podborka {
   font-size: 2.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--pb-text);
   margin-bottom: 0.35rem;
 }
 
@@ -73,7 +79,7 @@ body.page-podborka {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #bbb;
+  color: var(--pb-muted);
 }
 
 .podborka__quota-icon {
@@ -106,7 +112,7 @@ body.page-podborka {
   padding: 2.25rem 1.5rem;
   border: 2px dashed var(--pb-border);
   border-radius: var(--pb-radius-lg);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-2);
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: center;
@@ -146,7 +152,7 @@ body.page-podborka {
 .podborka__drop-title {
   font-size: 0.95rem;
   font-weight: 500;
-  color: #e5e5e5;
+  color: var(--pb-text);
 }
 
 .podborka__drop-title u {
@@ -251,7 +257,7 @@ body.page-podborka {
 .podborka__history-head h2 {
   font-size: 1.05rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--pb-text);
 }
 
 .podborka__history-hint {
@@ -273,7 +279,7 @@ body.page-podborka {
   scroll-behavior: smooth;
   padding: 0.25rem 0.15rem 0.5rem;
   scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .podborka__carousel::-webkit-scrollbar {
@@ -281,14 +287,14 @@ body.page-podborka {
 }
 
 .podborka__carousel::-webkit-scrollbar-thumb {
-  background: #333;
+  background: var(--border-strong);
   border-radius: 4px;
 }
 
 .podborka__carousel-btn {
   background: var(--pb-surface-2);
   border: 1px solid var(--pb-border);
-  color: #fff;
+  color: var(--pb-text);
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -303,7 +309,7 @@ body.page-podborka {
 
 .podborka__carousel-btn:hover {
   background: var(--pb-surface-hover);
-  border-color: #555;
+  border-color: var(--pb-border-focus);
 }
 
 .podborka__history-card {
@@ -318,7 +324,7 @@ body.page-podborka {
 }
 
 .podborka__history-card:hover {
-  border-color: #555;
+  border-color: var(--pb-border-focus);
   transform: translateY(-2px);
   background: var(--pb-surface-hover);
 }
@@ -340,7 +346,7 @@ body.page-podborka {
 .podborka__history-card-title {
   font-size: 0.78rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--pb-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -364,13 +370,13 @@ body.page-podborka {
   border: 1px solid var(--pb-border);
   border-radius: var(--pb-radius-md);
   font-size: 0.875rem;
-  color: #ccc;
+  color: var(--pb-muted);
   margin-bottom: 1rem;
   line-height: 1.5;
 }
 
 .podborka__meta strong {
-  color: #fff;
+  color: var(--pb-text);
 }
 
 .podborka__dedupe-note {
@@ -415,7 +421,7 @@ body.page-podborka {
 .podborka__block-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--pb-text);
 }
 
 .podborka__card-tag {
@@ -425,9 +431,9 @@ body.page-podborka {
   letter-spacing: 0.04em;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #aaa;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--accent-soft);
+  color: var(--pb-muted);
+  border: 1px solid var(--pb-border);
 }
 
 .podborka__block-hint {
@@ -493,11 +499,11 @@ body.page-podborka {
   cursor: pointer;
   transition: all 0.15s ease;
   font-size: 0.75rem;
-  color: #e5e5e5;
+  color: var(--pb-text);
 }
 
 .podborka__swatch:hover {
-  border-color: #666;
+  border-color: var(--pb-border-focus);
   transform: translateY(-1px);
   background: var(--pb-surface-hover);
 }
@@ -540,7 +546,7 @@ body.page-podborka {
 
 .podborka__attr-val {
   font-size: 0.85rem;
-  color: #fff;
+  color: var(--pb-text);
   font-weight: 500;
   word-break: break-word;
 }
@@ -558,7 +564,7 @@ body.page-podborka {
   border: none;
   cursor: pointer;
   padding: 2px 4px;
-  color: #888;
+  color: var(--pb-muted);
   font-size: 0.75rem;
   border-radius: 4px;
   display: inline-flex;
@@ -567,7 +573,7 @@ body.page-podborka {
 }
 
 .podborka__copy-btn:hover {
-  color: #fff;
+  color: var(--pb-text);
 }
 
 .podborka__copy-btn img {
@@ -596,7 +602,7 @@ body.page-podborka {
 .podborka__offers-head h2 {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--pb-text);
 }
 
 .podborka__offers-hint {
@@ -623,7 +629,7 @@ body.page-podborka {
 }
 
 .podborka__offer:hover {
-  border-color: #555;
+  border-color: var(--pb-border-focus);
   background: var(--pb-surface-hover);
   transform: translateY(-3px);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
@@ -699,9 +705,9 @@ body.page-podborka {
 }
 
 .podborka__offer-shop--other {
-  background: rgba(255, 255, 255, 0.06);
-  color: #aaa;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--accent-soft);
+  color: var(--pb-muted);
+  border: 1px solid var(--pb-border);
 }
 
 .podborka__offer-price {
@@ -713,7 +719,7 @@ body.page-podborka {
 .podborka__offer-title {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--pb-text);
   line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -743,15 +749,15 @@ body.page-podborka {
   font-weight: 600;
   padding: 0.45rem;
   border-radius: var(--pb-radius-sm);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e5e5e5;
+  background: var(--surface-2);
+  border: 1px solid var(--pb-border);
+  color: var(--pb-text);
   transition: all 0.15s ease;
 }
 
 .podborka__offer:hover .podborka__offer-btn {
-  background: #fff;
-  color: #000;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 /* Color Details Modal */
@@ -781,8 +787,8 @@ body.page-podborka {
   position: relative;
   width: 100%;
   max-width: 360px;
-  background: #141414;
-  border: 1px solid #2a2a2a;
+  background: var(--pb-surface);
+  border: 1px solid var(--pb-border);
   border-radius: var(--pb-radius-lg);
   padding: 1.5rem;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
@@ -795,19 +801,19 @@ body.page-podborka {
   background: transparent;
   border: none;
   font-size: 1.4rem;
-  color: #777;
+  color: var(--pb-muted);
   cursor: pointer;
   line-height: 1;
 }
 
 .podborka-modal__close:hover {
-  color: #fff;
+  color: var(--pb-text);
 }
 
 .podborka-modal__title {
   font-size: 1.15rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--pb-text);
   margin-bottom: 1rem;
 }
 
@@ -816,7 +822,7 @@ body.page-podborka {
   height: 48px;
   border-radius: var(--pb-radius-md);
   margin-bottom: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--pb-border);
 }
 
 .podborka-modal__rows {
@@ -841,6 +847,6 @@ body.page-podborka {
 
 .podborka-modal__row-val {
   font-family: monospace;
-  color: #fff;
+  color: var(--pb-text);
   font-weight: 600;
 }

@@ -4,10 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div class="home-top-bar">
+    <div data-vesha-theme-switcher></div>
     <div data-vesha-auth-widget></div>
   </div>
   <main>
@@ -15,6 +24,7 @@
     <p>Добро пожаловать.</p>
     <p class="home-nav"><a href="/experiments/">Эксперименты →</a></p>
   </main>
+  <script src="/theme.js"></script>
   <script src="/auth.js"></script>
 </body>
 </html>

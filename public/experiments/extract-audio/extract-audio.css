@@ -1,16 +1,22 @@
 :root {
-  --ea-accent: #f59e0b;
-  --ea-accent-soft: rgba(245, 158, 11, 0.12);
-  --ea-accent-border: rgba(245, 158, 11, 0.35);
-  --ea-surface: #18181b;
-  --ea-border: rgba(255, 255, 255, 0.08);
-  --ea-muted: #94a3b8;
+  --ea-accent: #d97706;
+  --ea-accent-soft: rgba(217, 119, 6, 0.12);
+  --ea-accent-border: rgba(217, 119, 6, 0.35);
+  --ea-surface: var(--surface);
+  --ea-border: var(--border);
+  --ea-muted: var(--text-muted);
+}
+
+html[data-theme="sand"] {
+  --ea-accent: #c7b36a;
+  --ea-accent-soft: rgba(199, 179, 106, 0.22);
+  --ea-accent-border: rgba(135, 112, 36, 0.4);
 }
 
 body.page-extract-audio {
   background:
-    radial-gradient(1000px 500px at 50% -10%, rgba(245, 158, 11, 0.08) 0%, transparent 60%),
-    #202328;
+    radial-gradient(1000px 500px at 50% -10%, var(--ea-accent-soft) 0%, transparent 60%),
+    var(--bg);
 }
 
 .ea-badge {
@@ -34,7 +40,7 @@ body.page-extract-audio {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 10px 30px var(--shadow);
 }
 
 .ea-field {
@@ -46,7 +52,7 @@ body.page-extract-audio {
 .ea-label {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--text);
 }
 
 .ea-hint {
@@ -55,7 +61,7 @@ body.page-extract-audio {
 }
 
 .ea-hint.is-ok {
-  color: #86efac;
+  color: var(--ok-text);
 }
 
 .ea-hint.is-bad {
@@ -71,10 +77,10 @@ body.page-extract-audio {
   flex: 1;
   min-width: 0;
   padding: 0.75rem 0.95rem;
-  background: #0f1115;
+  background: var(--input-bg);
   border: 1px solid var(--ea-border);
   border-radius: 10px;
-  color: #fff;
+  color: var(--text-heading);
   font-size: 0.95rem;
   outline: none;
 }
@@ -89,7 +95,7 @@ body.page-extract-audio {
   padding: 2rem 1.25rem;
   border: 2px dashed var(--ea-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-2);
   cursor: pointer;
   text-align: center;
 }
@@ -109,7 +115,7 @@ body.page-extract-audio {
   flex-direction: column;
   align-items: center;
   gap: 0.4rem;
-  color: #cbd5e1;
+  color: var(--text);
 }
 
 .ea-dropzone-inner svg {
@@ -118,7 +124,7 @@ body.page-extract-audio {
 
 .ea-dropzone-inner p {
   font-size: 0.95rem;
-  color: #e5e7eb;
+  color: var(--text-heading);
 }
 
 .ea-dropzone-inner u {
@@ -137,7 +143,7 @@ body.page-extract-audio {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
-  background: #111318;
+  background: var(--input-bg);
   border: 1px solid var(--ea-border);
   border-radius: 10px;
 }
@@ -149,7 +155,7 @@ body.page-extract-audio {
 }
 
 .ea-file-meta strong {
-  color: #fff;
+  color: var(--text-heading);
   font-size: 0.9rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -167,7 +173,7 @@ body.page-extract-audio {
   border-radius: 50%;
   border: 1px solid var(--ea-border);
   background: transparent;
-  color: #aaa;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
@@ -201,7 +207,7 @@ body.page-extract-audio {
   gap: 0.2rem;
   min-height: 100%;
   padding: 0.7rem 0.65rem;
-  background: #0f1115;
+  background: var(--input-bg);
   border: 1px solid var(--ea-border);
   border-radius: 10px;
   text-align: left;
@@ -209,7 +215,7 @@ body.page-extract-audio {
 }
 
 .ea-quality-card strong {
-  color: #e2e8f0;
+  color: var(--text);
   font-size: 0.84rem;
   font-weight: 600;
 }
@@ -236,7 +242,7 @@ body.page-extract-audio {
 }
 
 .ea-quality-opt input:checked + .ea-quality-card strong {
-  color: #fde68a;
+  color: var(--ea-accent);
 }
 
 .ea-label-row {
@@ -256,10 +262,10 @@ body.page-extract-audio {
   width: 100%;
   min-height: 6.5rem;
   padding: 0.85rem 0.95rem;
-  background: #0b0d10;
+  background: var(--surface-inset);
   border: 1px solid var(--ea-border);
   border-radius: 10px;
-  color: #fde68a;
+  color: var(--ea-accent);
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 0.78rem;
   line-height: 1.45;
@@ -275,10 +281,10 @@ body.page-extract-audio {
 .ea-ran-cmd {
   margin: 0.85rem 0 0;
   padding: 0.75rem 0.9rem;
-  background: #0b0d10;
+  background: var(--surface-inset);
   border: 1px solid var(--ea-border);
   border-radius: 10px;
-  color: #fde68a;
+  color: var(--ea-accent);
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 0.75rem;
   line-height: 1.45;
@@ -310,7 +316,7 @@ body.page-extract-audio {
 }
 
 .ea-progress-head strong {
-  color: #fff;
+  color: var(--text-heading);
 }
 
 .ea-progress-head span {
@@ -321,7 +327,7 @@ body.page-extract-audio {
 
 .ea-bar {
   height: 10px;
-  background: #0f1115;
+  background: var(--surface-inset);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -335,13 +341,13 @@ body.page-extract-audio {
 
 .ea-error {
   margin-top: 1rem;
-  color: #fca5a5;
+  color: var(--danger-text);
   font-size: 0.9rem;
 }
 
 .ea-result h2 {
   font-size: 1.15rem;
-  color: #fff;
+  color: var(--text-heading);
   margin: 0;
 }
 

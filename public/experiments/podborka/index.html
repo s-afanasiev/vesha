@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Подборка одежды — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="./podborka.css" />
 </head>
@@ -11,7 +19,10 @@
   <main class="podborka">
     <div class="experiments__nav">
       <a class="back-link" href="/experiments/">← Эксперименты</a>
-      <div data-vesha-auth-widget></div>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+        <div data-vesha-auth-widget></div>
+      </div>
     </div>
 
     <header class="podborka__header">
@@ -146,6 +157,7 @@
     </div>
   </div>
 
+  <script src="/theme.js"></script>
   <script src="/auth.js"></script>
   <script src="./colors.js"></script>
   <script src="./podborka.js"></script>
