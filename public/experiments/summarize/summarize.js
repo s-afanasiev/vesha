@@ -10,6 +10,9 @@
   const fileSizeEl = document.getElementById('file-size');
   const fileClearBtn = document.getElementById('file-clear');
   const urlInput = document.getElementById('url-input');
+  const videoQualityEl = document.getElementById('video-quality');
+  const downloadModeHint = document.getElementById('download-mode-hint');
+  const diskStatusEl = document.getElementById('disk-status');
   const micToggleBtn = document.getElementById('mic-toggle-btn');
   const micStatusText = document.getElementById('mic-status-text');
   const micTimer = document.getElementById('mic-timer');
@@ -83,14 +86,16 @@
   let latestSteps = [];
   let latestJobStatus = '';
   let latestJob = null;
+  const ACTIVE_JOB_STORAGE = 'vesha-summarize-active-job';
+  const DOWNLOAD_OPTIONS_STORAGE = 'vesha-summarize-download-options';
 
   // Format helpers
   function formatBytes(bytes) {
-    if (!bytes) return '0 Б';
+    if (!Number.isFinite(Number(bytes)) || Number(bytes) <= 0) return '0 Б';
     const k = 1024;
-    const sizes = ['Б', 'КБ', 'МБ', 'ГБ'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+    const i = Math.min(sizes.length - 1, Math.floor(Math.log(Number(bytes)) / Math.log(k)));
+    return parseFloat((Number(bytes) / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
   function formatTime(sec) {
@@ -232,6 +237,54 @@
   function setRadioValue(name, value) {
     const el = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
     if (el) el.checked = true;
+  }
+
+  function sourceDownloadMode() {
+    return radioValue('download-mode', 'video') === 'audio' ? 'audio' : 'video';
+  }
+
+  function selectedVideoQuality() {
+    const value = videoQualityEl ? videoQualityEl.value : '720';
+    return ['best', '1080', '720', '480', '360'].includes(value) ? value : '720';
+  }
+
+  function saveDownloadOptions() {
+    try {
+      localStorage.setItem(
+        DOWNLOAD_OPTIONS_STORAGE,
+        JSON.stringify({
+          downloadMode: sourceDownloadMode(),
+          videoQuality: selectedVideoQuality(),
+        })
+      );
+    } catch (_) {}
+  }
+
+  function loadDownloadOptions() {
+    try {
+      const raw = localStorage.getItem(DOWNLOAD_OPTIONS_STORAGE);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.downloadMode) setRadioValue('download-mode', data.downloadMode);
+        if (videoQualityEl && data.videoQuality) videoQualityEl.value = data.videoQuality;
+      }
+    } catch (_) {}
+    syncDownloadOptions();
+  }
+
+  function syncDownloadOptions() {
+    const audio = sourceDownloadMode() === 'audio';
+    if (videoQualityEl) {
+      videoQualityEl.disabled = audio;
+      const wrap = videoQualityEl.closest('.summarize-quality');
+      if (wrap) wrap.classList.toggle('is-disabled', audio);
+    }
+    if (downloadModeHint) {
+      downloadModeHint.textContent = audio
+        ? 'yt-dlp выберет bestaudio: видеопоток не скачивается. Исходная аудиодорожка останется на сервере и будет доступна после обновления страницы.'
+        : 'Для MP4 yt-dlp может скачать два потока: сначала видео, затем аудио. Общая полоса не сбрасывается, а текущий поток указан в деталях.';
+    }
+    saveDownloadOptions();
   }
 
   function loadSavedKeys() {
@@ -431,16 +484,34 @@
     });
   }
 
-  function previewUrlSteps(url, mode) {
+  function previewYtdlpSelector(downloadMode, quality) {
+    if (downloadMode === 'audio') return 'ba[ext=m4a]/ba';
+    const height = quality === 'best' ? '' : `[height<=${quality}]`;
+    return [
+      `bv[ext=mp4][vcodec^=avc1]${height}+ba[ext=m4a]`,
+      `b[ext=mp4][vcodec^=avc1]${height}`,
+      `b[ext=mp4]${height}`,
+    ].join('/');
+  }
+
+  function previewUrlSteps(url, mode, downloadMode, videoQuality) {
+    const sourceMode = downloadMode === 'audio' ? 'audio' : 'video';
+    const quality = videoQuality || '720';
+    const template = `${sourceMode}-{hash8}.%(ext)s`;
+    const selector = previewYtdlpSelector(sourceMode, quality);
+    const merge = sourceMode === 'video' ? ' --merge-output-format mp4' : '';
     return applyStopModeToSteps(
       [
         {
           n: 1,
           id: 'download',
-          title: 'Скачивание видео',
+          title: sourceMode === 'audio' ? 'Скачивание аудиодорожки' : 'Скачивание видео',
           tool: 'yt-dlp',
-          why: 'Шаг качает ролик через yt-dlp (видео+аудио). Ниже — живой этап: соединение это или уже байты файла, плюс скорость.',
-          command: `yt-dlp --js-runtimes node --cookies-from-browser firefox --force-ipv4 --ffmpeg-location ffmpeg -f bestvideo+bestaudio/best --no-playlist --newline --progress --no-mtime -o source.%(ext)s ${url}`,
+          why:
+            sourceMode === 'audio'
+              ? 'Скачиваем bestaudio: видеопоток вообще не пойдёт по сети.'
+              : 'Скачиваем браузерно-совместимые H.264 + M4A и объединяем в MP4. Если потоков два, ниже они будут показаны отдельно.',
+          command: `yt-dlp --js-runtimes node --cookies-from-browser firefox --force-ipv4 --ffmpeg-location ffmpeg -f "${selector}" --no-playlist --newline --progress --no-mtime -o "${template}"${merge} "${url}"`,
           status: 'pending',
           progress: 0,
           waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
@@ -462,15 +533,18 @@
           id: 'ffmpeg',
           title: 'Извлечение звука',
           tool: 'ffmpeg',
-          why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
-          command: 'ffmpeg -y -i source.* -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav',
+          why:
+            sourceMode === 'audio'
+              ? 'Приведём готовую аудиодорожку к WAV 16 kHz mono.'
+              : 'После MP4 вырежем аудиодорожку и приведём к WAV 16 kHz mono.',
+          command: `ffmpeg -y -i ${template} -vn -ar 16000 -ac 1 -c:a pcm_s16le -nostats -progress pipe:1 audio.wav`,
           status: 'pending',
           progress: 0,
           waitHint:
             mode === 'audio'
               ? 'После этого шага остановимся: распознавание не запустится само.'
               : 'Ещё не начался. Стартует сразу после скачивания.',
-          detail: 'Ждёт файл source.* от yt-dlp.',
+          detail: `Ждёт файл ${template} от yt-dlp.`,
         },
         {
           n: 3,
@@ -667,10 +741,20 @@
     const bits = [];
     const hasDownloadStep = (job.steps || []).some((s) => s.id === 'download');
 
-    if (step.id === 'download' && status === 'done' && job.videoUrl) {
+    if (step.id === 'download' && status === 'done' && (job.sourceUrl || job.videoUrl)) {
+      const sourceUrl = job.sourceUrl || job.videoUrl;
       bits.push(
-        `<a class="vesha-btn vesha-btn--sm vesha-btn--primary" href="${escapeHtml(withQuery(job.videoUrl, 'download=1'))}">Скачать видео</a>`
+        `<a class="vesha-btn vesha-btn--sm vesha-btn--primary" href="${escapeHtml(withQuery(sourceUrl, 'download=1'))}">${
+          job.sourceKind === 'audio' ? 'Скачать исходное аудио' : 'Скачать видео MP4'
+        }</a>`
       );
+      if (job.sourceServerPath) {
+        bits.push(
+          `<p class="run-step__path">Путь на сервере: ${escapeHtml(job.sourceServerPath)}${
+            job.sourceName ? ` · файл: ${escapeHtml(job.sourceName)}` : ''
+          }</p>`
+        );
+      }
       if (job.posterUrl) {
         bits.push(
           `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(job.posterUrl)}" download>Скриншот первого кадра</a>`
@@ -754,7 +838,8 @@
       return [
         'download',
         step.status,
-        job && job.videoUrl ? 'v' : '',
+        job && (job.sourceUrl || job.videoUrl) ? job.sourceKind || 'source' : '',
+        job && job.sourceServerPath ? job.sourceServerPath : '',
         job && job.posterUrl ? 'p' : '',
       ].join('|');
     }
@@ -996,8 +1081,18 @@
       } else {
         toolsStatusEl.textContent = 'Локальные бинарники: не установлены (работает браузерный режим)' + qText;
       }
+      if (diskStatusEl) {
+        const storage = data.storage || {};
+        diskStatusEl.textContent = Number.isFinite(storage.freeBytes)
+          ? `Диск: свободно ${formatBytes(storage.freeBytes)} из ${formatBytes(storage.totalBytes)}`
+          : 'Диск: свободное место неизвестно';
+        diskStatusEl.title = storage.root
+          ? `Каталог файлов: ${storage.root}`
+          : '';
+      }
     } catch {
       toolsStatusEl.textContent = 'Серверные инструменты: оффлайн';
+      if (diskStatusEl) diskStatusEl.textContent = 'Диск: сервер оффлайн';
     }
   }
 
@@ -1280,6 +1375,11 @@
 
   function applyJobView(job) {
     latestJob = job || null;
+    if (job && job.id) {
+      try {
+        localStorage.setItem(ACTIVE_JOB_STORAGE, job.id);
+      } catch (_) {}
+    }
     renderRunSteps(job.steps || [], job.status);
   }
 
@@ -1289,6 +1389,10 @@
       jobId: job.id,
       sourceTitle: job.title,
       audioUrl: job.audioUrl,
+      sourceUrl: job.sourceUrl,
+      sourceKind: job.sourceKind,
+      sourceName: job.sourceName,
+      sourceServerPath: job.sourceServerPath,
       transcript: job.transcript || null,
       transcriptUrl: job.transcriptUrl || null,
       bytes: job.bytes,
@@ -1629,6 +1733,7 @@
       addHistoryTag(meta, item.durationSec != null ? `Длительность ${formatClock(item.durationSec)}` : null);
       addHistoryTag(meta, item.audioBytes != null ? `Аудио ${formatBytes(item.audioBytes)}` : null);
       addHistoryTag(meta, item.sourceBytes != null ? `Исходник ${formatBytes(item.sourceBytes)}` : null);
+      addHistoryTag(meta, item.sourceName ? `Файл ${item.sourceName}` : null);
       addHistoryTag(meta, item.language ? `Язык ${item.language}` : null);
       addHistoryTag(
         meta,
@@ -1655,6 +1760,14 @@
         openBtn.addEventListener('click', () => openHistoryJob(item.id));
         actions.appendChild(openBtn);
       }
+      if (item.sourceDownloadUrl) {
+        const dlSource = document.createElement('a');
+        dlSource.className = 'vesha-btn vesha-btn--sm vesha-btn--primary';
+        dlSource.href = item.sourceDownloadUrl;
+        dlSource.textContent =
+          item.sourceKind === 'audio' ? 'Скачать исходное аудио' : 'Скачать видео';
+        actions.appendChild(dlSource);
+      }
       if (item.audioUrl) {
         const dlWav = document.createElement('a');
         dlWav.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
@@ -1670,6 +1783,12 @@
         actions.appendChild(dlMp3);
       }
       if (actions.childNodes.length) card.appendChild(actions);
+      if (item.sourceServerPath) {
+        const serverPathEl = document.createElement('p');
+        serverPathEl.className = 'run-step__path';
+        serverPathEl.textContent = 'Путь на сервере: ' + item.sourceServerPath;
+        card.appendChild(serverPathEl);
+      }
       historyList.appendChild(card);
     });
   }
@@ -1708,6 +1827,27 @@
     } catch (err) {
       showError(err.message || 'Не удалось открыть конвертацию');
       showStatus('');
+      processBtn.disabled = false;
+    }
+  }
+
+  async function restoreLastJob() {
+    let jobId = '';
+    try {
+      jobId = localStorage.getItem(ACTIVE_JOB_STORAGE) || '';
+    } catch (_) {}
+    if (!jobId) return;
+    processBtn.disabled = true;
+    try {
+      await pollJob(jobId);
+    } catch (err) {
+      if (err.status === 404) {
+        try {
+          localStorage.removeItem(ACTIVE_JOB_STORAGE);
+        } catch (_) {}
+      } else {
+        showError(err.message || 'Не удалось восстановить последнее задание');
+      }
       processBtn.disabled = false;
     }
   }
@@ -1752,9 +1892,13 @@
     })).filter((job) => job.files.length);
 
     if (filesModalHint) {
+      const storage = data.storage || {};
+      const free = Number.isFinite(storage.freeBytes)
+        ? ` Свободно на диске: ${formatBytes(storage.freeBytes)} из ${formatBytes(storage.totalBytes)}.`
+        : '';
       filesModalHint.textContent =
-        `На диске это source.* и audio.wav. Имена ниже — из задания: ролик, исходный файл или заголовок суммаризации. ` +
-        `${data.videoCount || 0} видео · ${data.audioCount || 0} аудио · ${formatBytes(data.totalBytes || 0)}.`;
+        `Файлы сохраняются под уникальными именами; ниже показан точный путь на сервере. ` +
+        `${data.videoCount || 0} видео · ${data.audioCount || 0} аудио · занято заданиями ${formatBytes(data.totalBytes || 0)}.${free}`;
     }
 
     document.querySelectorAll('[data-files-filter]').forEach((btn) => {
@@ -1825,7 +1969,9 @@
         label.textContent = fileRoleLabel(file);
         const name = document.createElement('span');
         name.className = 'files-row__name';
-        name.textContent = `${file.diskName} · ${formatBytes(file.bytes)}`;
+        name.textContent = `${file.diskName} · ${formatBytes(file.bytes)}${
+          file.serverPath ? ` · ${file.serverPath}` : ''
+        }`;
         row.appendChild(label);
         row.appendChild(name);
         if (file.kind === 'audio') {
@@ -1930,10 +2076,12 @@
     const mode = stopMode();
     const audioOnly = mode === 'audio';
     const transcriptOnly = mode === 'transcript';
+    const downloadMode = sourceDownloadMode();
+    const videoQuality = selectedVideoQuality();
     const aiOpts = collectAiOptions();
     const preview =
       activeTab === 'panel-url'
-        ? previewUrlSteps(url, mode)
+        ? previewUrlSteps(url, mode, downloadMode, videoQuality)
         : previewFileSteps(targetFile && targetFile.name, mode);
     renderRunSteps(preview, 'queued');
     if (runLog) {
@@ -1954,7 +2102,14 @@
         const res = await fetch('/api/summarize/from-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, audioOnly, transcriptOnly, ...aiOpts }),
+          body: JSON.stringify({
+            url,
+            audioOnly,
+            transcriptOnly,
+            downloadMode,
+            videoQuality,
+            ...aiOpts,
+          }),
         });
         job = await res.json();
         if (!res.ok) throw new Error(job.error || 'Ошибка постановки в очередь');
@@ -2205,6 +2360,10 @@
   document.querySelectorAll('input[name="stt-provider"], input[name="summarize-provider"]').forEach((el) => {
     el.addEventListener('change', saveKeys);
   });
+  document.querySelectorAll('input[name="download-mode"]').forEach((el) => {
+    el.addEventListener('change', syncDownloadOptions);
+  });
+  if (videoQualityEl) videoQualityEl.addEventListener('change', saveDownloadOptions);
 
   if (runSteps) {
     runSteps.addEventListener('click', (event) => {
@@ -2233,6 +2392,8 @@
   }
 
   loadSavedKeys();
+  loadDownloadOptions();
   checkTools();
   syncProcessLabel();
+  restoreLastJob();
 })();

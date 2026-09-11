@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { jobDir, readMeta, findSourceFile } = require('./extractAudio');
+const { getStorageInfo, serverPath } = require('./storageInfo');
 
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.opus']);
 
@@ -24,6 +25,7 @@ function fileInfo(filePath, extra) {
   const st = fs.statSync(filePath);
   return {
     diskName: path.basename(filePath),
+    serverPath: serverPath(filePath),
     bytes: st.size,
     mtime: st.mtime.toISOString(),
     ...extra,
@@ -34,14 +36,26 @@ function listStoredMedia() {
   const root = config.summarizeDir;
   const jobs = [];
   if (!root || !fs.existsSync(root)) {
-    return { jobs, totalBytes: 0, videoCount: 0, audioCount: 0 };
+    return {
+      jobs,
+      totalBytes: 0,
+      videoCount: 0,
+      audioCount: 0,
+      storage: getStorageInfo(root),
+    };
   }
 
   let names = [];
   try {
     names = fs.readdirSync(root);
   } catch {
-    return { jobs, totalBytes: 0, videoCount: 0, audioCount: 0 };
+    return {
+      jobs,
+      totalBytes: 0,
+      videoCount: 0,
+      audioCount: 0,
+      storage: getStorageInfo(root),
+    };
   }
 
   for (const name of names) {
@@ -71,8 +85,8 @@ function listStoredMedia() {
         fileInfo(sourcePath, {
           kind,
           role: 'source',
-          url: `/api/summarize/jobs/${id}/video`,
-          downloadUrl: `/api/summarize/jobs/${id}/video?download=1`,
+          url: `/api/summarize/jobs/${id}/source`,
+          downloadUrl: `/api/summarize/jobs/${id}/source?download=1`,
         })
       );
     }
@@ -116,7 +130,13 @@ function listStoredMedia() {
     }
   }
 
-  return { jobs, totalBytes, videoCount, audioCount };
+  return {
+    jobs,
+    totalBytes,
+    videoCount,
+    audioCount,
+    storage: getStorageInfo(root),
+  };
 }
 
 module.exports = {

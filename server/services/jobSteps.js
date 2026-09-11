@@ -1,7 +1,15 @@
+const {
+  normalizeDownloadMode,
+  normalizeVideoQuality,
+  formatSelector,
+  outputTemplate,
+  qualityLabel,
+} = require('./ytdlpOptions');
+
 function quoteArg(arg) {
   const s = String(arg);
   if (!s.length) return '""';
-  if (/[\s"]/.test(s)) return `"${s.replace(/"/g, '\\"')}"`;
+  if (/[\s"&|<>^;]/.test(s)) return `"${s.replace(/"/g, '\\"')}"`;
   return s;
 }
 
@@ -44,8 +52,13 @@ function geminiCommand(model) {
   return summarizeCommand('gemini');
 }
 
-function ytdlpShowArgs(url, cookiesBrowser = 'firefox') {
-  return [
+function ytdlpShowArgs(url, options = {}) {
+  const cookiesBrowser =
+    typeof options === 'string' ? options : options.cookiesBrowser ?? 'firefox';
+  const downloadMode = normalizeDownloadMode(options.downloadMode);
+  const videoQuality = normalizeVideoQuality(options.videoQuality);
+  const template = options.outputTemplate || outputTemplate(downloadMode, options.fileToken);
+  const args = [
     '--js-runtimes',
     'node',
     ...(cookiesBrowser ? ['--cookies-from-browser', cookiesBrowser] : []),
@@ -53,15 +66,19 @@ function ytdlpShowArgs(url, cookiesBrowser = 'firefox') {
     '--ffmpeg-location',
     'ffmpeg',
     '-f',
-    'bestvideo+bestaudio/best',
+    formatSelector(downloadMode, videoQuality),
     '--no-playlist',
     '--newline',
     '--progress',
     '--no-mtime',
     '-o',
-    'source.%(ext)s',
+    template,
     url,
   ];
+  if (downloadMode === 'video') {
+    args.splice(args.length - 1, 0, '--merge-output-format', 'mp4');
+  }
+  return args;
 }
 
 function ffmpegPreviewArgs(input) {
@@ -185,15 +202,37 @@ function summarizeStep(n, { audioOnly = false, transcriptOnly = false } = {}) {
   });
 }
 
-function buildUrlSteps(url, { audioOnly = false, transcriptOnly = false } = {}) {
+function buildUrlSteps(
+  url,
+  {
+    audioOnly = false,
+    transcriptOnly = false,
+    downloadMode = 'video',
+    videoQuality = '720',
+    fileToken,
+  } = {}
+) {
+  const sourceMode = normalizeDownloadMode(downloadMode);
+  const quality = normalizeVideoQuality(videoQuality);
+  const template = outputTemplate(sourceMode, fileToken);
+  const sourceLabel =
+    sourceMode === 'audio' ? 'аудиодорожки без видео' : `видео MP4 (${qualityLabel(quality)})`;
   const steps = [
     makeStep({
       n: 1,
       id: 'download',
-      title: 'Скачивание видео',
+      title: sourceMode === 'audio' ? 'Скачивание аудиодорожки' : 'Скачивание видео',
       tool: 'yt-dlp',
-      why: 'Шаг качает ролик через yt-dlp (видео+аудио). Ниже — живой этап: соединение это или уже байты файла, плюс скорость.',
-      command: formatCommand('yt-dlp', ytdlpShowArgs(url)),
+      why: `Шаг скачивает ${sourceLabel}. Ниже отдельно видны текущий поток, скорость, объём и последующее объединение.`,
+      command: formatCommand(
+        'yt-dlp',
+        ytdlpShowArgs(url, {
+          cookiesBrowser: 'firefox',
+          downloadMode: sourceMode,
+          videoQuality: quality,
+          outputTemplate: template,
+        })
+      ),
       waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
       detail: 'В очереди. Как только сервер освободится — запустим эту команду.',
       stats: emptyDownloadStats(),
@@ -203,12 +242,18 @@ function buildUrlSteps(url, { audioOnly = false, transcriptOnly = false } = {}) 
       id: 'ffmpeg',
       title: 'Извлечение звука',
       tool: 'ffmpeg',
-      why: 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
-      command: formatCommand('ffmpeg', ffmpegPreviewArgs('source.*')),
+      why:
+        sourceMode === 'audio'
+          ? 'Скачанную аудиодорожку приведём к WAV 16 kHz mono — так удобнее модели.'
+          : 'После скачивания вырежем аудиодорожку и приведём к WAV 16 kHz mono — так удобнее модели.',
+      command: formatCommand(
+        'ffmpeg',
+        ffmpegPreviewArgs(template.replace('%(ext)s', sourceMode === 'audio' ? 'm4a' : 'mp4'))
+      ),
       waitHint: audioOnly
         ? 'После этого шага остановимся: распознавание не запустится само.'
         : 'Ещё не начался. Стартует сразу после скачивания.',
-      detail: 'Ждёт файл source.* от yt-dlp.',
+      detail: `Ждёт файл ${template} от yt-dlp.`,
     }),
     sttStep(3, { audioOnly, transcriptOnly }),
     summarizeStep(4, { audioOnly, transcriptOnly }),

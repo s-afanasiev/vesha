@@ -46,6 +46,7 @@
         </div>
       </div>
       <div class="summarize-tools-pill" id="tools-status">Проверка инструментов…</div>
+      <div class="summarize-tools-pill" id="disk-status">Диск: проверка…</div>
       <div class="summarize-controls-actions">
         <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="files-btn">
           Файлы на сервере
@@ -117,6 +118,32 @@
         <div class="summarize-url-group">
           <input type="url" id="url-input" placeholder="https://www.youtube.com/watch?v=... или ссылка на файл" autocomplete="off" />
         </div>
+        <div class="summarize-download-options">
+          <fieldset>
+            <legend>Что скачать через yt-dlp</legend>
+            <label>
+              <input type="radio" name="download-mode" value="video" checked />
+              <span>Видео + звук (MP4)</span>
+            </label>
+            <label>
+              <input type="radio" name="download-mode" value="audio" />
+              <span>Только аудиодорожку — видеопоток не скачивать</span>
+            </label>
+          </fieldset>
+          <label class="summarize-quality">
+            <span>Качество видео</span>
+            <select id="video-quality">
+              <option value="best">Лучшее совместимое MP4</option>
+              <option value="1080">До 1080p</option>
+              <option value="720" selected>До 720p</option>
+              <option value="480">До 480p</option>
+              <option value="360">До 360p</option>
+            </select>
+          </label>
+        </div>
+        <p class="summarize-download-hint" id="download-mode-hint">
+          Для MP4 yt-dlp может скачать два потока: сначала видео, затем аудио. Общая полоса не сбрасывается, а текущий поток указан в деталях.
+        </p>
       </div>
 
       <!-- Panel: Mic Record -->
@@ -268,7 +295,7 @@
       <div class="files-modal__head">
         <h2 id="files-modal-title">Файлы на сервере</h2>
         <p class="files-modal__hint" id="files-modal-hint">
-          На диске файлы лежат как source.* и audio.wav. Ниже — человеческие имена из задания: название ролика, исходный файл или заголовок суммаризации.
+          Файлы сохраняются под уникальными именами. Здесь будут показаны размер, путь на сервере и свободное место.
         </p>
       </div>
       <div class="files-modal__filters" role="tablist">

@@ -3,8 +3,17 @@ const path = require('path');
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const { requireBins, run } = require('./mediaBins');
-const { formatCommand, patchStep, markDone, ytdlpShowArgs } = require('./jobSteps');
-const { createYtdlpTracker } = require('./ytdlpProgress');
+const { formatCommand, patchStep, markDone } = require('./jobSteps');
+const { createYtdlpTracker, formatBytes } = require('./ytdlpProgress');
+const {
+  normalizeDownloadMode,
+  normalizeVideoQuality,
+  formatSelector,
+  outputTemplate,
+  qualityLabel,
+  expectedStreamCount,
+} = require('./ytdlpOptions');
+const { serverPath } = require('./storageInfo');
 
 const PRIVATE_HOST =
   /^(localhost|127\.|10\.|0\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1|\[::1\])/i;
@@ -66,26 +75,47 @@ function isAudioSource(filePath) {
 }
 
 function findSourceFile(dir) {
+  let meta = null;
+  try {
+    meta = readMeta(path.basename(dir));
+  } catch (_) {
+    meta = null;
+  }
+  if (meta && meta.sourceFile) {
+    const exact = path.join(dir, path.basename(meta.sourceFile));
+    if (fs.existsSync(exact)) return exact;
+  }
+
   const names = fs
     .readdirSync(dir)
     .filter(
       (n) =>
-        n.startsWith('source.') &&
+        (n.startsWith('source.') ||
+          /^video-[a-z0-9]{6,8}\./i.test(n) ||
+          /^audio-[a-z0-9]{6,8}\./i.test(n) ||
+          /^upload-[a-z0-9]{6,8}\./i.test(n)) &&
         !n.endsWith('.json') &&
         !n.endsWith('.part') &&
         !n.endsWith('.ytdl') &&
-        !/^source\.f\d+/i.test(n) &&
+        !/\.f\d+\./i.test(n) &&
         n !== 'source.wav'
     );
   if (!names.length) {
     const fallback = fs
       .readdirSync(dir)
-      .filter((n) => n.startsWith('source.') && !n.endsWith('.json'));
+      .filter(
+        (n) =>
+          n.startsWith('source.') &&
+          !n.endsWith('.json') &&
+          !n.endsWith('.part') &&
+          !n.endsWith('.ytdl') &&
+          !/\.f\d+\./i.test(n)
+      );
     if (!fallback.length) return null;
     return path.join(dir, fallback[0]);
   }
-  const prefer = ['source.mkv', 'source.mp4', 'source.webm', 'source.mov'];
-  const hit = prefer.find((p) => names.includes(p));
+  const prefer = names.filter((n) => /\.(mp4|mov|webm|mkv)$/i.test(n));
+  const hit = prefer[0];
   return path.join(dir, hit || names[0]);
 }
 
@@ -124,7 +154,19 @@ async function probeDuration(file, bins) {
   }
 }
 
-function ytdlpDownloadArgs(url, bins, dir, { cookiesBrowser = 'firefox' } = {}) {
+function ytdlpDownloadArgs(
+  url,
+  bins,
+  dir,
+  {
+    cookiesBrowser = 'firefox',
+    downloadMode = 'video',
+    videoQuality = '720',
+    fileToken,
+  } = {}
+) {
+  const mode = normalizeDownloadMode(downloadMode);
+  const quality = normalizeVideoQuality(videoQuality);
   const args = [
     '--js-runtimes',
     `node:${process.execPath}`,
@@ -132,7 +174,7 @@ function ytdlpDownloadArgs(url, bins, dir, { cookiesBrowser = 'firefox' } = {}) 
     '--ffmpeg-location',
     bins.ffmpeg,
     '-f',
-    'bestvideo+bestaudio/best',
+    formatSelector(mode, quality),
     '--no-playlist',
     '--newline',
     '--progress',
@@ -150,9 +192,12 @@ function ytdlpDownloadArgs(url, bins, dir, { cookiesBrowser = 'firefox' } = {}) 
     '-P',
     dir,
     '-o',
-    'source.%(ext)s',
+    outputTemplate(mode, fileToken),
     url,
   ];
+  if (mode === 'video') {
+    args.splice(args.length - 1, 0, '--merge-output-format', 'mp4');
+  }
   if (cookiesBrowser) {
     args.splice(2, 0, '--cookies-from-browser', cookiesBrowser);
   }
@@ -218,10 +263,10 @@ async function extractAudioFromFile(id, opts = {}) {
     status: 'active',
     progress: 0,
     indeterminate: !durationSec,
-    command: formatCommand('ffmpeg', [
+    command: formatCommand(bins.ffmpeg, [
       '-y',
       '-i',
-      path.basename(sourcePath),
+      sourcePath,
       '-vn',
       '-ar',
       '16000',
@@ -232,7 +277,7 @@ async function extractAudioFromFile(id, opts = {}) {
       '-nostats',
       '-progress',
       'pipe:1',
-      'audio.wav',
+      wavPath,
     ]),
     detail: durationSec
       ? `Идёт извлечение звука (~${Math.round(durationSec)} с)…`
@@ -258,6 +303,10 @@ async function extractAudioFromFile(id, opts = {}) {
   meta.bytes = fs.statSync(wavPath).size;
   meta.title = meta.title || meta.sourceTitle || path.basename(sourcePath);
   meta.duration = durationSec;
+  meta.sourceFile = path.basename(sourcePath);
+  meta.sourceKind = isAudioSource(sourcePath) ? 'audio' : 'video';
+  meta.sourceBytes = fs.statSync(sourcePath).size;
+  meta.sourceServerPath = serverPath(sourcePath);
   meta.steps = steps;
   writeMeta(id, meta);
   if (opts.onProgress) opts.onProgress(meta);
@@ -268,6 +317,9 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
   const url = assertHttpUrl(rawUrl);
   const bins = requireBins();
   const id = opts.jobId || randomUUID();
+  const fileToken = String(opts.fileToken || id).replace(/-/g, '').slice(0, 8);
+  const downloadMode = normalizeDownloadMode(opts.downloadMode);
+  const videoQuality = normalizeVideoQuality(opts.videoQuality);
   const dir = jobDir(id);
   fs.mkdirSync(dir, { recursive: true });
 
@@ -279,6 +331,9 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
     ...prev,
     id,
     url,
+    downloadMode,
+    videoQuality,
+    fileToken,
     createdAt: prev.createdAt || new Date().toISOString(),
   };
   if (!opts.leaveStatus) meta.status = 'extracting';
@@ -289,7 +344,11 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
     indeterminate: true,
     startedAt: new Date().toISOString(),
     detail:
-      'Запускаем yt-dlp. Сейчас попытка соединиться с YouTube — файл ещё не качается, скорости нет.',
+      `Запускаем yt-dlp: ${
+        downloadMode === 'audio'
+          ? 'скачиваем только аудиодорожку, без видеопотока'
+          : `скачиваем MP4, качество ${qualityLabel(videoQuality)}`
+      }. Сейчас соединяемся с YouTube — байты файла ещё не идут.`,
     stats: {
       phase: 'starting',
       phaseLabel:
@@ -309,13 +368,22 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
   if (opts.onProgress) opts.onProgress({ ...meta });
 
   const tryDownload = async (cookiesBrowser) => {
-    const args = ytdlpDownloadArgs(url, bins, dir, { cookiesBrowser });
+    const args = ytdlpDownloadArgs(url, bins, dir, {
+      cookiesBrowser,
+      downloadMode,
+      videoQuality,
+      fileToken,
+    });
     const startedAt = Date.now();
-    const tracker = createYtdlpTracker({ cookiesBrowser, startedAt });
+    const tracker = createYtdlpTracker({
+      cookiesBrowser,
+      startedAt,
+      expectedStreams: expectedStreamCount(downloadMode),
+    });
     steps = patchStep(steps, 'download', {
       status: 'active',
       indeterminate: true,
-      command: formatCommand('yt-dlp', ytdlpShowArgs(url, cookiesBrowser)),
+      command: formatCommand(bins.ytdlp, args),
       ...tracker.snapshot(),
     });
     report({ steps, phase: 'downloading' }, true);
@@ -357,8 +425,16 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
     }
 
     const sourcePath = findSourceFile(dir);
-    if (!sourcePath) throw new Error('yt-dlp не сохранил видео');
+    if (!sourcePath) {
+      throw new Error(
+        `yt-dlp не сохранил ${downloadMode === 'audio' ? 'аудиодорожку' : 'видео'}`
+      );
+    }
     if (ytdlpTitle) meta.title = ytdlpTitle;
+    meta.sourceFile = path.basename(sourcePath);
+    meta.sourceKind = downloadMode;
+    meta.sourceBytes = fs.statSync(sourcePath).size;
+    meta.sourceServerPath = serverPath(sourcePath);
 
     const durationSec = await probeDuration(sourcePath, bins);
     if (durationSec && durationSec > config.summarizeMaxDurationSec) {
@@ -370,14 +446,22 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
     steps = markDone(
       steps,
       'download',
-      `Скачано: ${path.basename(sourcePath)}${durationSec ? ` · ${Math.round(durationSec)} с` : ''}`
+      `Скачано: ${path.basename(sourcePath)} · ${serverPath(sourcePath)}${
+        durationSec ? ` · ${Math.round(durationSec)} с` : ''
+      }`
     );
     steps = patchStep(steps, 'download', {
       stats: {
         phase: 'done',
-        phaseLabel: `Готово: ${path.basename(sourcePath)} сохранён.`,
+        phaseLabel: `Готово: ${path.basename(sourcePath)} сохранён на сервере: ${serverPath(sourcePath)}.`,
         items: [
           { key: 'file', label: 'Файл', value: path.basename(sourcePath) },
+          { key: 'path', label: 'Путь на сервере', value: serverPath(sourcePath) },
+          {
+            key: 'bytes',
+            label: 'Размер',
+            value: formatBytes(fs.statSync(sourcePath).size) || `${fs.statSync(sourcePath).size} Б`,
+          },
           {
             key: 'size',
             label: 'Длительность',
@@ -391,10 +475,10 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
       status: 'active',
       progress: 0,
       indeterminate: !durationSec,
-      command: formatCommand('ffmpeg', [
+      command: formatCommand(bins.ffmpeg, [
         '-y',
         '-i',
-        path.basename(sourcePath),
+        sourcePath,
         '-vn',
         '-ar',
         '16000',
@@ -405,7 +489,7 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
         '-nostats',
         '-progress',
         'pipe:1',
-        'audio.wav',
+        path.join(dir, 'audio.wav'),
       ]),
       detail: durationSec
         ? `Идёт извлечение звука (~${Math.round(durationSec)} с)…`
@@ -441,6 +525,10 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
     meta.audioFile = 'audio.wav';
     meta.bytes = stat.size;
     meta.duration = durationSec;
+    meta.sourceFile = path.basename(sourcePath);
+    meta.sourceKind = downloadMode;
+    meta.sourceBytes = fs.statSync(sourcePath).size;
+    meta.sourceServerPath = serverPath(sourcePath);
     meta.steps = steps;
     meta.phase = 'extracting';
     writeMeta(id, meta);
@@ -469,6 +557,10 @@ function publicJob(meta) {
   }
   const audioPath = meta.audioFile ? path.join(dir, meta.audioFile) : null;
   const audioExists = Boolean(audioPath && fs.existsSync(audioPath));
+  const sourceKind = sourcePath
+    ? meta.sourceKind || (isAudioSource(sourcePath) ? 'audio' : 'video')
+    : meta.sourceKind || null;
+  const sourceUrl = sourcePath ? `/api/summarize/jobs/${meta.id}/source` : null;
   return {
     id: meta.id,
     url: meta.url,
@@ -481,9 +573,17 @@ function publicJob(meta) {
     error: meta.error || null,
     aiError: meta.aiError || null,
     createdAt: meta.createdAt,
-    videoUrl: sourcePath ? `/api/summarize/jobs/${meta.id}/video` : null,
-    videoName: sourcePath ? path.basename(sourcePath) : null,
-    posterUrl: sourcePath && !isAudioSource(sourcePath)
+    downloadMode: meta.downloadMode || null,
+    videoQuality: meta.videoQuality || null,
+    sourceUrl,
+    sourceKind,
+    sourceName: sourcePath ? path.basename(sourcePath) : meta.sourceFile || null,
+    sourceBytes: sourcePath ? fs.statSync(sourcePath).size : meta.sourceBytes || null,
+    sourceServerPath: sourcePath ? serverPath(sourcePath) : meta.sourceServerPath || null,
+    videoUrl: sourcePath && sourceKind === 'video' ? sourceUrl : null,
+    videoName: sourcePath && sourceKind === 'video' ? path.basename(sourcePath) : null,
+    sourceAudioUrl: sourcePath && sourceKind === 'audio' ? sourceUrl : null,
+    posterUrl: sourcePath && sourceKind === 'video'
       ? `/api/summarize/jobs/${meta.id}/poster.jpg`
       : null,
     audioUrl: audioExists ? `/api/summarize/jobs/${meta.id}/audio` : null,

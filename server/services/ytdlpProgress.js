@@ -59,9 +59,9 @@ function prettySpeedToken(token) {
 
 function kindFromDestination(name) {
   const lower = String(name || '').toLowerCase();
-  if (/\.f\d+\.(mp4|webm|mkv|mov)$/i.test(lower) || /video/i.test(lower)) return 'видео';
+  if (/\.f(?:139|140|249|250|251)\./i.test(lower)) return 'аудио';
   if (/\.(m4a|mp3|opus|ogg|aac)$/i.test(lower) || /audio/i.test(lower)) return 'аудио';
-  if (/\.f1(39|40|249|250|251)\./i.test(lower)) return 'аудио';
+  if (/\.f\d+\.(mp4|webm|mkv|mov)$/i.test(lower) || /video/i.test(lower)) return 'видео';
   return 'файл';
 }
 
@@ -109,7 +109,7 @@ function translateLine(line) {
   return line;
 }
 
-function createYtdlpTracker({ cookiesBrowser, startedAt }) {
+function createYtdlpTracker({ cookiesBrowser, startedAt, expectedStreams = 1 }) {
   const state = {
     phase: 'starting',
     title: null,
@@ -119,6 +119,7 @@ function createYtdlpTracker({ cookiesBrowser, startedAt }) {
     destination: null,
     streamKind: null,
     streamIndex: 0,
+    expectedStreams: Math.max(1, Number(expectedStreams) || 1),
     percent: null,
     speed: null,
     eta: null,
@@ -286,7 +287,11 @@ function createYtdlpTracker({ cookiesBrowser, startedAt }) {
     }
     if (/Downloading 1 format/i.test(line) || /Downloading \d+ format/i.test(line)) {
       const formats = line.match(/format\(s\):\s*(.+)/i);
-      if (formats) state.format = formats[1].trim();
+      if (formats) {
+        state.format = formats[1].trim();
+        const selected = state.format.split('/')[0];
+        state.expectedStreams = Math.max(1, selected.split('+').length);
+      }
       setPhase('formats');
       pushLog(translateLine(line));
       return;
@@ -323,7 +328,11 @@ function createYtdlpTracker({ cookiesBrowser, startedAt }) {
         const pct = state.percent != null ? `${Math.round(state.percent)}%` : 'идёт';
         const spd = state.speed || 'скорость считается…';
         const kind = state.streamKind ? ` (${state.streamKind})` : '';
-        return `Скачивание идёт${kind}: ${pct} · ${spd} · прошло ${t}.`;
+        const stream =
+          state.expectedStreams > 1
+            ? ` · поток ${Math.max(1, state.streamIndex)} из ${state.expectedStreams}`
+            : '';
+        return `Скачивание идёт${kind}: ${pct}${stream} · ${spd} · прошло ${t}.`;
       }
       case 'merging':
         return `Скачивание закончено, склеиваем видео+аудио · прошло ${t}.`;
@@ -366,7 +375,11 @@ function createYtdlpTracker({ cookiesBrowser, startedAt }) {
       items.push({
         key: 'file',
         label: 'Файл',
-        value: `${state.streamKind || 'файл'}: ${state.destination}${state.streamIndex > 1 ? ` · поток ${state.streamIndex}` : ''}`,
+        value: `${state.streamKind || 'файл'}: ${state.destination}${
+          state.expectedStreams > 1
+            ? ` · поток ${Math.max(1, state.streamIndex)} из ${state.expectedStreams}`
+            : ''
+        }`,
       });
     }
     if (state.fragment && state.fragmentCount) {
@@ -387,9 +400,27 @@ function createYtdlpTracker({ cookiesBrowser, startedAt }) {
       items.push({ key: 'title', label: 'Ролик', value: state.title });
     }
 
+    const currentPercent = state.percent == null ? 0 : state.percent;
+    const streamIndex = Math.max(1, state.streamIndex || 1);
+    const overallPercent =
+      state.expectedStreams > 1
+        ? Math.min(
+            99,
+            Math.round(
+              (((streamIndex - 1) + Math.min(100, currentPercent) / 100) /
+                state.expectedStreams) *
+                100
+            )
+          )
+        : Math.round(currentPercent);
+
     return {
       status: 'active',
-      progress: downloading ? Math.max(0, Math.min(99, Math.round(state.percent))) : state.phase === 'merging' ? 99 : 0,
+      progress: downloading
+        ? Math.max(0, Math.min(99, overallPercent))
+        : state.phase === 'merging'
+          ? 99
+          : 0,
       indeterminate: !downloading,
       startedAt: new Date(startedAt).toISOString(),
       detail: phaseLabel(elapsedSec),

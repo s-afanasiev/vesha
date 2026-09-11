@@ -23,6 +23,10 @@ const {
   buildFileSteps,
 } = require('./jobSteps');
 const { touchHistory } = require('./summarizeHistory');
+const {
+  normalizeDownloadMode,
+  normalizeVideoQuality,
+} = require('./ytdlpOptions');
 
 const MAX_QUEUE = 30;
 
@@ -290,7 +294,14 @@ async function runJob(job) {
     const onProgress = (meta) => persist(job.id, meta);
 
     if (job.kind === 'url') {
-      await extractAudioFromUrl(job.url, { jobId: job.id, leaveStatus: true, onProgress });
+      await extractAudioFromUrl(job.url, {
+        jobId: job.id,
+        leaveStatus: true,
+        onProgress,
+        downloadMode: job.downloadMode,
+        videoQuality: job.videoQuality,
+        fileToken: job.fileToken,
+      });
     } else {
       await extractAudioFromFile(job.id, { onProgress });
     }
@@ -390,6 +401,9 @@ function enqueue(input) {
   const historyKind = inferHistoryKind(input.kind, input.sourceTitle);
   const audioOnly = Boolean(input.audioOnly) && !input.transcriptOnly;
   const transcriptOnly = Boolean(input.transcriptOnly) && !audioOnly;
+  const downloadMode = normalizeDownloadMode(input.downloadMode);
+  const videoQuality = normalizeVideoQuality(input.videoQuality);
+  const fileToken = String(input.fileToken || id).replace(/-/g, '').slice(0, 8);
   const job = {
     id,
     kind: input.kind,
@@ -397,6 +411,9 @@ function enqueue(input) {
     title: input.title || null,
     audioOnly,
     transcriptOnly,
+    downloadMode,
+    videoQuality,
+    fileToken,
     status: 'queued',
     phase: 'queued',
     createdAt: new Date().toISOString(),
@@ -412,6 +429,9 @@ function enqueue(input) {
     title: job.title,
     audioOnly,
     transcriptOnly,
+    downloadMode,
+    videoQuality,
+    fileToken,
     sourceTitle: input.sourceTitle || job.title,
     sourceBytes: input.sourceBytes || null,
     userId: input.userId || null,
@@ -425,7 +445,13 @@ function enqueue(input) {
     error: null,
     steps:
       job.kind === 'url'
-        ? buildUrlSteps(job.url, { audioOnly, transcriptOnly })
+        ? buildUrlSteps(job.url, {
+            audioOnly,
+            transcriptOnly,
+            downloadMode,
+            videoQuality,
+            fileToken,
+          })
         : buildFileSteps(input.sourceTitle, { audioOnly, transcriptOnly }),
   });
   waiting.push(id);

@@ -16,6 +16,7 @@ const {
 } = require('../services/summarizeQueue');
 const { ownerFromReq, listForOwner } = require('../services/summarizeHistory');
 const { listStoredMedia, jobDisplayTitle } = require('../services/summarizeFiles');
+const { getStorageInfo } = require('../services/storageInfo');
 
 const router = express.Router();
 
@@ -31,6 +32,7 @@ router.get('/tools', async (_req, res, next) => {
       ...tools,
       geminiConfigured: Boolean(config.geminiApiKey),
       queue: snapshot(),
+      storage: getStorageInfo(config.summarizeDir),
     });
   } catch (err) {
     next(err);
@@ -94,6 +96,8 @@ function aiOptions(body) {
     sttApiKey: src.sttApiKey,
     summarizeProvider: src.summarizeProvider,
     summarizeApiKey: src.summarizeApiKey,
+    downloadMode: src.downloadMode,
+    videoQuality: src.videoQuality,
   };
 }
 
@@ -143,7 +147,8 @@ router.post('/upload', upload.single('file'), (req, res, next) => {
 
     const originalName = req.file.originalname || 'upload';
     const ext = path.extname(originalName).toLowerCase() || '.dat';
-    const sourceFile = path.join(dir, `source${ext}`);
+    const fileToken = id.replace(/-/g, '').slice(0, 8);
+    const sourceFile = path.join(dir, `upload-${fileToken}${ext}`);
     fs.renameSync(req.file.path, sourceFile);
 
     const owner = ownerFromReq(req);
@@ -152,6 +157,7 @@ router.post('/upload', upload.single('file'), (req, res, next) => {
         id,
         sourceTitle: originalName,
         sourceBytes: req.file.size,
+        fileToken,
         ...aiOptions(req.body),
         userId: owner.userId,
         guestId: owner.guestId,
@@ -226,12 +232,12 @@ router.get('/jobs/:id/audio.mp3', async (req, res, next) => {
   }
 });
 
-router.get('/jobs/:id/video', (req, res) => {
+function sendSource(req, res) {
   const meta = readMeta(req.params.id);
   if (!meta) return res.status(404).json({ error: 'Задание не найдено' });
   const file = findSourceFile(jobDir(meta.id));
   if (!file || !fs.existsSync(file)) {
-    return res.status(404).json({ error: 'Видео ещё нет или уже удалено' });
+    return res.status(404).json({ error: 'Исходный файл ещё не готов или уже удалён' });
   }
   res.setHeader('Content-Type', sourceMime(file));
   if (req.query.download !== '0') {
@@ -242,7 +248,10 @@ router.get('/jobs/:id/video', (req, res) => {
     );
   }
   res.sendFile(file);
-});
+}
+
+router.get('/jobs/:id/source', sendSource);
+router.get('/jobs/:id/video', sendSource);
 
 router.get('/jobs/:id/poster.jpg', async (req, res, next) => {
   try {

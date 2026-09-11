@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../db');
 const config = require('../config');
-const { jobDir, readMeta } = require('./extractAudio');
+const { jobDir, readMeta, findSourceFile } = require('./extractAudio');
+const { serverPath } = require('./storageInfo');
 
 let tableReady = false;
 let tablePromise = null;
@@ -53,6 +54,20 @@ function publicRow(row) {
   const audioFile = row.audio_file ? path.join(dir, row.audio_file) : null;
   const hasFiles = fs.existsSync(dir);
   const audioExists = Boolean(audioFile && fs.existsSync(audioFile));
+  let sourceFile = null;
+  try {
+    sourceFile = hasFiles ? findSourceFile(dir) : null;
+  } catch (_) {
+    sourceFile = null;
+  }
+  const sourceExt = path.extname(sourceFile || '').toLowerCase();
+  const sourceKind = ['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.opus'].includes(
+    sourceExt
+  )
+    ? 'audio'
+    : sourceFile
+      ? 'video'
+      : null;
   return {
     id: row.id,
     kind: row.kind,
@@ -80,6 +95,12 @@ function publicRow(row) {
         ? new Date(row.completed_at) - new Date(row.started_at)
         : null,
     hasFiles,
+    sourceName: sourceFile ? path.basename(sourceFile) : null,
+    sourceKind,
+    sourceServerPath: sourceFile ? serverPath(sourceFile) : null,
+    sourceDownloadUrl: sourceFile
+      ? `/api/summarize/jobs/${row.id}/source?download=1`
+      : null,
     audioUrl: audioExists ? `/api/summarize/jobs/${row.id}/audio` : null,
     audioMp3Url: audioExists ? `/api/summarize/jobs/${row.id}/audio.mp3` : null,
   };

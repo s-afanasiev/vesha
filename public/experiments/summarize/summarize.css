@@ -225,6 +225,10 @@ body.page-experiments {
   margin-top: 0.75rem;
 }
 
+.summarize-file-chosen[hidden] {
+  display: none !important;
+}
+
 .summarize-file-info {
   display: flex;
   align-items: center;
@@ -287,6 +291,74 @@ body.page-experiments {
 .summarize-url-group input:focus {
   border-color: var(--sm-accent);
   box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.15);
+}
+
+.summarize-download-options {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1.4fr) minmax(12rem, 0.8fr);
+  gap: 0.75rem 1rem;
+  align-items: end;
+  margin-top: 0.9rem;
+}
+
+.summarize-download-options fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.summarize-download-options legend,
+.summarize-quality > span {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.4rem;
+  color: var(--sm-muted);
+  font-size: 0.78rem;
+}
+
+.summarize-download-options fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--sm-text);
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.summarize-download-options input {
+  accent-color: var(--sm-accent);
+}
+
+.summarize-quality select {
+  width: 100%;
+  padding: 0.58rem 0.7rem;
+  background: var(--input-bg);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-sm);
+  color: var(--sm-text);
+  font: inherit;
+}
+
+.summarize-quality.is-disabled {
+  opacity: 0.5;
+}
+
+.summarize-download-hint {
+  margin: 0.7rem 0 0;
+  color: var(--sm-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.run-step__path {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--sm-muted);
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
 }
 
 /* Mic Recording Box */
@@ -461,6 +533,10 @@ body.page-experiments {
   background: var(--sm-surface);
   border: 1px solid var(--sm-accent-border);
   border-radius: var(--sm-radius-md);
+}
+
+.summarize-queue[hidden] {
+  display: none !important;
 }
 
 .summarize-queue__spin {
@@ -841,6 +917,10 @@ body.page-experiments {
 
 @media (max-width: 720px) {
   .summarize-key-row {
+    grid-template-columns: 1fr;
+  }
+
+  .summarize-download-options {
     grid-template-columns: 1fr;
   }
 }
