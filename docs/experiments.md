@@ -22,6 +22,7 @@ Vesha — тонкий Express + статика. Главный продукт �
 - tech: список меток, например ["js", "ffmpeg"]
 - что делает пользователь: …
 - нужен ли бэкенд / БД / секреты: да/нет, какие
+- llm: да/нет. Если да — вставь блок **llm-picker** (не собирай выбор модели с нуля)
 - ограничения: не ломать другие эксперименты, vanilla JS, без новых фреймворков
 ```
 
@@ -47,6 +48,7 @@ Vesha — тонкий Express + статика. Главный продукт �
 | Страница эксперимента | `public/experiments/<id>/index.html` (+ свои `.css` / `.js`) |
 | Общие стили и кнопки | `public/style.css` |
 | Общий логин (виджет) | `public/auth.js` |
+| Блок выбора LLM | `public/llm-picker.js` + `public/llm-picker.css` |
 | Точка входа сервера | `main.js` |
 | Конфиг / env | `server/config.js`, `.env.example` |
 | Роуты API | `server/routes/*.js` |
@@ -119,6 +121,7 @@ Vesha — тонкий Express + статика. Главный продукт �
     </header>
     <!-- содержимое мини-проекта -->
   </main>
+  <script src="/theme.js"></script>
   <script src="/auth.js"></script>
   <script src="./my-experiment.js"></script>
 </body>
@@ -127,6 +130,7 @@ Vesha — тонкий Express + статика. Главный продукт �
 - Класс `page-experiments` на `body` включает тёмную сетку и выравнивание каталога.
 - Ссылка «← Эксперименты» обязательна (кроме совсем сырых песочниц вроде `roc`).
 - Виджет `[data-vesha-auth-widget]` + `/auth.js` — общий логин/гость. Не собирай вторую форму логина.
+- Если нужен выбор модели: блок **llm-picker**, см. ниже. Не копируй его в папку эксперимента.
 - Кнопки: `vesha-btn`, `vesha-btn--primary`, `vesha-btn--outline`, `vesha-btn--sm`.
 - Свои стили — отдельный файл в папке эксперимента, не раздувай глобальный `style.css`, если класс не общий.
 
@@ -138,7 +142,57 @@ Vesha — тонкий Express + статика. Главный продукт �
 
 Квоты (лимиты загрузок) уже есть для подборки. Новый эксперимент подключает их только если реально нужны.
 
-Секреты (Gemini, OpenAI, OAuth, …) живут **только на сервере**. В клиентский JS ключи не класть.
+Секреты (Gemini, OpenAI, OAuth, …) живут **только на сервере**. В клиентский JS ключи не класть. Исключение — блок **llm-picker**: пользователь может вставить свой ключ в UI; он хранится в localStorage браузера и уходит на бэкенд как override, в git не попадает.
+
+### Блок llm-picker (выбор нейросети)
+
+Готовый UI-блок. В новом чате достаточно: «вставь **llm-picker**». Не собирай радиокнопки провайдеров заново.
+
+Провайдеры:
+
+- **Gemini** и **YandexGPT** — URL и модель на сервере. В UI только поле API-ключа (пусто = ключ из `.env`).
+- **OpenAI-совместимый** — Base URL, модель, ключ, температура, max tokens.
+
+Подключение на странице эксперимента:
+
+```html
+<link rel="stylesheet" href="/llm-picker.css" />
+...
+<div data-vesha-llm-picker></div>
+...
+<script src="/llm-picker.js"></script>
+```
+
+Клиент:
+
+```js
+const llm = window.VeshaLlm.getPayload();
+// { provider, apiKey, baseUrl, model, temperature, maxTokens }
+await fetch('/api/<id>/…', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ …, llm }),
+});
+document.addEventListener('llm:change', () => { /* VeshaLlm.isReady() */ });
+```
+
+Бэкенд эксперимента вызывает общий сервис, не пишет свой HTTP-клиент:
+
+```js
+const { completeChat } = require('../services/llm');
+const result = await completeChat({
+  ...req.body.llm,
+  messages: [
+    { role: 'system', content: '…' },
+    { role: 'user', content: '…' },
+  ],
+});
+// result.text, result.provider, result.model
+```
+
+Статус ключей без секретов: `GET /api/llm/status`. Код виджета: `public/llm-picker.js`, стили `public/llm-picker.css`, сервис `server/services/llm.js`, роут `server/routes/llm.js`. Образец в UI: `public/experiments/notes-export/`.
+
+Env: `GEMINI_API_KEY`, `YANDEX_API_KEY`, `YANDEX_FOLDER_ID` (каталог облака, только сервер), `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`.
 
 ### Бэкенд, если он нужен
 
@@ -189,6 +243,7 @@ Postgres поднимается через `docker-compose.yml` (порт хос
 - [ ] Есть «← Эксперименты» (если это не голая песочница)
 - [ ] Подключён `/style.css`; свои стили локальные
 - [ ] Если нужен логин — виджет + `/auth.js`, не своя auth-система
+- [ ] Если нужен выбор LLM — блок `llm-picker` (`/llm-picker.js` + `/api/llm` + `completeChat`), не своя форма провайдеров
 - [ ] Если нужен бэкенд — `/api/<namespace>/…` подключён в `main.js`
 - [ ] Если нужна БД — новая миграция, не правка старых
 - [ ] Секреты только на сервере, `.env.example` обновлён

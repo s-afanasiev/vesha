@@ -10,6 +10,7 @@ const looksRoutes = require('./server/routes/looks');
 const summarizeRoutes = require('./server/routes/summarize');
 const extractAudioRoutes = require('./server/routes/extractAudio');
 const notesExportRoutes = require('./server/routes/notesExport');
+const llmRoutes = require('./server/routes/llm');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/api', identityMiddleware);
 app.use('/api/summarize', summarizeRoutes);
 app.use('/api/extract-audio', extractAudioRoutes);
 app.use('/api/notes-export', notesExportRoutes);
+app.use('/api/llm', llmRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);
 

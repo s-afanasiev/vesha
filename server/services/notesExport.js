@@ -4,6 +4,7 @@ const { execFileSync } = require('child_process');
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const { run, resolveBin } = require('./mediaBins');
+const { completeChat, publicStatus } = require('./llm');
 
 const STRUCTURE_PROMPT = `Ты — синтаксический анализатор курсов. Возьми предоставленный текст и преобразуй его в структурированный Markdown.
 Твоя задача — ТОЛЬКО проставить заголовки нужного уровня:
@@ -123,12 +124,16 @@ async function probePandoc() {
 }
 
 function llmStatus() {
-  const configured = Boolean(config.openaiApiKey) || config.notesExportMock;
+  const providers = publicStatus();
+  const configured =
+    providers.gemini.configured ||
+    providers.yandex.configured ||
+    providers.openai.configured ||
+    config.notesExportMock;
   return {
+    ...providers,
     configured,
     mock: Boolean(config.notesExportMock),
-    baseUrl: config.openaiBaseUrl,
-    model: config.openaiModel,
   };
 }
 
@@ -168,20 +173,6 @@ function unwrapMarkdown(text) {
   return value.trim();
 }
 
-function messageContent(content) {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part;
-        if (part && typeof part.text === 'string') return part.text;
-        return '';
-      })
-      .join('');
-  }
-  return '';
-}
-
 function mockMarkdown(text, mode) {
   if (mode === 'summarize') {
     return [
@@ -205,67 +196,32 @@ function mockMarkdown(text, mode) {
   return ['# Модуль 1: Курс', '', '## Урок 1: Материал', '', text.trim()].join('\n');
 }
 
-async function processWithLlm({ text, mode }) {
+async function processWithLlm({ text, mode, llm }) {
   const source = limitText(text, 'текст');
   const kind = mode === 'summarize' ? 'summarize' : 'structure';
-  if (config.notesExportMock && !config.openaiApiKey) {
+  if (config.notesExportMock) {
     return {
       markdown: mockMarkdown(source, kind),
       provider: 'mock',
       model: 'mock',
     };
   }
-  if (!config.openaiApiKey) {
-    throw bad(
-      'OPENAI_API_KEY не задан. Добавьте ключ OpenAI-совместимого API в .env (OPENAI_API_KEY, OPENAI_BASE_URL).',
-      500
-    );
-  }
 
   const system = kind === 'summarize' ? SUMMARIZE_PROMPT : STRUCTURE_PROMPT;
-  const url = `${config.openaiBaseUrl}/chat/completions`;
-  let res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: config.openaiModel,
-        temperature: kind === 'summarize' ? 0.3 : 0,
-        max_tokens: config.notesExportMaxTokens,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: `Исходный текст:\n\n${source}` },
-        ],
-      }),
-      signal: AbortSignal.timeout(config.notesExportLlmTimeoutMs),
-    });
-  } catch (err) {
-    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-      throw bad('Таймаут запроса к LLM', 504);
-    }
-    throw bad(`Не удалось обратиться к LLM (${config.openaiBaseUrl}): ${err.message}`, 502);
-  }
-
-  const raw = await res.text();
-  let data = {};
-  try {
-    data = raw ? JSON.parse(raw) : {};
-  } catch {
-    throw bad(`LLM вернул не JSON (HTTP ${res.status}): ${raw.slice(0, 180)}`, 502);
-  }
-  if (!res.ok) {
-    throw bad(data.error?.message || `LLM HTTP ${res.status}`, 502);
-  }
-  const markdown = unwrapMarkdown(messageContent(data.choices?.[0]?.message?.content));
+  const result = await completeChat({
+    ...(llm || {}),
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: `Исходный текст:\n\n${source}` },
+    ],
+    timeoutMs: config.notesExportLlmTimeoutMs,
+  });
+  const markdown = unwrapMarkdown(result.text);
   if (!markdown) throw bad('Модель вернула пустой Markdown', 502);
   return {
     markdown,
-    provider: 'openai',
-    model: data.model || config.openaiModel,
+    provider: result.provider,
+    model: result.model,
   };
 }
 

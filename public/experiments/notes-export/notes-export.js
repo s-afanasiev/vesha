@@ -121,6 +121,19 @@
     return text.slice(0, 180) || 'Ошибка запроса';
   }
 
+  function syncLlmPill() {
+    if (!window.VeshaLlm) {
+      setPill(llmStatus, 'LLM: загрузка…');
+      return;
+    }
+    setPill(
+      llmStatus,
+      window.VeshaLlm.statusLabel(),
+      window.VeshaLlm.isReady() ? 'ok' : 'bad'
+    );
+    tools.llmOk = window.VeshaLlm.isReady();
+  }
+
   async function loadStatus() {
     try {
       const res = await fetch('/api/notes-export/status');
@@ -128,27 +141,20 @@
       if (!res.ok) throw new Error(data.error || 'status');
 
       tools.pandocOk = Boolean(data.pandoc && data.pandoc.ok);
-      tools.llmOk = Boolean(data.llm && data.llm.configured);
 
       if (tools.pandocOk) {
         setPill(pandocStatus, data.pandoc.version || 'Pandoc готов', 'ok');
       } else {
         setPill(pandocStatus, data.pandoc && data.pandoc.error ? data.pandoc.error : 'Pandoc не найден', 'bad');
       }
-
-      if (data.llm && data.llm.mock) {
-        setPill(llmStatus, 'LLM: mock-режим', 'ok');
-      } else if (tools.llmOk) {
-        setPill(llmStatus, 'LLM: ' + (data.llm.model || 'готов'), 'ok');
-      } else {
-        setPill(llmStatus, 'LLM: задайте OPENAI_API_KEY и OPENAI_BASE_URL', 'bad');
-      }
     } catch (err) {
       tools.pandocOk = false;
-      tools.llmOk = false;
       setPill(pandocStatus, 'Не удалось проверить инструменты', 'bad');
-      setPill(llmStatus, err.message || 'Статус недоступен', 'bad');
     }
+    if (window.VeshaLlm && typeof window.VeshaLlm.refreshStatus === 'function') {
+      await window.VeshaLlm.refreshStatus();
+    }
+    syncLlmPill();
     updatePanels();
   }
 
@@ -169,6 +175,7 @@
         body: JSON.stringify({
           text,
           mode: summarizeToggle.checked ? 'summarize' : 'structure',
+          llm: window.VeshaLlm ? window.VeshaLlm.getPayload() : { provider: 'gemini' },
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -309,6 +316,7 @@
   htmlBtn.addEventListener('click', convertHtml);
   htmlExportBtn.addEventListener('click', () => exportFormat('html'));
   epubExportBtn.addEventListener('click', () => exportFormat('epub'));
+  document.addEventListener('llm:change', syncLlmPill);
 
   window.addEventListener('beforeunload', revokeUrls);
 

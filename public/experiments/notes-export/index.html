@@ -13,6 +13,7 @@
     }
   </script>
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/llm-picker.css" />
   <link rel="stylesheet" href="./notes-export.css" />
 </head>
 <body class="page-experiments page-notes-export">
@@ -86,6 +87,8 @@
         <span class="ne-card-tag" id="llm-tag">Raw Text</span>
       </div>
       <p class="ne-hint" id="llm-gate-hint">Доступно, когда выбран Raw Text.</p>
+
+      <div data-vesha-llm-picker></div>
 
       <label class="ne-switch" id="summarize-label">
         <input type="checkbox" id="summarize-toggle" />
@@ -172,6 +175,7 @@
 
   <script src="/theme.js"></script>
   <script src="/auth.js"></script>
+  <script src="/llm-picker.js"></script>
   <script src="./notes-export.js"></script>
 </body>
 </html>

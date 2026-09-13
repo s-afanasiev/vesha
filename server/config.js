@@ -38,6 +38,14 @@ const config = {
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   geminiApiBase: (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com').replace(/\/$/, ''),
   geminiHttpsProxy: process.env.GEMINI_HTTPS_PROXY || process.env.HTTPS_PROXY || '',
+  geminiModel: envStr('GEMINI_MODEL') || 'gemini-2.5-flash',
+  yandexApiKey: envStr('YANDEX_API_KEY') || envStr('YANDEX_GPT_API_KEY'),
+  yandexFolderId: envStr('YANDEX_FOLDER_ID'),
+  yandexModel: envStr('YANDEX_GPT_MODEL') || 'yandexgpt-lite/latest',
+  yandexBaseUrl: (envStr('YANDEX_GPT_BASE_URL') || 'https://llm.api.cloud.yandex.net').replace(
+    /\/$/,
+    ''
+  ),
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiBaseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',

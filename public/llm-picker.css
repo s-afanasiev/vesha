@@ -1,0 +1,180 @@
+.llm-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.llm-picker__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.llm-picker__head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--text-heading);
+}
+
+.llm-picker__status {
+  flex-shrink: 0;
+  max-width: 55%;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.llm-picker__status.is-ok {
+  color: var(--ok-text);
+}
+
+.llm-picker__status.is-bad {
+  color: var(--danger-text);
+}
+
+.llm-picker__providers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.llm-picker__opt {
+  position: relative;
+  display: block;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.llm-picker__opt input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.llm-picker__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-height: 100%;
+  padding: 0.7rem 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.llm-picker__card strong {
+  font-size: 0.86rem;
+  color: var(--text);
+}
+
+.llm-picker__card small {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.llm-picker__opt:hover .llm-picker__card {
+  border-color: var(--border-strong);
+}
+
+.llm-picker__opt input:focus-visible + .llm-picker__card {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.llm-picker__opt input:checked + .llm-picker__card {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.llm-picker__opt input:checked + .llm-picker__card strong {
+  color: var(--text-heading);
+}
+
+.llm-picker__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.llm-picker__fields {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.llm-picker__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.llm-picker__field span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.llm-picker__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.llm-picker input[type="text"],
+.llm-picker input[type="password"],
+.llm-picker input[type="number"] {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.llm-picker input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.llm-picker input[type="range"] {
+  width: 100%;
+}
+
+.llm-picker__temp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.llm-picker__temp output {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .llm-picker__providers,
+  .llm-picker__row,
+  .llm-picker__head {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .llm-picker__status {
+    max-width: none;
+    text-align: left;
+  }
+}

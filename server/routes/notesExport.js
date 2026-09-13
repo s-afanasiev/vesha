@@ -35,6 +35,7 @@ router.post('/llm', async (req, res, next) => {
     const result = await processWithLlm({
       text: req.body && req.body.text,
       mode: req.body && req.body.mode,
+      llm: req.body && req.body.llm,
     });
     res.json(result);
   } catch (err) {
