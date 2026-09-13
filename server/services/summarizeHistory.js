@@ -61,7 +61,7 @@ function publicRow(row) {
     sourceFile = null;
   }
   const sourceExt = path.extname(sourceFile || '').toLowerCase();
-  const sourceKind = ['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.opus'].includes(
+  const sourceKind = ['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.opus', '.wma'].includes(
     sourceExt
   )
     ? 'audio'

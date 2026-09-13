@@ -4,6 +4,7 @@ const {
   formatSelector,
   outputTemplate,
   qualityLabel,
+  downloadStrategyPlan,
 } = require('./ytdlpOptions');
 
 function quoteArg(arg) {
@@ -114,7 +115,7 @@ function emptyDownloadStats() {
   };
 }
 
-function makeStep({ n, id, title, tool, why, command, waitHint, detail, stats }) {
+function makeStep({ n, id, title, tool, why, command, waitHint, detail, stats, attempts }) {
   return {
     n,
     id,
@@ -125,6 +126,7 @@ function makeStep({ n, id, title, tool, why, command, waitHint, detail, stats })
     waitHint,
     detail,
     stats: stats || null,
+    attempts: attempts || null,
     status: 'pending',
     progress: 0,
     indeterminate: false,
@@ -217,6 +219,11 @@ function buildUrlSteps(
   const template = outputTemplate(sourceMode, fileToken);
   const sourceLabel =
     sourceMode === 'audio' ? 'аудиодорожки без видео' : `видео MP4 (${qualityLabel(quality)})`;
+  const attempts = downloadStrategyPlan({
+    url,
+    downloadMode: sourceMode,
+    videoQuality: quality,
+  });
   const steps = [
     makeStep({
       n: 1,
@@ -226,8 +233,8 @@ function buildUrlSteps(
       why: `Шаг скачивает ${sourceLabel}. Ниже отдельно видны текущий поток, скорость, объём и последующее объединение.`,
       command: formatCommand(
         'yt-dlp',
-        ytdlpShowArgs(url, {
-          cookiesBrowser: 'firefox',
+        ytdlpShowArgs('URL_страницы_с_видео', {
+          cookiesBrowser: null,
           downloadMode: sourceMode,
           videoQuality: quality,
           outputTemplate: template,
@@ -236,6 +243,7 @@ function buildUrlSteps(
       waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
       detail: 'В очереди. Как только сервер освободится — запустим эту команду.',
       stats: emptyDownloadStats(),
+      attempts,
     }),
     makeStep({
       n: 2,

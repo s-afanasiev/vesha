@@ -12,6 +12,8 @@ const {
   outputTemplate,
   qualityLabel,
   expectedStreamCount,
+  genericFormat,
+  downloadStrategyPlan,
 } = require('./ytdlpOptions');
 const { serverPath } = require('./storageInfo');
 
@@ -68,6 +70,7 @@ const AUDIO_SOURCE_EXT = new Set([
   '.aac',
   '.flac',
   '.opus',
+  '.wma',
 ]);
 
 function isAudioSource(filePath) {
@@ -159,7 +162,7 @@ function ytdlpDownloadArgs(
   bins,
   dir,
   {
-    cookiesBrowser = 'firefox',
+    cookiesBrowser = null,
     downloadMode = 'video',
     videoQuality = '720',
     fileToken,
@@ -202,6 +205,95 @@ function ytdlpDownloadArgs(
     args.splice(2, 0, '--cookies-from-browser', cookiesBrowser);
   }
   return args;
+}
+
+const DOWNLOADED_MEDIA_EXT = new Set([
+  '.mp4',
+  '.mkv',
+  '.webm',
+  '.mov',
+  '.avi',
+  '.m4v',
+  '.mpeg',
+  '.mpg',
+  '.3gp',
+  '.wmv',
+  '.asf',
+  '.vob',
+  '.m2ts',
+  '.m4a',
+  '.mp3',
+  '.ogg',
+  '.opus',
+  '.aac',
+  '.flac',
+  '.wav',
+  '.wma',
+  '.ts',
+]);
+
+function findAttemptMedia(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const files = fs
+    .readdirSync(dir)
+    .map((name) => path.join(dir, name))
+    .filter((file) => {
+      const name = path.basename(file);
+      if (/(\.part|\.ytdl|\.temp)$/i.test(name) || /\.f\d+\./i.test(name)) return false;
+      try {
+        return fs.statSync(file).isFile() && DOWNLOADED_MEDIA_EXT.has(path.extname(name).toLowerCase());
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => fs.statSync(b).size - fs.statSync(a).size);
+  return files[0] || null;
+}
+
+function finalizeAttemptMedia(attemptDir, dir, downloadMode, fileToken) {
+  const source = findAttemptMedia(attemptDir);
+  if (!source) throw new Error('yt-dlp завершился, но итоговый медиафайл не найден');
+  const ext = path.extname(source).toLowerCase();
+  const finalName = outputTemplate(downloadMode, fileToken).replace('%(ext)s', ext.slice(1));
+  const finalPath = path.join(dir, finalName);
+  if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+  fs.renameSync(source, finalPath);
+  try {
+    fs.rmSync(attemptDir, { recursive: true, force: true });
+  } catch (_) {
+    // The final file is already safe in the job directory; stale temp cleanup is non-fatal.
+  }
+  return finalPath;
+}
+
+function fallbackArgs(strategyId, url, downloadMode) {
+  const format = genericFormat(downloadMode);
+  if (strategyId === 'youtube-cookies') {
+    return [
+      '--js-runtimes',
+      `node:${process.execPath}`,
+      '--cookies-from-browser',
+      'firefox',
+      '-f',
+      format,
+      url,
+    ];
+  }
+  return [url, '-f', format];
+}
+
+function mediaPathEnv(bins) {
+  const currentPath = process.env.PATH || process.env.Path || '';
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === 'path') delete env[key];
+  }
+  env.PATH = [path.dirname(bins.ffmpeg), currentPath].filter(Boolean).join(path.delimiter);
+  return env;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function runFfmpegExtract(bins, sourcePath, wavPath, dir, { durationSec, onTick }) {
@@ -327,6 +419,12 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
   const report = createReporter(id, opts.onProgress);
   let steps = prev.steps || [];
   let ytdlpTitle = null;
+  let attempts = downloadStrategyPlan({ url, downloadMode, videoQuality }).map((attempt) => ({
+    ...attempt,
+    status: 'pending',
+    error: null,
+  }));
+  const sourceHost = new URL(url).hostname;
   const meta = {
     ...prev,
     id,
@@ -348,11 +446,12 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
         downloadMode === 'audio'
           ? 'скачиваем только аудиодорожку, без видеопотока'
           : `скачиваем MP4, качество ${qualityLabel(videoQuality)}`
-      }. Сейчас соединяемся с YouTube — байты файла ещё не идут.`,
+      }. Для ${sourceHost} запланировано ${attempts.length} способа скачивания.`,
+    attempts,
     stats: {
       phase: 'starting',
       phaseLabel:
-        'yt-dlp запускается. Пытаемся прочитать cookies Firefox и открыть соединение с YouTube.',
+        `yt-dlp запускается. Попытка 1 из ${attempts.length}: ${attempts[0].title}.`,
       items: [
         { key: 'speed', label: 'Скорость', value: 'нет: файл ещё не качается' },
         { key: 'size', label: 'Скачано', value: '0 — до файла не дошли' },
@@ -367,23 +466,36 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
   writeMeta(id, meta);
   if (opts.onProgress) opts.onProgress({ ...meta });
 
-  const tryDownload = async (cookiesBrowser) => {
-    const args = ytdlpDownloadArgs(url, bins, dir, {
-      cookiesBrowser,
-      downloadMode,
-      videoQuality,
-      fileToken,
-    });
+  const tryDownload = async (strategy, attemptDir, attemptNumber) => {
+    const args =
+      strategy.id === 'configured'
+        ? ytdlpDownloadArgs(url, bins, attemptDir, {
+            cookiesBrowser: null,
+            downloadMode,
+            videoQuality,
+            fileToken,
+          })
+        : fallbackArgs(strategy.id, url, downloadMode);
     const startedAt = Date.now();
     const tracker = createYtdlpTracker({
-      cookiesBrowser,
+      cookiesBrowser: strategy.id === 'youtube-cookies' ? 'firefox' : null,
       startedAt,
       expectedStreams: expectedStreamCount(downloadMode),
+      sourceHost,
     });
+    attempts = attempts.map((attempt, index) => ({
+      ...attempt,
+      status: index === attemptNumber ? 'active' : attempt.status,
+      error: index === attemptNumber ? null : attempt.error,
+    }));
     steps = patchStep(steps, 'download', {
       status: 'active',
       indeterminate: true,
-      command: formatCommand(bins.ytdlp, args),
+      command: formatCommand(
+        bins.ytdlp,
+        args.map((arg) => (arg === url ? 'URL_страницы_с_видео' : arg))
+      ),
+      attempts,
       ...tracker.snapshot(),
     });
     report({ steps, phase: 'downloading' }, true);
@@ -397,7 +509,8 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
     try {
       await run(bins.ytdlp, args, {
         timeoutMs: config.summarizeTimeoutMs,
-        cwd: dir,
+        cwd: attemptDir,
+        env: mediaPathEnv(bins),
         onOutput: (text) => {
           tracker.ingest(text);
           ytdlpTitle = tracker.title() || ytdlpTitle;
@@ -408,26 +521,92 @@ async function extractAudioFromUrl(rawUrl, opts = {}) {
       clearInterval(timer);
       flush(true);
     }
+    return finalizeAttemptMedia(attemptDir, dir, downloadMode, fileToken);
   };
 
   try {
-    try {
-      await tryDownload('firefox');
-    } catch (err) {
-      const msg = String(err.message || '');
-      const cookieFail = /cookie|firefox|Could not copy|profile/i.test(msg);
-      if (!cookieFail && !/403|forbidden/i.test(msg)) throw err;
-      steps = patchStep(steps, 'download', {
-        detail: `Firefox cookies не сработали (${msg.slice(0, 180)}). Повторяем без cookies…`,
-      });
-      report({ steps, phase: 'downloading' }, true);
-      await tryDownload(null);
+    let sourcePath = null;
+    let lastDownloadError = null;
+    let lastDownloadMessage = null;
+    for (let index = 0; index < attempts.length; index += 1) {
+      const strategy = attempts[index];
+      const attemptDir = path.join(dir, `.download-attempt-${index + 1}`);
+      fs.rmSync(attemptDir, { recursive: true, force: true });
+      fs.mkdirSync(attemptDir, { recursive: true });
+      try {
+        sourcePath = await tryDownload(strategy, attemptDir, index);
+        attempts = attempts.map((attempt, attemptIndex) => ({
+          ...attempt,
+          status:
+            attemptIndex === index
+              ? 'done'
+              : attemptIndex > index
+                ? 'skipped'
+                : attempt.status,
+        }));
+        steps = patchStep(steps, 'download', { attempts });
+        report({ steps, phase: 'downloading' }, true);
+        break;
+      } catch (err) {
+        lastDownloadError = err;
+        const message = String(err.message || 'Неизвестная ошибка')
+          .split(url)
+          .join('URL_страницы_с_видео')
+          .slice(0, 600);
+        lastDownloadMessage = message;
+        attempts = attempts.map((attempt, attemptIndex) =>
+          attemptIndex === index
+            ? { ...attempt, status: 'failed', error: message }
+            : attempt
+        );
+        fs.rmSync(attemptDir, { recursive: true, force: true });
+
+        const nextAttempt = attempts[index + 1];
+        if (!nextAttempt) break;
+        for (let seconds = 5; seconds >= 1; seconds -= 1) {
+          const phaseLabel =
+            `Попытка ${index + 1} не сработала. Через ${seconds} сек. запустим ` +
+            `попытку ${index + 2}: ${nextAttempt.title}.`;
+          steps = patchStep(steps, 'download', {
+            status: 'active',
+            progress: 0,
+            indeterminate: true,
+            attempts,
+            detail: phaseLabel,
+            stats: {
+              phase: 'retry_wait',
+              phaseLabel,
+              items: [
+                {
+                  key: 'failed',
+                  label: 'Не сработало',
+                  value: attempts[index].title,
+                },
+                {
+                  key: 'next',
+                  label: 'Следующий способ',
+                  value: nextAttempt.title,
+                },
+                {
+                  key: 'retry',
+                  label: 'Повтор через',
+                  value: `${seconds} сек.`,
+                },
+              ],
+              log: [`Ошибка: ${message}`],
+            },
+          });
+          report({ steps, phase: 'retry_wait' }, true);
+          await sleep(1000);
+        }
+      }
     }
 
-    const sourcePath = findSourceFile(dir);
     if (!sourcePath) {
+      const methods = attempts.map((attempt) => attempt.title).join(', ');
       throw new Error(
-        `yt-dlp не сохранил ${downloadMode === 'audio' ? 'аудиодорожку' : 'видео'}`
+        `Не удалось скачать после ${attempts.length} попыток (${methods}). ` +
+          `${lastDownloadMessage || lastDownloadError?.name || 'Все способы завершились ошибкой'}`
       );
     }
     if (ytdlpTitle) meta.title = ytdlpTitle;

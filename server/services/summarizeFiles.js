@@ -4,7 +4,7 @@ const config = require('../config');
 const { jobDir, readMeta, findSourceFile } = require('./extractAudio');
 const { getStorageInfo, serverPath } = require('./storageInfo');
 
-const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.opus']);
+const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.opus', '.wma']);
 
 function jobDisplayTitle(meta) {
   if (!meta) return null;

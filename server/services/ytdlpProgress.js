@@ -109,7 +109,12 @@ function translateLine(line) {
   return line;
 }
 
-function createYtdlpTracker({ cookiesBrowser, startedAt, expectedStreams = 1 }) {
+function createYtdlpTracker({
+  cookiesBrowser,
+  startedAt,
+  expectedStreams = 1,
+  sourceHost = 'источником',
+}) {
   const state = {
     phase: 'starting',
     title: null,
@@ -319,7 +324,7 @@ function createYtdlpTracker({ cookiesBrowser, startedAt, expectedStreams = 1 }) 
       case 'cookies':
         return `Читаем cookies ${state.cookies || 'браузера'} · прошло ${t}. Файл ещё не качается.`;
       case 'resolving':
-        return `Соединяемся с YouTube и разбираем ролик · прошло ${t}. Скорости ещё нет — это запросы API, не скачивание.`;
+        return `Соединяемся с ${sourceHost} и разбираем ссылку · прошло ${t}. Скорости ещё нет — это запросы API, не скачивание.`;
       case 'formats':
         return `Форматы выбраны${state.format ? ` (${state.format})` : ''}. Открываем соединение на файл · прошло ${t}.`;
       case 'connecting':
@@ -337,7 +342,9 @@ function createYtdlpTracker({ cookiesBrowser, startedAt, expectedStreams = 1 }) 
       case 'merging':
         return `Скачивание закончено, склеиваем видео+аудио · прошло ${t}.`;
       default:
-        return `yt-dlp запущен, пытаемся соединиться с YouTube${state.cookies ? ` (cookies ${state.cookies})` : ''} · прошло ${t}. Скорости нет, пока не пойдут байты файла.`;
+        return `yt-dlp запущен, пытаемся соединиться с ${sourceHost}${
+          state.cookies ? ` (cookies ${state.cookies})` : ''
+        } · прошло ${t}. Скорости нет, пока не пойдут байты файла.`;
     }
   }
 

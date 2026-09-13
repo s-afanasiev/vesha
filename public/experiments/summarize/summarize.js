@@ -494,12 +494,66 @@
     ].join('/');
   }
 
+  function isYoutubePreviewUrl(rawUrl) {
+    try {
+      const host = new URL(rawUrl).hostname.toLowerCase();
+      return (
+        host === 'youtu.be' ||
+        host.endsWith('.youtu.be') ||
+        host === 'youtube.com' ||
+        host.endsWith('.youtube.com') ||
+        host === 'youtube-nocookie.com' ||
+        host.endsWith('.youtube-nocookie.com')
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function previewDownloadAttempts(url, downloadMode, quality) {
+    const generic = downloadMode === 'audio' ? 'bestaudio' : 'bestvideo+bestaudio/best';
+    const selector = previewYtdlpSelector(downloadMode, quality);
+    const merge = downloadMode === 'video' ? ' --merge-output-format mp4' : '';
+    const attempts = [
+      {
+        id: 'configured',
+        title: 'Основной способ',
+        description: 'Выбранное качество, совместимый формат и служебные параметры.',
+        command:
+          `yt-dlp --js-runtimes node --force-ipv4 --ffmpeg-location ffmpeg ` +
+          `-f "${selector}"${merge} "URL_страницы_с_видео"`,
+        status: 'pending',
+      },
+    ];
+    attempts.push(
+      isYoutubePreviewUrl(url)
+        ? {
+            id: 'youtube-cookies',
+            title: 'YouTube через Firefox cookies',
+            description: 'Если YouTube отклонит обычный запрос, повторим с cookies браузера.',
+            command:
+              `yt-dlp --js-runtimes node --cookies-from-browser firefox ` +
+              `-f "${generic}" "URL_страницы_с_видео"`,
+            status: 'pending',
+          }
+        : {
+            id: 'minimal',
+            title: 'Максимально простой способ',
+            description: 'Без дополнительных параметров: только URL и формат.',
+            command: `yt-dlp "URL_страницы_с_видео" -f "${generic}"`,
+            status: 'pending',
+          }
+    );
+    return attempts;
+  }
+
   function previewUrlSteps(url, mode, downloadMode, videoQuality) {
     const sourceMode = downloadMode === 'audio' ? 'audio' : 'video';
     const quality = videoQuality || '720';
     const template = `${sourceMode}-{hash8}.%(ext)s`;
     const selector = previewYtdlpSelector(sourceMode, quality);
     const merge = sourceMode === 'video' ? ' --merge-output-format mp4' : '';
+    const attempts = previewDownloadAttempts(url, sourceMode, quality);
     return applyStopModeToSteps(
       [
         {
@@ -511,7 +565,7 @@
             sourceMode === 'audio'
               ? 'Скачиваем bestaudio: видеопоток вообще не пойдёт по сети.'
               : 'Скачиваем браузерно-совместимые H.264 + M4A и объединяем в MP4. Если потоков два, ниже они будут показаны отдельно.',
-          command: `yt-dlp --js-runtimes node --cookies-from-browser firefox --force-ipv4 --ffmpeg-location ffmpeg -f "${selector}" --no-playlist --newline --progress --no-mtime -o "${template}"${merge} "${url}"`,
+          command: `yt-dlp --js-runtimes node --force-ipv4 --ffmpeg-location ffmpeg -f "${selector}" --no-playlist --newline --progress --no-mtime -o "${template}"${merge} "URL_страницы_с_видео"`,
           status: 'pending',
           progress: 0,
           waitHint: 'Ещё не начался. Запустится первым, как только дойдёт очередь.',
@@ -527,6 +581,7 @@
             ],
             log: [],
           },
+          attempts,
         },
         {
           n: 2,
@@ -703,6 +758,7 @@
       why: step.why || '',
       command: step.command || '',
       stats: step.stats || null,
+      attempts: step.attempts || null,
       startedAt: step.startedAt || null,
     };
   }
@@ -727,6 +783,46 @@
     return `<ol class="run-step__log">${lines
       .map((l) => `<li>${escapeHtml(l)}</li>`)
       .join('')}</ol>`;
+  }
+
+  function attemptStatusLabel(status) {
+    if (status === 'active') return 'пробуем сейчас';
+    if (status === 'done') return 'сработало';
+    if (status === 'failed') return 'не сработало';
+    if (status === 'skipped') return 'не понадобилось';
+    return 'будем пробовать';
+  }
+
+  function attemptsHtml(attempts) {
+    if (!attempts || !attempts.length) return '';
+    return `
+      <div class="run-step__attempts-title">План способов скачивания</div>
+      <div class="run-step__attempts-list">
+        ${attempts
+          .map(
+            (attempt, index) => `
+              <div class="run-attempt is-${escapeHtml(attempt.status || 'pending')}">
+                <div class="run-attempt__head">
+                  <strong>Попытка ${index + 1}: ${escapeHtml(attempt.title || '')}</strong>
+                  <span>${escapeHtml(attemptStatusLabel(attempt.status))}</span>
+                </div>
+                ${
+                  attempt.description
+                    ? `<p class="run-attempt__description">${escapeHtml(attempt.description)}</p>`
+                    : ''
+                }
+                <pre class="run-attempt__command">${escapeHtml(attempt.command || '')}</pre>
+                ${
+                  attempt.error
+                    ? `<p class="run-attempt__error">${escapeHtml(attempt.error)}</p>`
+                    : ''
+                }
+              </div>
+            `
+          )
+          .join('')}
+      </div>
+    `;
   }
 
   function withQuery(url, extra) {
@@ -928,6 +1024,26 @@
     `;
   }
 
+  function fillAttempts(article, attempts) {
+    let box = article.querySelector('.run-step__attempts');
+    if (!attempts || !attempts.length) {
+      if (box) box.remove();
+      return;
+    }
+    const key = attempts
+      .map((attempt) => [attempt.id, attempt.status, attempt.error || ''].join(':'))
+      .join('|');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'run-step__attempts';
+      const live = article.querySelector('.run-step__live');
+      article.querySelector('.run-step__card').insertBefore(box, live || null);
+    }
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    box.innerHTML = attemptsHtml(attempts);
+  }
+
   function patchStepEl(article, step, idx) {
     const v = stepView(step, idx);
     article.className = 'run-step is-' + v.status;
@@ -948,6 +1064,7 @@
     setText(article.querySelector('.run-step__pct'), v.pctLabel);
     setText(article.querySelector('.run-step__cmd-label'), cmdLabel(v.status));
     setText(article.querySelector('.run-step__cmd'), v.command);
+    fillAttempts(article, v.attempts);
     fillLive(article, v.stats);
     fillActions(article, step, latestJob);
     let detailEl = article.querySelector('.run-step__detail');
@@ -984,6 +1101,9 @@
               <i style="width:${v.barWidth}%"></i>
             </div>
             <span class="run-step__pct">${escapeHtml(v.pctLabel)}</span>
+          </div>
+          <div class="run-step__attempts"${v.attempts ? '' : ' hidden'}>
+            ${attemptsHtml(v.attempts)}
           </div>
           <div class="run-step__live"${v.stats ? '' : ' hidden'}>
             ${v.stats && v.stats.phaseLabel ? `<p class="run-step__phase">${escapeHtml(v.stats.phaseLabel)}</p>` : ''}

@@ -890,6 +890,100 @@ body.page-experiments {
   flex: 1 1 100%;
 }
 
+.run-step__attempts {
+  margin: 0.15rem 0 0.85rem;
+}
+
+.run-step__attempts[hidden] {
+  display: none !important;
+}
+
+.run-step__attempts-title {
+  margin-bottom: 0.45rem;
+  color: var(--sm-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.run-step__attempts-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.run-attempt {
+  padding: 0.65rem 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--sm-border);
+  border-radius: 8px;
+}
+
+.run-attempt.is-active {
+  border-color: var(--sm-accent);
+  box-shadow: 0 0 0 1px var(--sm-accent-soft);
+}
+
+.run-attempt.is-done {
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+.run-attempt.is-failed {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.run-attempt.is-skipped {
+  opacity: 0.62;
+}
+
+.run-attempt__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.run-attempt__head span {
+  color: var(--sm-muted);
+}
+
+.run-attempt.is-active .run-attempt__head span {
+  color: var(--sm-accent);
+}
+
+.run-attempt.is-done .run-attempt__head span {
+  color: var(--sm-green);
+}
+
+.run-attempt.is-failed .run-attempt__head span,
+.run-attempt__error {
+  color: #f87171;
+}
+
+.run-attempt__description,
+.run-attempt__error {
+  margin: 0.35rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.run-attempt__description {
+  color: var(--sm-muted);
+}
+
+.run-attempt__command {
+  margin: 0.45rem 0 0;
+  padding: 0.45rem 0.55rem;
+  overflow-x: auto;
+  background: var(--input-bg);
+  border-radius: 6px;
+  color: var(--sm-text);
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .run-step__summary {
   flex: 1 1 100%;
   margin: 0;
