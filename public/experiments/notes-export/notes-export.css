@@ -1,0 +1,372 @@
+:root {
+  --ne-accent: #0f766e;
+  --ne-accent-soft: rgba(15, 118, 110, 0.12);
+  --ne-accent-border: rgba(15, 118, 110, 0.35);
+}
+
+html[data-theme="sand"] {
+  --ne-accent: #635473;
+  --ne-accent-soft: rgba(99, 84, 115, 0.16);
+  --ne-accent-border: rgba(135, 112, 36, 0.4);
+}
+
+body.page-notes-export {
+  background:
+    radial-gradient(1000px 500px at 50% -10%, var(--ne-accent-soft) 0%, transparent 60%),
+    var(--bg);
+}
+
+body.page-notes-export .experiments {
+  width: min(1040px, 100%);
+}
+
+body.page-notes-export [hidden] {
+  display: none !important;
+}
+
+.ne-badge {
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ne-accent);
+  background: var(--ne-accent-soft);
+  border: 1px solid var(--ne-accent-border);
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+}
+
+.ne-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 1.15rem;
+}
+
+.ne-pill {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.ne-pill.is-ok {
+  color: var(--ok-text);
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+}
+
+.ne-pill.is-bad {
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+.ne-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 10px 30px var(--shadow);
+  margin-bottom: 1.15rem;
+}
+
+.ne-card.is-disabled {
+  opacity: 0.62;
+}
+
+.ne-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ne-card-head h2 {
+  font-size: 1.12rem;
+  color: var(--text-heading);
+  margin: 0;
+}
+
+.ne-card-tag {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ne-accent);
+  background: var(--ne-accent-soft);
+  border: 1px solid var(--ne-accent-border);
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.ne-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ne-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ne-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ne-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.ne-card textarea,
+.ne-card input[type="text"] {
+  width: 100%;
+  padding: 0.8rem 0.95rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-heading);
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.ne-card textarea {
+  min-height: 12rem;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+#md-editor {
+  min-height: 18rem;
+  background: var(--surface-inset);
+}
+
+.ne-card textarea:focus,
+.ne-card input[type="text"]:focus {
+  border-color: var(--ne-accent);
+  box-shadow: 0 0 0 2px var(--ne-accent-soft);
+}
+
+.ne-formats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.ne-format-opt {
+  position: relative;
+  display: block;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.ne-format-opt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ne-format-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 100%;
+  padding: 0.75rem 0.8rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ne-format-card strong {
+  font-size: 0.86rem;
+  color: var(--text);
+}
+
+.ne-format-card small {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.ne-format-opt:hover .ne-format-card {
+  border-color: var(--ne-accent-border);
+}
+
+.ne-format-opt input:focus-visible + .ne-format-card {
+  border-color: var(--ne-accent);
+  box-shadow: 0 0 0 2px var(--ne-accent-soft);
+}
+
+.ne-format-opt input:checked + .ne-format-card {
+  background: var(--ne-accent-soft);
+  border-color: var(--ne-accent);
+  box-shadow: 0 0 0 1px var(--ne-accent);
+}
+
+.ne-format-opt input:checked + .ne-format-card strong {
+  color: var(--ne-accent);
+}
+
+.ne-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.ne-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ne-switch-ui {
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ne-switch-ui::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  box-shadow: 0 1px 3px var(--shadow);
+  transition: transform 0.15s ease;
+}
+
+.ne-switch input:checked + .ne-switch-ui {
+  background: var(--ne-accent);
+  border-color: var(--ne-accent);
+}
+
+.ne-switch input:checked + .ne-switch-ui::after {
+  transform: translateX(18px);
+}
+
+.ne-switch input:focus-visible + .ne-switch-ui {
+  box-shadow: 0 0 0 2px var(--ne-accent-soft);
+}
+
+.ne-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ne-switch-text strong {
+  font-size: 0.9rem;
+  color: var(--text-heading);
+}
+
+.ne-switch-text small {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.ne-actions,
+.ne-compile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.ne-compile .vesha-btn {
+  min-height: 42px;
+}
+
+.ne-busy {
+  font-size: 0.82rem;
+  color: var(--ne-accent);
+  margin: 0;
+}
+
+.ne-error {
+  margin: 0 0 1.15rem;
+  color: var(--danger-text);
+  font-size: 0.9rem;
+}
+
+.ne-preview {
+  margin-bottom: 0;
+}
+
+.ne-frame {
+  width: 100%;
+  min-height: 28rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.ne-epub {
+  padding: 1.1rem 1.15rem;
+  border: 1px dashed var(--ne-accent-border);
+  border-radius: 10px;
+  background: var(--ne-accent-soft);
+}
+
+.ne-epub p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.ne-spinner {
+  width: 14px;
+  height: 14px;
+  margin-right: 0.45rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ne-spin 0.7s linear infinite;
+}
+
+.vesha-btn .ne-spinner[hidden] {
+  display: none;
+}
+
+@keyframes ne-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .ne-formats {
+    grid-template-columns: 1fr;
+  }
+
+  .ne-card-head,
+  .ne-compile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

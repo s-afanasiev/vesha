@@ -31,6 +31,14 @@
       "href": "/experiments/extract-audio/",
       "status": "wip",
       "tech": ["js", "ffmpeg"]
+    },
+    {
+      "id": "notes-export",
+      "title": "Конспект курса",
+      "description": "Разметка LLM и сборка HTML/EPUB через Pandoc",
+      "href": "/experiments/notes-export/",
+      "status": "wip",
+      "tech": ["js", "llm", "pandoc"]
     }
   ]
 }

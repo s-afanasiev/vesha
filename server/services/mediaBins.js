@@ -97,10 +97,11 @@ function getPaths() {
   };
 }
 
-function run(cmd, args, { timeoutMs = 10 * 60 * 1000, cwd, onOutput } = {}) {
+function run(cmd, args, { timeoutMs = 10 * 60 * 1000, cwd, onOutput, env } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd,
+      env: env || process.env,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -228,5 +229,6 @@ module.exports = {
   getPaths,
   getToolStatus,
   requireBins,
+  resolveBin,
   run,
 };

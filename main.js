@@ -9,12 +9,14 @@ const authRoutes = require('./server/routes/auth');
 const looksRoutes = require('./server/routes/looks');
 const summarizeRoutes = require('./server/routes/summarize');
 const extractAudioRoutes = require('./server/routes/extractAudio');
+const notesExportRoutes = require('./server/routes/notesExport');
 
 const app = express();
 
 fs.mkdirSync(config.uploadDir, { recursive: true });
 fs.mkdirSync(config.summarizeDir, { recursive: true });
 fs.mkdirSync(config.extractAudioDir, { recursive: true });
+fs.mkdirSync(config.notesExportDir, { recursive: true });
 
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -23,6 +25,7 @@ app.use(cookieParser());
 app.use('/api', identityMiddleware);
 app.use('/api/summarize', summarizeRoutes);
 app.use('/api/extract-audio', extractAudioRoutes);
+app.use('/api/notes-export', notesExportRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);
 

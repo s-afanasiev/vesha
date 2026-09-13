@@ -5,6 +5,16 @@ function intEnv(name, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function envStr(name) {
+  return String(process.env[name] || '').trim();
+}
+
+function pandocPathForThisOs() {
+  const byOs =
+    process.platform === 'win32' ? envStr('PANDOC_PATH_WINDOWS') : envStr('PANDOC_PATH_LINUX');
+  return byOs || envStr('PANDOC_PATH');
+}
+
 const databaseUrl = process.env.DATABASE_URL || '';
 const dbConfig = databaseUrl
   ? { connectionString: databaseUrl }
@@ -29,6 +39,20 @@ const config = {
   geminiApiBase: (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com').replace(/\/$/, ''),
   geminiHttpsProxy: process.env.GEMINI_HTTPS_PROXY || process.env.HTTPS_PROXY || '',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
+  openaiBaseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  pandocPath: pandocPathForThisOs(),
+  notesExportDir:
+    process.env.NOTES_EXPORT_DIR ||
+    require('path').join(
+      process.env.UPLOAD_DIR || require('path').join(__dirname, '..', 'uploads'),
+      'notes-export'
+    ),
+  notesExportTimeoutMs: intEnv('NOTES_EXPORT_TIMEOUT_MS', 5 * 60 * 1000),
+  notesExportLlmTimeoutMs: intEnv('NOTES_EXPORT_LLM_TIMEOUT_MS', 3 * 60 * 1000),
+  notesExportMaxChars: intEnv('NOTES_EXPORT_MAX_CHARS', 200000),
+  notesExportMaxTokens: intEnv('NOTES_EXPORT_MAX_TOKENS', 16384),
+  notesExportMock: ['1', 'true', 'yes'].includes(String(process.env.NOTES_EXPORT_MOCK || '').toLowerCase()),
   serpapiApiKey: process.env.SERPAPI_API_KEY || '',
   replicateApiToken: process.env.REPLICATE_API_TOKEN || '',
   replicateRemoveBgModel: process.env.REPLICATE_REMOVE_BG_MODEL || 'lucataco/remove-bg',

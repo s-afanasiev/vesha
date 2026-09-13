@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Конспект курса — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./notes-export.css" />
+</head>
+<body class="page-experiments page-notes-export">
+  <main class="experiments">
+    <div class="experiments__nav">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+        <div data-vesha-auth-widget></div>
+      </div>
+    </div>
+
+    <header class="experiments__header">
+      <div class="ne-badge">LLM · Pandoc</div>
+      <h1>Конспект курса</h1>
+      <p>Разметьте конспект через LLM и соберите автономный HTML или EPUB-книгу.</p>
+    </header>
+
+    <div class="ne-status-bar">
+      <div class="ne-pill" id="llm-status">LLM: проверка…</div>
+      <div class="ne-pill" id="pandoc-status">Pandoc: проверка…</div>
+    </div>
+
+    <section class="ne-card">
+      <label class="ne-field">
+        <span class="ne-label">Исходный текст</span>
+        <textarea
+          id="source-text"
+          rows="12"
+          spellcheck="false"
+          placeholder="Вставьте конспект, транскрипт лекции или уже размеченный Markdown…"
+        ></textarea>
+      </label>
+
+      <div class="ne-field">
+        <span class="ne-label">Исходный формат</span>
+        <div class="ne-formats" role="radiogroup" aria-label="Исходный формат">
+          <label class="ne-format-opt">
+            <input type="radio" name="source-format" value="txt" checked />
+            <span class="ne-format-card">
+              <strong>Raw Text (TXT)</strong>
+              <small>Сплошной текст → LLM расставит структуру</small>
+            </span>
+          </label>
+          <label class="ne-format-opt">
+            <input type="radio" name="source-format" value="md" />
+            <span class="ne-format-card">
+              <strong>Markdown (MD)</strong>
+              <small>Сразу в редактор и в Pandoc</small>
+            </span>
+          </label>
+          <label class="ne-format-opt">
+            <input type="radio" name="source-format" value="html" />
+            <span class="ne-format-card">
+              <strong>HTML</strong>
+              <small>Сначала конвертация в Markdown</small>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <label class="ne-field">
+        <span class="ne-label">Название документа</span>
+        <input type="text" id="doc-title" value="Конспект курса" maxlength="200" />
+      </label>
+    </section>
+
+    <section class="ne-card" id="llm-card">
+      <div class="ne-card-head">
+        <h2>Обработка через LLM</h2>
+        <span class="ne-card-tag" id="llm-tag">Raw Text</span>
+      </div>
+      <p class="ne-hint" id="llm-gate-hint">Доступно, когда выбран Raw Text.</p>
+
+      <label class="ne-switch" id="summarize-label">
+        <input type="checkbox" id="summarize-toggle" />
+        <span class="ne-switch-ui" aria-hidden="true"></span>
+        <span class="ne-switch-text">
+          <strong>Суммаризировать / Сгенерировать структуру</strong>
+          <small id="mode-hint">Выкл — только заголовки модулей и уроков, текст дословно.</small>
+        </span>
+      </label>
+
+      <div class="ne-actions">
+        <button type="button" class="vesha-btn vesha-btn--primary" id="llm-btn">
+          <span class="ne-spinner" hidden></span>
+          <span class="ne-btn-label">Обработать через LLM</span>
+        </button>
+      </div>
+      <p class="ne-busy" id="llm-busy" hidden>Отправляю текст в модель…</p>
+    </section>
+
+    <section class="ne-card" id="html-card" hidden>
+      <div class="ne-card-head">
+        <h2>HTML → Markdown</h2>
+        <span class="ne-card-tag">Pandoc</span>
+      </div>
+      <p class="ne-hint">Фрагмент или целая страница. Pandoc снимет разметку и отдаст Markdown в редактор.</p>
+      <div class="ne-actions">
+        <button type="button" class="vesha-btn vesha-btn--primary" id="html-btn">
+          <span class="ne-spinner" hidden></span>
+          <span class="ne-btn-label">Преобразовать в Markdown</span>
+        </button>
+      </div>
+      <p class="ne-busy" id="html-busy" hidden>Pandoc конвертирует HTML…</p>
+    </section>
+
+    <section class="ne-card" id="md-card">
+      <div class="ne-card-head">
+        <h2>Редактор Markdown</h2>
+        <div class="ne-card-actions">
+          <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="use-source-btn">
+            Взять исходник
+          </button>
+          <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="copy-md-btn">
+            Копировать
+          </button>
+        </div>
+      </div>
+      <p class="ne-hint" id="md-hint">Можно править руками перед сборкой HTML или EPUB.</p>
+      <textarea
+        id="md-editor"
+        rows="16"
+        spellcheck="false"
+        placeholder="Здесь появится Markdown после LLM, конвертации HTML или вставки исходника…"
+      ></textarea>
+
+      <div class="ne-compile">
+        <button type="button" class="vesha-btn vesha-btn--primary" id="html-export-btn">
+          <span class="ne-spinner" hidden></span>
+          <span class="ne-btn-label">Собрать в автономный HTML</span>
+        </button>
+        <button type="button" class="vesha-btn vesha-btn--outline" id="epub-export-btn">
+          <span class="ne-spinner" hidden></span>
+          <span class="ne-btn-label">Собрать в EPUB книгу</span>
+        </button>
+      </div>
+      <p class="ne-busy" id="export-busy" hidden>Pandoc собирает файл…</p>
+    </section>
+
+    <p class="ne-error" id="error" hidden></p>
+
+    <section class="ne-card ne-preview" id="preview-card" hidden>
+      <div class="ne-card-head">
+        <div>
+          <h2 id="preview-title">Результат</h2>
+          <p class="ne-hint" id="preview-meta"></p>
+        </div>
+        <a class="vesha-btn vesha-btn--primary" id="download-btn" href="#" download>Скачать</a>
+      </div>
+      <iframe id="html-frame" class="ne-frame" title="Предпросмотр HTML" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" hidden></iframe>
+      <div class="ne-epub" id="epub-box" hidden>
+        <p>EPUB готов. Предпросмотр книги в браузере недоступен — скачайте файл.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/theme.js"></script>
+  <script src="/auth.js"></script>
+  <script src="./notes-export.js"></script>
+</body>
+</html>
