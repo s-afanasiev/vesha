@@ -1,6 +1,5 @@
 const express = require('express');
 const {
-  probePandoc,
   processWithLlm,
   htmlToMarkdown,
   exportMarkdown,
@@ -19,21 +18,16 @@ function contentDisposition(filename) {
   return `attachment; filename="${asciiFilename(filename)}"; filename*=UTF-8''${encoded}`;
 }
 
-router.get('/status', async (_req, res, next) => {
-  try {
-    const pandoc = await probePandoc();
-    res.setHeader('Cache-Control', 'no-store');
-    res.json({
-      pandoc: {
-        ok: pandoc.ok,
-        version: pandoc.version || null,
-        error: pandoc.error || null,
-      },
-      mock: Boolean(config.notesExportMock),
-    });
-  } catch (err) {
-    next(err);
-  }
+router.get('/status', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    converters: {
+      htmlToMarkdown: 'turndown',
+      markdownToHtml: 'marked',
+      epub: false,
+    },
+    mock: Boolean(config.notesExportMock),
+  });
 });
 
 router.post('/llm', async (req, res, next) => {
@@ -58,8 +52,6 @@ router.post('/llm', async (req, res, next) => {
 });
 
 router.post('/to-markdown', async (req, res, next) => {
-  req.setTimeout(config.notesExportTimeoutMs + 15 * 1000);
-  res.setTimeout(config.notesExportTimeoutMs + 15 * 1000);
   try {
     const markdown = await htmlToMarkdown(req.body && req.body.html);
     res.json({ markdown });
@@ -69,8 +61,6 @@ router.post('/to-markdown', async (req, res, next) => {
 });
 
 router.post('/export', async (req, res, next) => {
-  req.setTimeout(config.notesExportTimeoutMs + 30 * 1000);
-  res.setTimeout(config.notesExportTimeoutMs + 30 * 1000);
   try {
     const result = await exportMarkdown({
       markdown: req.body && req.body.markdown,

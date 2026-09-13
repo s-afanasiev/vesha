@@ -27,14 +27,14 @@
     </div>
 
     <header class="experiments__header">
-      <div class="ne-badge">LLM · Pandoc</div>
+      <div class="ne-badge">LLM · Markdown · HTML</div>
       <h1>Конспект курса</h1>
-      <p>Разметьте конспект через LLM и соберите standalone HTML или EPUB-книгу.</p>
+      <p>Разметьте конспект через LLM и соберите standalone HTML без внешних CLI-инструментов.</p>
     </header>
 
     <div class="ne-status-bar">
       <div class="ne-pill" id="llm-status">LLM: проверка…</div>
-      <div class="ne-pill" id="pandoc-status">Pandoc: проверка…</div>
+      <div class="ne-pill" id="converter-status">Конвертеры: проверка…</div>
     </div>
 
     <section class="ne-card">
@@ -62,7 +62,7 @@
             <input type="radio" name="source-format" value="md" />
             <span class="ne-format-card">
               <strong>Markdown (MD)</strong>
-              <small>Сразу в редактор и в Pandoc</small>
+              <small>Сразу в редактор и в Marked</small>
             </span>
           </label>
           <label class="ne-format-opt">
@@ -111,16 +111,16 @@
     <section class="ne-card" id="html-card" hidden>
       <div class="ne-card-head">
         <h2>HTML → Markdown</h2>
-        <span class="ne-card-tag">Pandoc</span>
+        <span class="ne-card-tag">Turndown</span>
       </div>
-      <p class="ne-hint">Фрагмент или целая страница. Pandoc снимет разметку и отдаст Markdown в редактор.</p>
+      <p class="ne-hint">Фрагмент или целая страница. Turndown преобразует содержимое в редактируемый Markdown.</p>
       <div class="ne-actions">
         <button type="button" class="vesha-btn vesha-btn--primary" id="html-btn">
           <span class="ne-spinner" hidden></span>
           <span class="ne-btn-label">Преобразовать в Markdown</span>
         </button>
       </div>
-      <p class="ne-busy" id="html-busy" hidden>Pandoc конвертирует HTML…</p>
+      <p class="ne-busy" id="html-busy" hidden>Turndown конвертирует HTML…</p>
     </section>
 
     <section class="ne-card" id="md-card">
@@ -135,7 +135,7 @@
           </button>
         </div>
       </div>
-      <p class="ne-hint" id="md-hint">Можно править руками перед сборкой HTML или EPUB.</p>
+      <p class="ne-hint" id="md-hint">Можно править руками перед сборкой HTML.</p>
       <textarea
         id="md-editor"
         rows="16"
@@ -148,13 +148,9 @@
           <span class="ne-spinner" hidden></span>
           <span class="ne-btn-label">Собрать в standalone HTML</span>
         </button>
-        <button type="button" class="vesha-btn vesha-btn--outline" id="epub-export-btn">
-          <span class="ne-spinner" hidden></span>
-          <span class="ne-btn-label">Собрать в EPUB книгу</span>
-        </button>
       </div>
-      <p class="ne-hint">Standalone HTML — полный HTML-документ; внешние изображения не встраиваются, сырой HTML в Markdown отключён для безопасности.</p>
-      <p class="ne-busy" id="export-busy" hidden>Pandoc собирает файл…</p>
+      <p class="ne-hint">Marked создаёт полный HTML-документ; внешние изображения не встраиваются, небезопасный HTML удаляется.</p>
+      <p class="ne-busy" id="export-busy" hidden>Marked собирает файл…</p>
     </section>
 
     <p class="ne-error" id="error" hidden></p>
@@ -168,9 +164,6 @@
         <a class="vesha-btn vesha-btn--primary" id="download-btn" href="#" download>Скачать</a>
       </div>
       <iframe id="html-frame" class="ne-frame" title="Предпросмотр HTML" sandbox hidden></iframe>
-      <div class="ne-epub" id="epub-box" hidden>
-        <p>EPUB готов. Предпросмотр книги в браузере недоступен — скачайте файл.</p>
-      </div>
     </section>
   </main>
 

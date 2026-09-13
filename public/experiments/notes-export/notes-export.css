@@ -330,19 +330,6 @@ body.page-notes-export [hidden] {
   background: #fff;
 }
 
-.ne-epub {
-  padding: 1.1rem 1.15rem;
-  border: 1px dashed var(--ne-accent-border);
-  border-radius: 10px;
-  background: var(--ne-accent-soft);
-}
-
-.ne-epub p {
-  margin: 0;
-  color: var(--text);
-  font-size: 0.9rem;
-}
-
 .ne-spinner {
   width: 14px;
   height: 14px;

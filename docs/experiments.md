@@ -207,6 +207,10 @@ Env: `GEMINI_API_KEY`, `YANDEX_API_KEY` или `YANDEX_IAM_TOKEN`, `YANDEX_FOLDE
 - За одним доверенным Nginx/Caddy задайте `TRUST_PROXY=true`, иначе IP-лимит будет видеть адрес proxy.
 - Событие `llm:change` содержит только provider/ready/statusLabel — API-ключ в событие не попадает.
 
+### Конвертация документов в notes-export
+
+Эксперимент `notes-export` не требует системного Pandoc: HTML → Markdown выполняет `turndown` с GFM-плагином, Markdown → standalone HTML — `marked` с `sanitize-html`. EPUB отложен и в API отклоняется явно. Marked требует Node.js 20 или новее.
+
 ### Бэкенд, если он нужен
 
 1. `server/routes/<id>.js` — Express Router.

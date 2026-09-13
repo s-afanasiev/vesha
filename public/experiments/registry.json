@@ -35,10 +35,10 @@
     {
       "id": "notes-export",
       "title": "Конспект курса",
-      "description": "Разметка LLM и сборка HTML/EPUB через Pandoc",
+      "description": "Разметка LLM и конвертация Markdown/HTML",
       "href": "/experiments/notes-export/",
       "status": "wip",
-      "tech": ["js", "llm", "pandoc"]
+      "tech": ["js", "llm", "marked"]
     }
   ]
 }

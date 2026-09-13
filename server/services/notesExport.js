@@ -1,10 +1,10 @@
-const fs = require('fs');
-const path = require('path');
-const { execFileSync } = require('child_process');
-const { randomUUID } = require('crypto');
+const sanitizeHtml = require('sanitize-html');
+const TurndownService = require('turndown');
+const { gfm } = require('turndown-plugin-gfm');
 const config = require('../config');
-const { run, resolveBin } = require('./mediaBins');
 const { completeChat } = require('./llm');
+
+let markedPromise = null;
 
 const STRUCTURE_PROMPT = `Ты — синтаксический анализатор курсов. Возьми предоставленный текст и преобразуй его в структурированный Markdown.
 Твоя задача — ТОЛЬКО проставить заголовки нужного уровня:
@@ -26,103 +26,6 @@ function bad(message, status = 400) {
   return err;
 }
 
-function whichOnPath(name) {
-  try {
-    const cmd = process.platform === 'win32' ? 'where' : 'which';
-    const out = execFileSync(cmd, [name], {
-      encoding: 'utf8',
-      windowsHide: true,
-      timeout: 5000,
-    });
-    return (
-      String(out || '')
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .find(Boolean) || null
-    );
-  } catch {
-    return null;
-  }
-}
-
-function firstExistingFile(candidates) {
-  for (const file of candidates) {
-    if (!file) continue;
-    try {
-      if (fs.existsSync(file) && fs.statSync(file).isFile()) return file;
-    } catch (_) {
-      /* skip */
-    }
-  }
-  return null;
-}
-
-function resolvePandoc() {
-  const fromEnvOrBin = resolveBin('pandoc', config.pandocPath);
-  if (fromEnvOrBin) return fromEnvOrBin;
-
-  const home = process.env.USERPROFILE || process.env.HOME || '';
-  const typicalInstall =
-    process.platform === 'win32'
-      ? firstExistingFile([
-          'C:\\Program Files\\Pandoc\\pandoc.exe',
-          'C:\\Program Files (x86)\\Pandoc\\pandoc.exe',
-          home && path.join(home, 'AppData', 'Local', 'Pandoc', 'pandoc.exe'),
-        ])
-      : firstExistingFile(['/usr/local/bin/pandoc', '/usr/bin/pandoc']);
-
-  return typicalInstall || whichOnPath('pandoc') || 'pandoc';
-}
-
-function versionLine(text) {
-  return (
-    String(text || '')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) || ''
-  );
-}
-
-function pandocMissingError() {
-  return bad(
-    'Pandoc не установлен. Установите CLI (https://pandoc.org/installing.html) и убедитесь, что команда pandoc есть в PATH, либо задайте PANDOC_PATH_WINDOWS / PANDOC_PATH_LINUX в .env.',
-    500
-  );
-}
-
-async function runPandoc(args, { timeoutMs = config.notesExportTimeoutMs, cwd } = {}) {
-  const bin = resolvePandoc();
-  try {
-    return await run(bin, args, { timeoutMs, cwd });
-  } catch (err) {
-    if (err.code === 'ENOENT' || /Не найден бинарь/i.test(err.message || '')) {
-      throw pandocMissingError();
-    }
-    const wrapped = bad(err.message || 'Pandoc завершился с ошибкой', err.status || 502);
-    wrapped.stderr = err.stderr;
-    throw wrapped;
-  }
-}
-
-async function probePandoc() {
-  const resolved = resolvePandoc();
-  try {
-    const { stdout, stderr } = await runPandoc(['-v'], { timeoutMs: 15000 });
-    const version = versionLine(stdout || stderr);
-    return {
-      ok: true,
-      path: resolved,
-      version: version || 'pandoc',
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      path: resolved === 'pandoc' ? null : resolved,
-      error: err.message || 'Pandoc недоступен',
-    };
-  }
-}
-
 function limitText(text, label) {
   const value = String(text || '').replace(/^\uFEFF/, '');
   if (!value.trim()) throw bad(`Пустой ${label}`);
@@ -142,6 +45,79 @@ function safeTitle(title) {
   return value.slice(0, 200) || 'Конспект курса';
 }
 
+function escapeHtmlText(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function markedToSafeHtml(markdown) {
+  if (!markedPromise) {
+    markedPromise = import('marked').then((module) => module.marked);
+  }
+  const marked = await markedPromise;
+  const rendered = await marked.parse(markdown, {
+    async: false,
+    gfm: true,
+    breaks: false,
+  });
+  return sanitizeHtml(String(rendered), {
+    allowedTags: [
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'p',
+      'br',
+      'hr',
+      'blockquote',
+      'pre',
+      'code',
+      'strong',
+      'em',
+      'del',
+      's',
+      'sub',
+      'sup',
+      'kbd',
+      'ul',
+      'ol',
+      'li',
+      'a',
+      'img',
+      'table',
+      'thead',
+      'tbody',
+      'tfoot',
+      'tr',
+      'th',
+      'td',
+      'figure',
+      'figcaption',
+      'details',
+      'summary',
+    ],
+    allowedAttributes: {
+      a: ['href', 'title'],
+      img: ['src', 'alt', 'title', 'width', 'height'],
+      code: ['class'],
+      ol: ['start'],
+      th: ['colspan', 'rowspan', 'align'],
+      td: ['colspan', 'rowspan', 'align'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    allowedSchemesByTag: {
+      img: ['http', 'https', 'data'],
+    },
+    allowProtocolRelative: false,
+  });
+}
+
 function hardenStandaloneHtml(html) {
   const policy = [
     "default-src 'self' data: https: http:",
@@ -155,9 +131,47 @@ function hardenStandaloneHtml(html) {
   ].join('; ');
   const meta = `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
   const source = String(html || '');
+  if (/http-equiv=["']Content-Security-Policy["']/i.test(source)) return source;
+  if (/<meta\s+charset=["'][^"']+["']\s*\/?>/i.test(source)) {
+    return source.replace(
+      /<meta\s+charset=["'][^"']+["']\s*\/?>/i,
+      (charset) => `${charset}\n${meta}`
+    );
+  }
   return /<head(?:\s[^>]*)?>/i.test(source)
     ? source.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${meta}`)
     : `${meta}\n${source}`;
+}
+
+async function buildStandaloneHtml(markdown, title) {
+  const body = await markedToSafeHtml(markdown);
+  const escapedTitle = escapeHtmlText(title);
+  const document = `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="Vesha / Marked">
+  <title>${escapedTitle}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { max-width: 54rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; font: 17px/1.65 system-ui, sans-serif; }
+    h1, h2, h3, h4 { line-height: 1.25; margin-top: 1.7em; }
+    h1 { border-bottom: 1px solid #8885; padding-bottom: .35em; }
+    a { color: #0f766e; }
+    img { max-width: 100%; height: auto; }
+    blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid #8888; color: #666; }
+    pre { overflow-x: auto; padding: 1rem; border-radius: .5rem; background: #8882; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: .5rem .65rem; border: 1px solid #8886; text-align: left; }
+  </style>
+</head>
+<body>
+${body}
+</body>
+</html>`;
+  return hardenStandaloneHtml(document);
 }
 
 function fileSlug(title) {
@@ -264,101 +278,59 @@ async function processWithLlm({ text, mode, llm }) {
   };
 }
 
-async function withTempDir(fn) {
-  const dir = path.join(config.notesExportDir, randomUUID());
-  fs.mkdirSync(dir, { recursive: true });
-  try {
-    return await fn(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 async function htmlToMarkdown(html) {
   const source = limitText(html, 'HTML');
-  return withTempDir(async (dir) => {
-    const input = path.join(dir, 'input.html');
-    const output = path.join(dir, 'output.md');
-    fs.writeFileSync(input, source, 'utf8');
-    await runPandoc(
-      ['--sandbox', 'input.html', '-f', 'html', '-t', 'markdown', '--wrap=none', '-o', 'output.md'],
-      {
-        timeoutMs: 60000,
-        cwd: dir,
-      }
-    );
-    if (!fs.existsSync(output)) throw bad('Pandoc не создал Markdown', 502);
-    return fs.readFileSync(output, 'utf8');
+  const turndown = new TurndownService({
+    headingStyle: 'atx',
+    bulletListMarker: '-',
+    codeBlockStyle: 'fenced',
+    emDelimiter: '*',
+    strongDelimiter: '**',
   });
+  turndown.use(gfm);
+  turndown.remove([
+    'script',
+    'style',
+    'iframe',
+    'object',
+    'embed',
+    'form',
+    'template',
+    'noscript',
+    'svg',
+    'canvas',
+  ]);
+  const markdown = turndown.turndown(source).trim();
+  if (!markdown) throw bad('Turndown не нашёл текстового содержимого в HTML');
+  return markdown;
 }
 
 async function exportMarkdown({ markdown, format, title }) {
   const source = limitText(markdown, 'Markdown');
-  const kind = String(format || '').toLowerCase();
-  if (kind !== 'html' && kind !== 'epub') {
-    throw bad('Формат должен быть html или epub');
+  const kind = String(format || 'html').toLowerCase();
+  if (kind !== 'html') {
+    throw bad('Сейчас поддерживается только экспорт в HTML');
   }
   const metaTitle = safeTitle(title);
   const slug = fileSlug(metaTitle);
-
-  return withTempDir(async (dir) => {
-    const input = path.join(dir, 'input.md');
-    const outputName = kind === 'html' ? 'output.html' : 'output.epub';
-    const output = path.join(dir, outputName);
-    fs.writeFileSync(input, source, 'utf8');
-
-    const args =
-      kind === 'html'
-        ? [
-            '--sandbox',
-            'input.md',
-            '-f',
-            'markdown-raw_html-raw_attribute-link_attributes',
-            '-s',
-            '--metadata',
-            `title=${metaTitle}`,
-            '-o',
-            outputName,
-          ]
-        : [
-            '--sandbox',
-            'input.md',
-            '-f',
-            'markdown-raw_html-raw_attribute-link_attributes',
-            '-o',
-            outputName,
-            '--toc',
-            '--toc-depth=2',
-            '--metadata',
-            `title=${metaTitle}`,
-          ];
-
-    await runPandoc(args, { cwd: dir });
-    if (!fs.existsSync(output) || fs.statSync(output).size < 8) {
-      throw bad('Pandoc не создал выходной файл', 502);
-    }
-    const rawBuffer = fs.readFileSync(output);
-    const buffer =
-      kind === 'html'
-        ? Buffer.from(hardenStandaloneHtml(rawBuffer.toString('utf8')), 'utf8')
-        : rawBuffer;
-    return {
-      buffer,
-      format: kind,
-      mime: kind === 'html' ? 'text/html; charset=utf-8' : 'application/epub+zip',
-      filename: `${slug}.${kind === 'html' ? 'html' : 'epub'}`,
-    };
-  });
+  const output = await buildStandaloneHtml(source, metaTitle);
+  return {
+    buffer: Buffer.from(output, 'utf8'),
+    format: 'html',
+    mime: 'text/html; charset=utf-8',
+    filename: `${slug}.html`,
+  };
 }
 
 module.exports = {
-  probePandoc,
   processWithLlm,
   htmlToMarkdown,
   exportMarkdown,
   __test: {
     assertStructurePreserved,
+    buildStandaloneHtml,
     hardenStandaloneHtml,
+    markedToSafeHtml,
     structureFingerprint,
   },
 };

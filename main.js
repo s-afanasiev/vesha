@@ -19,7 +19,6 @@ if (config.trustProxy) app.set('trust proxy', 1);
 fs.mkdirSync(config.uploadDir, { recursive: true });
 fs.mkdirSync(config.summarizeDir, { recursive: true });
 fs.mkdirSync(config.extractAudioDir, { recursive: true });
-fs.mkdirSync(config.notesExportDir, { recursive: true });
 
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));

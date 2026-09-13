@@ -18,16 +18,14 @@
   const mdEditor = document.getElementById('md-editor');
   const mdHint = document.getElementById('md-hint');
   const htmlExportBtn = document.getElementById('html-export-btn');
-  const epubExportBtn = document.getElementById('epub-export-btn');
   const errorEl = document.getElementById('error');
   const previewCard = document.getElementById('preview-card');
   const previewTitle = document.getElementById('preview-title');
   const previewMeta = document.getElementById('preview-meta');
   const downloadBtn = document.getElementById('download-btn');
   const htmlFrame = document.getElementById('html-frame');
-  const epubBox = document.getElementById('epub-box');
   const llmStatus = document.getElementById('llm-status');
-  const pandocStatus = document.getElementById('pandoc-status');
+  const converterStatus = document.getElementById('converter-status');
   const llmBusy = document.getElementById('llm-busy');
   const htmlBusy = document.getElementById('html-busy');
   const exportBusy = document.getElementById('export-busy');
@@ -35,7 +33,7 @@
   let editorTouched = false;
   let htmlBlobUrl = '';
   let downloadUrl = '';
-  let tools = { pandocOk: false, llmOk: false, llmMock: false };
+  let tools = { llmOk: false, llmMock: false };
 
   function getFormat() {
     const selected = formatInputs.find((el) => el.checked);
@@ -108,7 +106,6 @@
 
     const hasMd = Boolean(currentMarkdown().trim());
     htmlExportBtn.disabled = !hasMd;
-    epubExportBtn.disabled = !hasMd;
     useSourceBtn.disabled = !sourceText.value.trim();
 
     if (format === 'md') {
@@ -116,7 +113,7 @@
     } else if (format === 'html') {
       mdHint.textContent = 'Сначала преобразуйте HTML — затем правьте Markdown и собирайте.';
     } else {
-      mdHint.textContent = 'После LLM можно править Markdown руками и сразу собирать HTML или EPUB.';
+      mdHint.textContent = 'После LLM можно править Markdown руками и сразу собирать HTML.';
     }
   }
 
@@ -156,17 +153,18 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'status');
 
-      tools.pandocOk = Boolean(data.pandoc && data.pandoc.ok);
       tools.llmMock = Boolean(data.mock);
-
-      if (tools.pandocOk) {
-        setPill(pandocStatus, data.pandoc.version || 'Pandoc готов', 'ok');
-      } else {
-        setPill(pandocStatus, data.pandoc && data.pandoc.error ? data.pandoc.error : 'Pandoc не найден', 'bad');
-      }
+      const converters = data.converters || {};
+      const ready =
+        converters.htmlToMarkdown === 'turndown' &&
+        converters.markdownToHtml === 'marked';
+      setPill(
+        converterStatus,
+        ready ? 'Конвертеры: Turndown · Marked' : 'Конвертеры недоступны',
+        ready ? 'ok' : 'bad'
+      );
     } catch (err) {
-      tools.pandocOk = false;
-      setPill(pandocStatus, 'Не удалось проверить инструменты', 'bad');
+      setPill(converterStatus, 'Не удалось проверить конвертеры', 'bad');
     }
     if (window.VeshaLlm && typeof window.VeshaLlm.refreshStatus === 'function') {
       await window.VeshaLlm.refreshStatus();
@@ -189,7 +187,6 @@
     }
     setBusy(llmBtn, llmBusy, true, 'Отправляю текст в модель…');
     htmlExportBtn.disabled = true;
-    epubExportBtn.disabled = true;
     try {
       const res = await fetch('/api/notes-export/llm', {
         method: 'POST',
@@ -219,7 +216,7 @@
       showError('Вставьте HTML');
       return;
     }
-    setBusy(htmlBtn, htmlBusy, true, 'Pandoc конвертирует HTML…');
+    setBusy(htmlBtn, htmlBusy, true, 'Turndown конвертирует HTML…');
     try {
       const res = await fetch('/api/notes-export/to-markdown', {
         method: 'POST',
@@ -238,7 +235,7 @@
     }
   }
 
-  async function exportFormat(format) {
+  async function exportHtml() {
     showError('');
     const markdown = currentMarkdown().trim();
     if (!markdown) {
@@ -246,49 +243,35 @@
       return;
     }
     const title = titleInput.value.trim() || 'Конспект курса';
-    const label = format === 'html' ? 'Pandoc собирает standalone HTML…' : 'Pandoc собирает EPUB…';
-    const btn = format === 'html' ? htmlExportBtn : epubExportBtn;
-    const other = format === 'html' ? epubExportBtn : htmlExportBtn;
-    setBusy(btn, exportBusy, true, label);
-    other.disabled = true;
+    setBusy(htmlExportBtn, exportBusy, true, 'Marked собирает standalone HTML…');
     try {
       const res = await fetch('/api/notes-export/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown, format, title }),
+        body: JSON.stringify({ markdown, format: 'html', title }),
       });
       if (!res.ok) throw new Error(await readError(res));
       const blob = await res.blob();
       const headerName = res.headers.get('X-Notes-Export-Filename');
-      const filename = headerName ? decodeURIComponent(headerName) : format === 'html' ? 'conspect.html' : 'conspect.epub';
+      const filename = headerName ? decodeURIComponent(headerName) : 'conspect.html';
       revokeUrls();
       downloadUrl = URL.createObjectURL(blob);
       downloadBtn.href = downloadUrl;
       downloadBtn.setAttribute('download', filename);
       previewCard.hidden = false;
-      previewMeta.textContent = filename + ' · ' + format.toUpperCase();
-
-      if (format === 'html') {
-        const previewHtml = securePreviewHtml(await blob.text());
-        htmlBlobUrl = URL.createObjectURL(
-          new Blob([previewHtml], { type: 'text/html;charset=utf-8' })
-        );
-        htmlFrame.hidden = false;
-        epubBox.hidden = true;
-        htmlFrame.src = htmlBlobUrl;
-        previewTitle.textContent = 'Предпросмотр HTML';
-      } else {
-        htmlFrame.hidden = true;
-        htmlFrame.removeAttribute('src');
-        epubBox.hidden = false;
-        previewTitle.textContent = 'EPUB книга';
-      }
+      previewMeta.textContent = filename + ' · HTML';
+      const previewHtml = securePreviewHtml(await blob.text());
+      htmlBlobUrl = URL.createObjectURL(
+        new Blob([previewHtml], { type: 'text/html;charset=utf-8' })
+      );
+      htmlFrame.hidden = false;
+      htmlFrame.src = htmlBlobUrl;
+      previewTitle.textContent = 'Предпросмотр HTML';
       previewCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       showError(err.message || 'Ошибка сборки');
     } finally {
       setBusy(htmlExportBtn, exportBusy, false);
-      setBusy(epubExportBtn, null, false);
       updatePanels();
     }
   }
@@ -339,8 +322,7 @@
 
   llmBtn.addEventListener('click', processLlm);
   htmlBtn.addEventListener('click', convertHtml);
-  htmlExportBtn.addEventListener('click', () => exportFormat('html'));
-  epubExportBtn.addEventListener('click', () => exportFormat('epub'));
+  htmlExportBtn.addEventListener('click', exportHtml);
   document.addEventListener('llm:change', syncLlmPill);
 
   window.addEventListener('beforeunload', revokeUrls);

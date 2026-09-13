@@ -22,12 +22,6 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
-function pandocPathForThisOs() {
-  const byOs =
-    process.platform === 'win32' ? envStr('PANDOC_PATH_WINDOWS') : envStr('PANDOC_PATH_LINUX');
-  return byOs || envStr('PANDOC_PATH');
-}
-
 const databaseUrl = process.env.DATABASE_URL || '';
 const dbConfig = databaseUrl
   ? { connectionString: databaseUrl }
@@ -81,14 +75,6 @@ const config = {
   llmGuestRequestsPerHour: intEnv('LLM_GUEST_REQUESTS_PER_HOUR', 10),
   llmUserRequestsPerHour: intEnv('LLM_USER_REQUESTS_PER_HOUR', 60),
   llmMaxConcurrent: intEnv('LLM_MAX_CONCURRENT', 4),
-  pandocPath: pandocPathForThisOs(),
-  notesExportDir:
-    process.env.NOTES_EXPORT_DIR ||
-    require('path').join(
-      process.env.UPLOAD_DIR || require('path').join(__dirname, '..', 'uploads'),
-      'notes-export'
-    ),
-  notesExportTimeoutMs: intEnv('NOTES_EXPORT_TIMEOUT_MS', 5 * 60 * 1000),
   notesExportLlmTimeoutMs: intEnv('NOTES_EXPORT_LLM_TIMEOUT_MS', 3 * 60 * 1000),
   notesExportMaxChars: intEnv('NOTES_EXPORT_MAX_CHARS', 200000),
   notesExportMaxTokens: intEnv('NOTES_EXPORT_MAX_TOKENS', 16384),
