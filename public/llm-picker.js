@@ -2,7 +2,8 @@
  * Vesha LLM picker — reusable provider block for experiments.
  * Markup: <div data-vesha-llm-picker></div>
  * Scripts: /llm-picker.css + /llm-picker.js
- * API: window.VeshaLlm.getPayload(), isReady(), onChange(), refreshStatus()
+ * API: window.VeshaLlm.getPayload(), isReady(), onChange(), refreshStatus(), ready()
+ * API keys live only in page memory: they are not persisted and never enter change events.
  */
 (function (global) {
   const STORAGE_KEY = 'vesha.llm-picker';
@@ -25,27 +26,62 @@
   ];
 
   let status = {
+    defaultProvider: 'gemini',
     gemini: { configured: false, model: 'gemini-2.5-flash' },
-    yandex: { configured: false, hasKey: false, hasFolder: false, model: 'yandexgpt-lite/latest' },
-    openai: { configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+    yandex: {
+      configured: false,
+      hasCredential: false,
+      hasFolder: false,
+      model: 'yandexgpt-lite/latest',
+    },
+    openai: {
+      configured: false,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      customEndpointsEnabled: false,
+      privateEndpointsEnabled: false,
+    },
   };
+  let hadStoredState = false;
   let state = loadState();
+  const secrets = { gemini: '', yandex: '', openai: '' };
   const listeners = [];
+  let pickerCounter = 0;
+  let statusLoaded = false;
+  let statusPromise = null;
+  let initPromise = null;
 
   function loadState() {
     const defaults = {
       provider: 'gemini',
-      apiKey: '',
-      baseUrl: '',
-      model: '',
-      temperature: 0.2,
-      maxTokens: 8192,
+      yandex: { folderId: '' },
+      openai: {
+        baseUrl: '',
+        model: '',
+        temperature: 0.2,
+        maxTokens: 8192,
+      },
     };
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaults;
+      hadStoredState = true;
       const parsed = JSON.parse(raw);
-      return { ...defaults, ...parsed };
+      const provider = PROVIDERS.some((item) => item.id === parsed.provider)
+        ? parsed.provider
+        : defaults.provider;
+      return {
+        provider,
+        yandex: {
+          folderId: String(parsed.yandex?.folderId || ''),
+        },
+        openai: {
+          baseUrl: String(parsed.openai?.baseUrl || parsed.baseUrl || ''),
+          model: String(parsed.openai?.model || parsed.model || ''),
+          temperature: Number(parsed.openai?.temperature ?? parsed.temperature ?? 0.2),
+          maxTokens: Number(parsed.openai?.maxTokens ?? parsed.maxTokens ?? 8192),
+        },
+      };
     } catch {
       return defaults;
     }
@@ -53,7 +89,15 @@
 
   function saveState() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          version: 2,
+          provider: state.provider,
+          yandex: { folderId: state.yandex.folderId },
+          openai: { ...state.openai },
+        })
+      );
     } catch (_) {
       /* ignore quota */
     }
@@ -72,7 +116,11 @@
 
   function emit(options) {
     saveState();
-    const detail = { payload: getPayload(), ready: isReady(), statusLabel: statusLabel() };
+    const detail = {
+      provider: state.provider,
+      ready: isReady(),
+      statusLabel: statusLabel(),
+    };
     listeners.forEach((fn) => {
       try {
         fn(detail);
@@ -86,28 +134,52 @@
   }
 
   function getPayload() {
+    const provider = state.provider;
+    if (provider === 'gemini') {
+      return { provider, apiKey: secrets.gemini.trim() };
+    }
+    if (provider === 'yandex') {
+      return {
+        provider,
+        apiKey: secrets.yandex.trim(),
+        folderId: String(state.yandex.folderId || '').trim(),
+      };
+    }
     return {
-      provider: state.provider,
-      apiKey: String(state.apiKey || '').trim(),
-      baseUrl: String(state.baseUrl || '').trim(),
-      model: String(state.model || '').trim(),
-      temperature: Number(state.temperature) || 0,
-      maxTokens: Number(state.maxTokens) || 8192,
+      provider,
+      apiKey: secrets.openai.trim(),
+      baseUrl: String(state.openai.baseUrl || status.openai.baseUrl || '').trim(),
+      model: String(state.openai.model || status.openai.model || '').trim(),
+      temperature: Number.isFinite(Number(state.openai.temperature))
+        ? Number(state.openai.temperature)
+        : 0.2,
+      maxTokens: Number(state.openai.maxTokens) || 8192,
     };
   }
 
   function providerReady(id) {
-    const payload = getPayload();
-    const hasUserKey = Boolean(payload.apiKey);
+    const hasUserKey = Boolean(secrets[id]);
     if (id === 'gemini') return Boolean(status.gemini.configured || hasUserKey);
     if (id === 'yandex') {
-      return Boolean(status.yandex.hasFolder && (status.yandex.hasKey || hasUserKey));
+      if (!hasUserKey) return Boolean(status.yandex.configured);
+      return Boolean(state.yandex.folderId || status.yandex.hasFolder);
     }
-    const url = payload.baseUrl || status.openai.baseUrl;
-    const model = payload.model || status.openai.model;
-    const key = hasUserKey || status.openai.configured;
-    const local = /localhost|127\.0\.0\.1/i.test(url);
-    return Boolean(url && model && (key || local));
+    if (!hasUserKey) return Boolean(status.openai.configured);
+    const payload = getPayload();
+    let customEndpoint = false;
+    try {
+      const requested = new URL(payload.baseUrl);
+      const preset = new URL(status.openai.baseUrl);
+      const requestPath = requested.pathname.replace(/\/chat\/completions\/?$/i, '').replace(/\/+$/, '');
+      const presetPath = preset.pathname.replace(/\/chat\/completions\/?$/i, '').replace(/\/+$/, '');
+      customEndpoint =
+        requested.origin !== preset.origin ||
+        requestPath !== presetPath;
+    } catch {
+      return false;
+    }
+    if (customEndpoint && !status.openai.customEndpointsEnabled) return false;
+    return Boolean(payload.baseUrl && payload.model);
   }
 
   function isReady() {
@@ -117,21 +189,25 @@
   function statusLabel() {
     const id = state.provider;
     if (id === 'gemini') {
-      if (state.apiKey) return 'Gemini: свой ключ';
+      if (secrets.gemini) return 'Gemini: свой ключ (до закрытия страницы)';
       if (status.gemini.configured) return 'Gemini: ключ сервера';
       return 'Gemini: нужен API ключ';
     }
     if (id === 'yandex') {
-      if (!status.yandex.hasFolder) return 'YandexGPT: задайте YANDEX_FOLDER_ID в .env';
-      if (state.apiKey) return 'YandexGPT: свой ключ';
-      if (status.yandex.hasKey) return 'YandexGPT: ключ сервера';
+      if (secrets.yandex && !state.yandex.folderId && !status.yandex.hasFolder) {
+        return 'YandexGPT: нужен Folder ID';
+      }
+      if (secrets.yandex) return 'YandexGPT: свой ключ (до закрытия страницы)';
+      if (status.yandex.configured) return 'YandexGPT: профиль сервера';
+      if (!status.yandex.hasFolder) return 'YandexGPT: нужны ключ и Folder ID';
       return 'YandexGPT: нужен API ключ';
     }
-    if (providerReady('openai')) {
-      const model = state.model || status.openai.model;
-      return 'OpenAI-compat: ' + model;
+    if (secrets.openai) {
+      if (!providerReady('openai')) return 'OpenAI-compat: проверьте URL и модель';
+      return 'OpenAI-compat: свой профиль · ' + (state.openai.model || status.openai.model);
     }
-    return 'OpenAI-compat: укажите URL, модель и ключ';
+    if (status.openai.configured) return 'OpenAI-compat: server preset · ' + status.openai.model;
+    return 'OpenAI-compat: нужен API ключ';
   }
 
   function hintFor(id) {
@@ -139,16 +215,25 @@
       return (
         'Endpoint и модель заданы на сервере (' +
         (status.gemini.model || 'gemini-2.5-flash') +
-        '). Свой ключ — если серверный исчерпан или недоступен.'
+        '). Свой ключ хранится только до закрытия страницы.'
       );
     }
     if (id === 'yandex') {
       return (
-        'Модель и каталог облака заданы на сервере. Свой API-ключ — если серверный закончился. ' +
-        (status.yandex.hasFolder ? '' : 'На сервере пока нет YANDEX_FOLDER_ID.')
+        'Модель задана на сервере. Для ключа из другого Yandex Cloud укажите его Folder ID. ' +
+        'Секрет не сохраняется в браузере.'
       );
     }
-    return 'Подойдёт OpenAI, OpenRouter, Groq, Ollama /v1, vLLM и любой совместимый chat/completions.';
+    const customHint = status.openai.customEndpointsEnabled
+      ? 'Публичный HTTPS endpoint можно задать со своим ключом.'
+      : 'Пользовательские URL на этом сервере отключены.';
+    return (
+      'Без своего ключа используется неизменяемый server preset. ' +
+      customHint +
+      (status.openai.privateEndpointsEnabled
+        ? ' Локальные адреса явно разрешены конфигурацией сервера.'
+        : '')
+    );
   }
 
   function escapeHtml(value) {
@@ -160,7 +245,7 @@
   }
 
   function bind(root) {
-    root.querySelectorAll('input[name="vesha-llm-provider"]').forEach((el) => {
+    root.querySelectorAll('input[type="radio"][data-llm-provider]').forEach((el) => {
       el.addEventListener('change', () => {
         if (el.checked) {
           state.provider = el.value;
@@ -171,14 +256,18 @@
     root.querySelectorAll('[data-llm-field]').forEach((el) => {
       const field = el.getAttribute('data-llm-field');
       el.addEventListener('input', () => {
-        if (field === 'temperature' || field === 'maxTokens') {
-          state[field] = Number(el.value);
+        if (field === 'apiKey') {
+          secrets[state.provider] = el.value;
+        } else if (field === 'folderId') {
+          state.yandex.folderId = el.value;
+        } else if (field === 'temperature' || field === 'maxTokens') {
+          state.openai[field] = Number(el.value);
         } else {
-          state[field] = el.value;
+          state.openai[field] = el.value;
         }
         const tempOut = root.querySelector('[data-llm-temp-out]');
         if (field === 'temperature' && tempOut) {
-          tempOut.textContent = Number(state.temperature).toFixed(1);
+          tempOut.textContent = Number(state.openai.temperature).toFixed(1);
         }
         emit();
       });
@@ -186,9 +275,16 @@
   }
 
   function render(root) {
+    root.classList.add('llm-picker');
+    if (!root.dataset.llmPickerId) {
+      pickerCounter += 1;
+      root.dataset.llmPickerId = String(pickerCounter);
+    }
+    const radioName = `vesha-llm-provider-${root.dataset.llmPickerId}`;
     const ready = isReady();
-    const openaiUrl = state.baseUrl || status.openai.baseUrl || '';
-    const openaiModel = state.model || status.openai.model || '';
+    const openaiUrl = state.openai.baseUrl || status.openai.baseUrl || '';
+    const openaiModel = state.openai.model || status.openai.model || '';
+    const serverCredential = Boolean(status[state.provider] && status[state.provider].configured);
     root.innerHTML = `
       <div class="llm-picker__head">
         <h2>Нейросеть</h2>
@@ -198,7 +294,7 @@
         ${PROVIDERS.map(
           (p) => `
             <label class="llm-picker__opt">
-              <input type="radio" name="vesha-llm-provider" value="${p.id}" ${
+              <input type="radio" data-llm-provider name="${radioName}" value="${p.id}" ${
                 state.provider === p.id ? 'checked' : ''
               } />
               <span class="llm-picker__card">
@@ -229,11 +325,23 @@
             `
             : ''
         }
+        ${
+          state.provider === 'yandex'
+            ? `
+              <label class="llm-picker__field">
+                <span>Folder ID для своего ключа</span>
+                <input type="text" data-llm-field="folderId" spellcheck="false" autocomplete="off" value="${escapeHtml(
+                  state.yandex.folderId
+                )}" placeholder="${status.yandex.hasFolder ? 'пусто — каталог с сервера' : 'b1g…'}" />
+              </label>
+            `
+            : ''
+        }
         <label class="llm-picker__field">
-          <span>API ключ ${status[state.provider] && (status[state.provider].configured || status[state.provider].hasKey) ? '(если пусто — ключ с сервера)' : ''}</span>
-          <input type="password" data-llm-field="apiKey" autocomplete="off" value="${escapeHtml(
-            state.apiKey
-          )}" placeholder="необязательно, если ключ задан в .env" />
+          <span>API ключ ${serverCredential ? '(пусто — server preset)' : ''}</span>
+          <input type="password" data-llm-field="apiKey" autocomplete="new-password" value="${escapeHtml(
+            secrets[state.provider]
+          )}" placeholder="не сохраняется в браузере" />
         </label>
         ${
           state.provider === 'openai'
@@ -241,16 +349,16 @@
               <div class="llm-picker__row">
                 <label class="llm-picker__field">
                   <span class="llm-picker__temp">Температура <output data-llm-temp-out>${Number(
-                    state.temperature
+                    state.openai.temperature
                   ).toFixed(1)}</output></span>
                   <input type="range" data-llm-field="temperature" min="0" max="2" step="0.1" value="${escapeHtml(
-                    state.temperature
+                    state.openai.temperature
                   )}" />
                 </label>
                 <label class="llm-picker__field">
                   <span>Max tokens</span>
-                  <input type="number" data-llm-field="maxTokens" min="256" max="128000" step="256" value="${escapeHtml(
-                    state.maxTokens
+                  <input type="number" data-llm-field="maxTokens" min="256" max="32768" step="256" value="${escapeHtml(
+                    state.openai.maxTokens
                   )}" />
                 </label>
               </div>
@@ -266,23 +374,40 @@
     document.querySelectorAll('[data-vesha-llm-picker]').forEach((el) => render(el));
   }
 
-  async function refreshStatus() {
-    try {
-      const res = await fetch('/api/llm/status');
-      const data = await res.json();
-      if (res.ok && data) {
-        status = {
-          gemini: { ...status.gemini, ...(data.gemini || {}) },
-          yandex: { ...status.yandex, ...(data.yandex || {}) },
-          openai: { ...status.openai, ...(data.openai || {}) },
-        };
-        if (!state.baseUrl && status.openai.baseUrl) state.baseUrl = status.openai.baseUrl;
-        if (!state.model && status.openai.model) state.model = status.openai.model;
+  async function refreshStatus(force) {
+    if (statusLoaded && !force) return status;
+    if (statusPromise) return statusPromise;
+    statusPromise = (async () => {
+      try {
+        const res = await fetch('/api/llm/status', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (res.ok && data) {
+          status = {
+            defaultProvider: data.defaultProvider || status.defaultProvider,
+            gemini: { ...status.gemini, ...(data.gemini || {}) },
+            yandex: { ...status.yandex, ...(data.yandex || {}) },
+            openai: { ...status.openai, ...(data.openai || {}) },
+          };
+          if (!hadStoredState && PROVIDERS.some((item) => item.id === status.defaultProvider)) {
+            state.provider = status.defaultProvider;
+          }
+          if (!state.openai.baseUrl && status.openai.baseUrl) {
+            state.openai.baseUrl = status.openai.baseUrl;
+          }
+          if (!state.openai.model && status.openai.model) {
+            state.openai.model = status.openai.model;
+          }
+          statusLoaded = true;
+        }
+      } catch (_) {
+        /* keep defaults */
+      } finally {
+        statusPromise = null;
       }
-    } catch (_) {
-      /* keep defaults */
-    }
-    emit({ rerender: true });
+      emit({ rerender: true });
+      return status;
+    })();
+    return statusPromise;
   }
 
   function onChange(fn) {
@@ -294,14 +419,17 @@
   }
 
   async function init() {
+    saveState();
     renderAll();
     await refreshStatus();
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => {
+      initPromise = init();
+    });
   } else {
-    init();
+    initPromise = init();
   }
 
   global.VeshaLlm = {
@@ -309,6 +437,7 @@
     isReady,
     statusLabel,
     refreshStatus,
+    ready: () => initPromise || statusPromise || Promise.resolve(status),
     onChange,
     renderAll,
   };

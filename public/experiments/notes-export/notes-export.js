@@ -35,7 +35,7 @@
   let editorTouched = false;
   let htmlBlobUrl = '';
   let downloadUrl = '';
-  let tools = { pandocOk: false, llmOk: false };
+  let tools = { pandocOk: false, llmOk: false, llmMock: false };
 
   function getFormat() {
     const selected = formatInputs.find((el) => el.checked);
@@ -70,6 +70,15 @@
     downloadUrl = '';
   }
 
+  function securePreviewHtml(html) {
+    const policy =
+      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'";
+    const meta = `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
+    return /<head(?:\s[^>]*)?>/i.test(html)
+      ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => head + meta)
+      : meta + html;
+  }
+
   function currentMarkdown() {
     const edited = mdEditor.value.trim();
     if (edited) return mdEditor.value;
@@ -91,7 +100,7 @@
     llmCard.hidden = format !== 'txt';
     htmlCard.hidden = format !== 'html';
     llmCard.classList.toggle('is-disabled', format !== 'txt');
-    llmBtn.disabled = format !== 'txt';
+    llmBtn.disabled = format !== 'txt' || !tools.llmOk;
 
     if (format === 'md' && !editorTouched) {
       mdEditor.value = sourceText.value;
@@ -122,6 +131,12 @@
   }
 
   function syncLlmPill() {
+    if (tools.llmMock) {
+      tools.llmOk = true;
+      setPill(llmStatus, 'LLM: mock-режим', 'ok');
+      llmBtn.disabled = getFormat() !== 'txt';
+      return;
+    }
     if (!window.VeshaLlm) {
       setPill(llmStatus, 'LLM: загрузка…');
       return;
@@ -132,6 +147,7 @@
       window.VeshaLlm.isReady() ? 'ok' : 'bad'
     );
     tools.llmOk = window.VeshaLlm.isReady();
+    llmBtn.disabled = getFormat() !== 'txt' || !tools.llmOk;
   }
 
   async function loadStatus() {
@@ -141,6 +157,7 @@
       if (!res.ok) throw new Error(data.error || 'status');
 
       tools.pandocOk = Boolean(data.pandoc && data.pandoc.ok);
+      tools.llmMock = Boolean(data.mock);
 
       if (tools.pandocOk) {
         setPill(pandocStatus, data.pandoc.version || 'Pandoc готов', 'ok');
@@ -160,6 +177,11 @@
 
   async function processLlm() {
     showError('');
+    syncLlmPill();
+    if (!tools.llmOk) {
+      showError('Сначала настройте выбранный LLM-провайдер');
+      return;
+    }
     const text = sourceText.value.trim();
     if (!text) {
       showError('Вставьте исходный текст');
@@ -224,7 +246,7 @@
       return;
     }
     const title = titleInput.value.trim() || 'Конспект курса';
-    const label = format === 'html' ? 'Pandoc собирает автономный HTML…' : 'Pandoc собирает EPUB…';
+    const label = format === 'html' ? 'Pandoc собирает standalone HTML…' : 'Pandoc собирает EPUB…';
     const btn = format === 'html' ? htmlExportBtn : epubExportBtn;
     const other = format === 'html' ? epubExportBtn : htmlExportBtn;
     setBusy(btn, exportBusy, true, label);
@@ -247,7 +269,10 @@
       previewMeta.textContent = filename + ' · ' + format.toUpperCase();
 
       if (format === 'html') {
-        htmlBlobUrl = downloadUrl;
+        const previewHtml = securePreviewHtml(await blob.text());
+        htmlBlobUrl = URL.createObjectURL(
+          new Blob([previewHtml], { type: 'text/html;charset=utf-8' })
+        );
         htmlFrame.hidden = false;
         epubBox.hidden = true;
         htmlFrame.src = htmlBlobUrl;

@@ -4,7 +4,7 @@ const { execFileSync } = require('child_process');
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const { run, resolveBin } = require('./mediaBins');
-const { completeChat, publicStatus } = require('./llm');
+const { completeChat } = require('./llm');
 
 const STRUCTURE_PROMPT = `Ты — синтаксический анализатор курсов. Возьми предоставленный текст и преобразуй его в структурированный Markdown.
 Твоя задача — ТОЛЬКО проставить заголовки нужного уровня:
@@ -123,20 +123,6 @@ async function probePandoc() {
   }
 }
 
-function llmStatus() {
-  const providers = publicStatus();
-  const configured =
-    providers.gemini.configured ||
-    providers.yandex.configured ||
-    providers.openai.configured ||
-    config.notesExportMock;
-  return {
-    ...providers,
-    configured,
-    mock: Boolean(config.notesExportMock),
-  };
-}
-
 function limitText(text, label) {
   const value = String(text || '').replace(/^\uFEFF/, '');
   if (!value.trim()) throw bad(`Пустой ${label}`);
@@ -156,6 +142,24 @@ function safeTitle(title) {
   return value.slice(0, 200) || 'Конспект курса';
 }
 
+function hardenStandaloneHtml(html) {
+  const policy = [
+    "default-src 'self' data: https: http:",
+    "script-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "style-src 'self' 'unsafe-inline' data: https: http:",
+    "font-src 'self' data: https: http:",
+    "img-src 'self' data: https: http:",
+  ].join('; ');
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
+  const source = String(html || '');
+  return /<head(?:\s[^>]*)?>/i.test(source)
+    ? source.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${meta}`)
+    : `${meta}\n${source}`;
+}
+
 function fileSlug(title) {
   const slug = safeTitle(title)
     .replace(/[^\p{L}\p{N}._-]+/gu, '_')
@@ -173,6 +177,34 @@ function unwrapMarkdown(text) {
   return value.trim();
 }
 
+function structureFingerprint(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^\s*#{1,6}\s+/, '')
+        .trim()
+        .replace(
+          /^((?:Модуль|Урок)\s+\d+)\s*[.:\-–—]\s*/iu,
+          '$1: '
+        )
+    )
+    .filter(Boolean);
+}
+
+function assertStructurePreserved(source, markdown) {
+  const before = structureFingerprint(source);
+  const after = structureFingerprint(markdown);
+  if (before.length !== after.length || before.some((line, index) => line !== after[index])) {
+    const err = bad(
+      'Модель изменила текст в режиме «только структура». Результат отклонён — исходный конспект сохранён.',
+      502
+    );
+    err.code = 'structure_changed';
+    throw err;
+  }
+}
+
 function mockMarkdown(text, mode) {
   if (mode === 'summarize') {
     return [
@@ -186,7 +218,7 @@ function mockMarkdown(text, mode) {
       '## Урок 1: Краткое содержание',
       '',
       '- **Тезис:** NOTES_EXPORT_MOCK=1 — живой LLM не вызывался.',
-      '- **Вывод:** замените флаг и задайте OPENAI_API_KEY, чтобы получить настоящую разметку.',
+      '- **Вывод:** отключите mock-режим и настройте LLM, чтобы получить настоящую разметку.',
       '',
       'Исходный фрагмент:',
       '',
@@ -208,20 +240,27 @@ async function processWithLlm({ text, mode, llm }) {
   }
 
   const system = kind === 'summarize' ? SUMMARIZE_PROMPT : STRUCTURE_PROMPT;
+  const selectedProvider = String(llm?.provider || '').toLowerCase();
+  const usesPickerTuning = selectedProvider === 'openai';
   const result = await completeChat({
-    ...(llm || {}),
+    selection: llm || {},
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: `Исходный текст:\n\n${source}` },
     ],
     timeoutMs: config.notesExportLlmTimeoutMs,
+    temperature: usesPickerTuning ? undefined : kind === 'summarize' ? 0.3 : 0,
+    maxTokens: usesPickerTuning ? undefined : config.notesExportMaxTokens,
   });
   const markdown = unwrapMarkdown(result.text);
   if (!markdown) throw bad('Модель вернула пустой Markdown', 502);
+  if (kind === 'structure') assertStructurePreserved(source, markdown);
   return {
     markdown,
     provider: result.provider,
     model: result.model,
+    usage: result.usage || null,
+    finishReason: result.finishReason || null,
   };
 }
 
@@ -241,10 +280,13 @@ async function htmlToMarkdown(html) {
     const input = path.join(dir, 'input.html');
     const output = path.join(dir, 'output.md');
     fs.writeFileSync(input, source, 'utf8');
-    await runPandoc(['input.html', '-f', 'html', '-t', 'markdown', '--wrap=none', '-o', 'output.md'], {
-      timeoutMs: 60000,
-      cwd: dir,
-    });
+    await runPandoc(
+      ['--sandbox', 'input.html', '-f', 'html', '-t', 'markdown', '--wrap=none', '-o', 'output.md'],
+      {
+        timeoutMs: 60000,
+        cwd: dir,
+      }
+    );
     if (!fs.existsSync(output)) throw bad('Pandoc не создал Markdown', 502);
     return fs.readFileSync(output, 'utf8');
   });
@@ -268,7 +310,10 @@ async function exportMarkdown({ markdown, format, title }) {
     const args =
       kind === 'html'
         ? [
+            '--sandbox',
             'input.md',
+            '-f',
+            'markdown-raw_html-raw_attribute-link_attributes',
             '-s',
             '--metadata',
             `title=${metaTitle}`,
@@ -276,7 +321,10 @@ async function exportMarkdown({ markdown, format, title }) {
             outputName,
           ]
         : [
+            '--sandbox',
             'input.md',
+            '-f',
+            'markdown-raw_html-raw_attribute-link_attributes',
             '-o',
             outputName,
             '--toc',
@@ -289,7 +337,11 @@ async function exportMarkdown({ markdown, format, title }) {
     if (!fs.existsSync(output) || fs.statSync(output).size < 8) {
       throw bad('Pandoc не создал выходной файл', 502);
     }
-    const buffer = fs.readFileSync(output);
+    const rawBuffer = fs.readFileSync(output);
+    const buffer =
+      kind === 'html'
+        ? Buffer.from(hardenStandaloneHtml(rawBuffer.toString('utf8')), 'utf8')
+        : rawBuffer;
     return {
       buffer,
       format: kind,
@@ -301,8 +353,12 @@ async function exportMarkdown({ markdown, format, title }) {
 
 module.exports = {
   probePandoc,
-  llmStatus,
   processWithLlm,
   htmlToMarkdown,
   exportMarkdown,
+  __test: {
+    assertStructurePreserved,
+    hardenStandaloneHtml,
+    structureFingerprint,
+  },
 };

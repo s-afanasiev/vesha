@@ -142,7 +142,7 @@ Vesha — тонкий Express + статика. Главный продукт �
 
 Квоты (лимиты загрузок) уже есть для подборки. Новый эксперимент подключает их только если реально нужны.
 
-Секреты (Gemini, OpenAI, OAuth, …) живут **только на сервере**. В клиентский JS ключи не класть. Исключение — блок **llm-picker**: пользователь может вставить свой ключ в UI; он хранится в localStorage браузера и уходит на бэкенд как override, в git не попадает.
+Секреты (Gemini, OpenAI, OAuth, …) живут **только на сервере**. В клиентский JS ключи не класть. Исключение — блок **llm-picker**: пользователь может вставить свой ключ в UI; ключ живёт только в памяти страницы до её закрытия и уходит на бэкенд как override. В `localStorage` сохраняются только несекретные настройки.
 
 ### Блок llm-picker (выбор нейросети)
 
@@ -150,7 +150,8 @@ Vesha — тонкий Express + статика. Главный продукт �
 
 Провайдеры:
 
-- **Gemini** и **YandexGPT** — URL и модель на сервере. В UI только поле API-ключа (пусто = ключ из `.env`).
+- **Gemini** — URL и модель на сервере. В UI только API-ключ (пусто = ключ из `.env`).
+- **YandexGPT** — URL и модель на сервере. Для своего ключа можно указать Folder ID; иначе используется серверный каталог.
 - **OpenAI-совместимый** — Base URL, модель, ключ, температура, max tokens.
 
 Подключение на странице эксперимента:
@@ -167,7 +168,7 @@ Vesha — тонкий Express + статика. Главный продукт �
 
 ```js
 const llm = window.VeshaLlm.getPayload();
-// { provider, apiKey, baseUrl, model, temperature, maxTokens }
+// Объект зависит от provider; apiKey присутствует только в момент вызова.
 await fetch('/api/<id>/…', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -181,7 +182,7 @@ document.addEventListener('llm:change', () => { /* VeshaLlm.isReady() */ });
 ```js
 const { completeChat } = require('../services/llm');
 const result = await completeChat({
-  ...req.body.llm,
+  selection: req.body.llm,
   messages: [
     { role: 'system', content: '…' },
     { role: 'user', content: '…' },
@@ -192,7 +193,19 @@ const result = await completeChat({
 
 Статус ключей без секретов: `GET /api/llm/status`. Код виджета: `public/llm-picker.js`, стили `public/llm-picker.css`, сервис `server/services/llm.js`, роут `server/routes/llm.js`. Образец в UI: `public/experiments/notes-export/`.
 
-Env: `GEMINI_API_KEY`, `YANDEX_API_KEY`, `YANDEX_FOLDER_ID` (каталог облака, только сервер), `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`.
+Env: `GEMINI_API_KEY`, `YANDEX_API_KEY` или `YANDEX_IAM_TOKEN`, `YANDEX_FOLDER_ID`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`. Для локального keyless endpoint нужен явный `OPENAI_ALLOW_KEYLESS=true`.
+
+Правила gateway:
+
+- Без пользовательского ключа OpenAI URL и модель всегда берутся из server preset. Клиент не может направить серверный ключ на другой хост.
+- Пользовательские URL в production по умолчанию выключены. Для них нужны `LLM_ENABLE_CUSTOM_ENDPOINTS=true` и allowlist `LLM_ALLOWED_OPENAI_HOSTS`.
+- Локальные и private IP блокируются; разрешить их можно только явным `LLM_ALLOW_PRIVATE_ENDPOINTS=true`.
+- Редиректы endpoint запрещены, чтобы ключ не ушёл на другой хост.
+- Каждый LLM-route должен выполнять вызов через `runGuarded(req, task)` из `server/services/llmGuard.js`.
+- Guard ограничивает гостя одновременно по guest cookie и IP, пользователя — по user ID; лимиты и общая конкурентность задаются через `LLM_*`.
+- Счётчики guard хранятся в памяти процесса. Для нескольких Node-инстансов их нужно вынести в Redis/Postgres.
+- За одним доверенным Nginx/Caddy задайте `TRUST_PROXY=true`, иначе IP-лимит будет видеть адрес proxy.
+- Событие `llm:change` содержит только provider/ready/statusLabel — API-ключ в событие не попадает.
 
 ### Бэкенд, если он нужен
 

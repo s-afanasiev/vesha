@@ -14,6 +14,8 @@ const llmRoutes = require('./server/routes/llm');
 
 const app = express();
 
+if (config.trustProxy) app.set('trust proxy', 1);
+
 fs.mkdirSync(config.uploadDir, { recursive: true });
 fs.mkdirSync(config.summarizeDir, { recursive: true });
 fs.mkdirSync(config.extractAudioDir, { recursive: true });

@@ -65,6 +65,18 @@ body.page-notes-export [hidden] {
   background: var(--danger-bg);
 }
 
+.ne-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1.15rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 14px);
+  box-shadow: 0 8px 28px var(--shadow);
+}
+
 .ne-card [data-vesha-llm-picker] {
   padding-top: 0.15rem;
 }

@@ -29,7 +29,7 @@
     <header class="experiments__header">
       <div class="ne-badge">LLM · Pandoc</div>
       <h1>Конспект курса</h1>
-      <p>Разметьте конспект через LLM и соберите автономный HTML или EPUB-книгу.</p>
+      <p>Разметьте конспект через LLM и соберите standalone HTML или EPUB-книгу.</p>
     </header>
 
     <div class="ne-status-bar">
@@ -146,13 +146,14 @@
       <div class="ne-compile">
         <button type="button" class="vesha-btn vesha-btn--primary" id="html-export-btn">
           <span class="ne-spinner" hidden></span>
-          <span class="ne-btn-label">Собрать в автономный HTML</span>
+          <span class="ne-btn-label">Собрать в standalone HTML</span>
         </button>
         <button type="button" class="vesha-btn vesha-btn--outline" id="epub-export-btn">
           <span class="ne-spinner" hidden></span>
           <span class="ne-btn-label">Собрать в EPUB книгу</span>
         </button>
       </div>
+      <p class="ne-hint">Standalone HTML — полный HTML-документ; внешние изображения не встраиваются, сырой HTML в Markdown отключён для безопасности.</p>
       <p class="ne-busy" id="export-busy" hidden>Pandoc собирает файл…</p>
     </section>
 
@@ -166,7 +167,7 @@
         </div>
         <a class="vesha-btn vesha-btn--primary" id="download-btn" href="#" download>Скачать</a>
       </div>
-      <iframe id="html-frame" class="ne-frame" title="Предпросмотр HTML" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" hidden></iframe>
+      <iframe id="html-frame" class="ne-frame" title="Предпросмотр HTML" sandbox hidden></iframe>
       <div class="ne-epub" id="epub-box" hidden>
         <p>EPUB готов. Предпросмотр книги в браузере недоступен — скачайте файл.</p>
       </div>

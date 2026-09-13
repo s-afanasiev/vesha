@@ -1,12 +1,12 @@
 const express = require('express');
 const {
   probePandoc,
-  llmStatus,
   processWithLlm,
   htmlToMarkdown,
   exportMarkdown,
 } = require('../services/notesExport');
 const config = require('../config');
+const { runGuarded } = require('../services/llmGuard');
 
 const router = express.Router();
 
@@ -22,7 +22,15 @@ function contentDisposition(filename) {
 router.get('/status', async (_req, res, next) => {
   try {
     const pandoc = await probePandoc();
-    res.json({ pandoc, llm: llmStatus() });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      pandoc: {
+        ok: pandoc.ok,
+        version: pandoc.version || null,
+        error: pandoc.error || null,
+      },
+      mock: Boolean(config.notesExportMock),
+    });
   } catch (err) {
     next(err);
   }
@@ -32,13 +40,19 @@ router.post('/llm', async (req, res, next) => {
   req.setTimeout(config.notesExportLlmTimeoutMs + 30 * 1000);
   res.setTimeout(config.notesExportLlmTimeoutMs + 30 * 1000);
   try {
-    const result = await processWithLlm({
-      text: req.body && req.body.text,
-      mode: req.body && req.body.mode,
-      llm: req.body && req.body.llm,
+    const { result, quota } = await runGuarded(req, async (quotaState) => {
+      const llmResult = await processWithLlm({
+        text: req.body && req.body.text,
+        mode: req.body && req.body.mode,
+        llm: req.body && req.body.llm,
+      });
+      return { result: llmResult, quota: quotaState };
     });
+    res.setHeader('X-RateLimit-Limit', String(quota.limit));
+    res.setHeader('X-RateLimit-Remaining', String(quota.remaining));
     res.json(result);
   } catch (err) {
+    if (err.retryAfterSec) res.setHeader('Retry-After', String(err.retryAfterSec));
     next(err);
   }
 });

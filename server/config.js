@@ -9,6 +9,19 @@ function envStr(name) {
   return String(process.env[name] || '').trim();
 }
 
+function boolEnv(name, fallback = false) {
+  const value = envStr(name).toLowerCase();
+  if (!value) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(value);
+}
+
+function listEnv(name) {
+  return envStr(name)
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function pandocPathForThisOs() {
   const byOs =
     process.platform === 'win32' ? envStr('PANDOC_PATH_WINDOWS') : envStr('PANDOC_PATH_LINUX');
@@ -31,7 +44,9 @@ if (process.env.DATABASE_SSL === 'true' || process.env.PGSSLMODE === 'require') 
 }
 
 const config = {
+  isProduction: process.env.NODE_ENV === 'production',
   port: intEnv('PORT', 3000),
+  trustProxy: boolEnv('TRUST_PROXY', false),
   databaseUrl: databaseUrl || `postgres://${dbConfig.user}:${dbConfig.password}@${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`,
   dbConfig,
   sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
@@ -40,6 +55,7 @@ const config = {
   geminiHttpsProxy: process.env.GEMINI_HTTPS_PROXY || process.env.HTTPS_PROXY || '',
   geminiModel: envStr('GEMINI_MODEL') || 'gemini-2.5-flash',
   yandexApiKey: envStr('YANDEX_API_KEY') || envStr('YANDEX_GPT_API_KEY'),
+  yandexIamToken: envStr('YANDEX_IAM_TOKEN'),
   yandexFolderId: envStr('YANDEX_FOLDER_ID'),
   yandexModel: envStr('YANDEX_GPT_MODEL') || 'yandexgpt-lite/latest',
   yandexBaseUrl: (envStr('YANDEX_GPT_BASE_URL') || 'https://llm.api.cloud.yandex.net').replace(
@@ -49,6 +65,22 @@ const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiBaseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  openaiAllowKeyless: boolEnv('OPENAI_ALLOW_KEYLESS', false),
+  llmDefaultProvider: envStr('LLM_DEFAULT_PROVIDER') || 'gemini',
+  llmTimeoutMs: intEnv('LLM_TIMEOUT_MS', 3 * 60 * 1000),
+  llmMaxInputChars: intEnv('LLM_MAX_INPUT_CHARS', 300000),
+  llmMaxResponseBytes: intEnv('LLM_MAX_RESPONSE_BYTES', 4 * 1024 * 1024),
+  llmMaxTokens: intEnv('LLM_MAX_TOKENS', 32768),
+  llmServerMaxTokens: intEnv('LLM_SERVER_MAX_TOKENS', 16384),
+  llmEnableCustomEndpoints: boolEnv(
+    'LLM_ENABLE_CUSTOM_ENDPOINTS',
+    process.env.NODE_ENV !== 'production'
+  ),
+  llmAllowPrivateEndpoints: boolEnv('LLM_ALLOW_PRIVATE_ENDPOINTS', false),
+  llmAllowedOpenaiHosts: listEnv('LLM_ALLOWED_OPENAI_HOSTS'),
+  llmGuestRequestsPerHour: intEnv('LLM_GUEST_REQUESTS_PER_HOUR', 10),
+  llmUserRequestsPerHour: intEnv('LLM_USER_REQUESTS_PER_HOUR', 60),
+  llmMaxConcurrent: intEnv('LLM_MAX_CONCURRENT', 4),
   pandocPath: pandocPathForThisOs(),
   notesExportDir:
     process.env.NOTES_EXPORT_DIR ||
