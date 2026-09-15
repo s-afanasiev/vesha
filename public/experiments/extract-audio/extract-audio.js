@@ -1,18 +1,50 @@
 (function () {
   const STORAGE_KEY = 'vesha.extract-audio.ffmpegDir';
   const QUALITY_STORAGE_KEY = 'vesha.extract-audio.quality';
+  const FORMAT_STORAGE_KEY = 'vesha.extract-audio.format';
   const DEFAULT_FFMPEG_DIR = 'C:\\CODE\\VESHA\\v1\\bin\\';
+  const AUDIO_NAME_RE = /\.(mp3|wav|m4a|ogg|aac|flac|opus|wma)$/i;
   const QUALITY_ARGS = {
-    original: '-c:a libmp3lame -q:a 2',
-    compact: '-c:a libmp3lame -b:a 96k',
-    low: '-ac 1 -ar 22050 -c:a libmp3lame -b:a 48k',
-    speech: '-ac 1 -ar 16000 -c:a libmp3lame -b:a 32k',
+    mp3: {
+      original: '-c:a libmp3lame -q:a 2',
+      compact: '-c:a libmp3lame -b:a 96k',
+      low: '-ac 1 -ar 22050 -c:a libmp3lame -b:a 48k',
+      speech: '-ac 1 -ar 16000 -c:a libmp3lame -b:a 32k',
+    },
+    wav: {
+      original: '-c:a pcm_s16le',
+      compact: '-ar 44100 -c:a pcm_s16le',
+      low: '-ac 1 -ar 22050 -c:a pcm_s16le',
+      speech: '-ac 1 -ar 16000 -c:a pcm_s16le',
+    },
+  };
+  const QUALITY_NOTES = {
+    mp3: {
+      original: '~190 кбит/с · стерео',
+      compact: '96 кбит/с · стерео',
+      low: '48 кбит/с · моно',
+      speech: '32 кбит/с · 16 кГц',
+    },
+    wav: {
+      original: 'PCM · как в исходнике',
+      compact: 'PCM · 44.1 кГц',
+      low: 'PCM · моно 22 кГц',
+      speech: 'PCM · моно 16 кГц',
+    },
   };
   const QUALITY_HINTS = {
-    original: 'Без дополнительного сжатия: стерео, VBR ~190 кбит/с. Файл как после обычного извлечения.',
-    compact: 'Меньше размер: 96 кбит/с, стерео. Речь и музыка ещё звучат нормально.',
-    low: 'Заметно хуже и легче: 48 кбит/с, моно, 22 кГц. Речь слышна, файл примерно в 4 раза меньше.',
-    speech: 'Минимум для распознавания речи: 32 кбит/с, моно, 16 кГц. Хватает Whisper и похожим движкам.',
+    mp3: {
+      original: 'Без дополнительного сжатия: стерео, VBR ~190 кбит/с. Файл как после обычного извлечения.',
+      compact: 'Меньше размер: 96 кбит/с, стерео. Речь и музыка ещё звучат нормально.',
+      low: 'Заметно хуже и легче: 48 кбит/с, моно, 22 кГц. Речь слышна, файл примерно в 4 раза меньше.',
+      speech: 'Минимум для распознавания речи: 32 кбит/с, моно, 16 кГц. Хватает Whisper и похожим движкам.',
+    },
+    wav: {
+      original: 'Без сжатия: PCM 16-bit, частота и каналы как в исходнике. Файл будет заметно больше MP3.',
+      compact: 'PCM 16-bit, 44.1 кГц. Универсальный WAV без потери на кодеке.',
+      low: 'PCM 16-bit, моно, 22 кГц. Речь слышна, файл меньше обычного WAV.',
+      speech: 'PCM 16-bit, моно, 16 кГц. Формат для Whisper и похожих движков.',
+    },
   };
   const QUALITY_LABELS = {
     original: 'как есть',
@@ -47,30 +79,69 @@
   const player = document.getElementById('player');
   const qualityHint = document.getElementById('quality-hint');
   const qualityInputs = Array.from(document.querySelectorAll('input[name="audio-quality"]'));
+  const formatInputs = Array.from(document.querySelectorAll('input[name="audio-format"]'));
 
   let currentFile = null;
   let progressSource = null;
   let commandDirty = false;
   let previewTimer = null;
 
-  function getQuality() {
-    const selected = qualityInputs.find((el) => el.checked);
-    const value = selected && selected.value;
-    return QUALITY_ARGS[value] ? value : 'original';
+  function isAudioName(name) {
+    return AUDIO_NAME_RE.test(name || '');
   }
 
-  function setQuality(value) {
-    const id = QUALITY_ARGS[value] ? value : 'original';
-    qualityInputs.forEach((el) => {
+  function getFormat() {
+    const selected = formatInputs.find((el) => el.checked);
+    return selected && selected.value === 'wav' ? 'wav' : 'mp3';
+  }
+
+  function setFormat(value) {
+    const id = value === 'wav' ? 'wav' : 'mp3';
+    formatInputs.forEach((el) => {
       el.checked = el.value === id;
     });
-    qualityHint.textContent = QUALITY_HINTS[id];
     return id;
   }
 
-  function fallbackCommandLine(ffmpeg, input, quality) {
-    const output = input.replace(/\.[^.]+$/, '') + '.mp3';
-    const audioArgs = QUALITY_ARGS[quality] || QUALITY_ARGS.original;
+  function getQuality() {
+    const selected = qualityInputs.find((el) => el.checked);
+    const value = selected && selected.value;
+    return QUALITY_ARGS.mp3[value] ? value : 'original';
+  }
+
+  function syncQualityCopy() {
+    const format = getFormat();
+    const quality = getQuality();
+    qualityHint.textContent = QUALITY_HINTS[format][quality];
+    qualityInputs.forEach((el) => {
+      const note = el.parentElement && el.parentElement.querySelector('.ea-quality-note');
+      if (note && QUALITY_NOTES[format][el.value]) {
+        note.textContent = QUALITY_NOTES[format][el.value];
+      }
+    });
+    if (extractBtn) {
+      const name = currentFile ? currentFile.name : '';
+      if (format === 'wav' && isAudioName(name)) extractBtn.textContent = 'Превратить в WAV';
+      else if (format === 'wav') extractBtn.textContent = 'Собрать WAV';
+      else if (isAudioName(name)) extractBtn.textContent = 'Перекодировать в MP3';
+      else extractBtn.textContent = 'Извлечь звук';
+    }
+  }
+
+  function setQuality(value) {
+    const id = QUALITY_ARGS.mp3[value] ? value : 'original';
+    qualityInputs.forEach((el) => {
+      el.checked = el.value === id;
+    });
+    syncQualityCopy();
+    return id;
+  }
+
+  function fallbackCommandLine(ffmpeg, input, quality, format) {
+    const ext = format === 'wav' ? '.wav' : '.mp3';
+    const output = input.replace(/\.[^.]+$/, '') + ext;
+    const audioArgs =
+      (QUALITY_ARGS[format] && QUALITY_ARGS[format][quality]) || QUALITY_ARGS.mp3.original;
     return (
       '"' + ffmpeg + '" -hide_banner -nostdin -y -i "' + input +
       '" -vn ' + audioArgs + ' -progress pipe:1 -nostats "' + output + '"'
@@ -110,12 +181,14 @@
     if (!file) {
       fileChosen.hidden = true;
       fileDropzone.hidden = false;
+      syncQualityCopy();
       return;
     }
     fileNameEl.textContent = file.name;
     fileSizeEl.textContent = formatBytes(file.size);
     fileChosen.hidden = false;
     fileDropzone.hidden = true;
+    syncQualityCopy();
   }
 
   function showRanCommand(commandLine) {
@@ -132,10 +205,12 @@
   async function refreshCommand(force) {
     if (commandDirty && !force) return;
     const quality = getQuality();
+    const format = getFormat();
     const params = new URLSearchParams({
       ffmpegDir: ffmpegDirInput.value.trim(),
       inputName: currentFile ? currentFile.name : 'video.mp4',
       quality,
+      format,
     });
     try {
       const res = await fetch('/api/extract-audio/preview?' + params.toString());
@@ -146,7 +221,7 @@
     } catch {
       const ffmpeg = ffmpegDirInput.value.trim() || 'ffmpeg.exe';
       const input = currentFile ? currentFile.name : 'video.mp4';
-      commandEl.value = fallbackCommandLine(ffmpeg, input, quality);
+      commandEl.value = fallbackCommandLine(ffmpeg, input, quality, format);
       commandDirty = false;
     }
   }
@@ -193,6 +268,7 @@
     } else {
       ffmpegDirInput.value = DEFAULT_FFMPEG_DIR;
     }
+    setFormat(localStorage.getItem(FORMAT_STORAGE_KEY) || 'mp3');
     setQuality(localStorage.getItem(QUALITY_STORAGE_KEY) || 'original');
   }
 
@@ -231,6 +307,7 @@
       fd.append('ffmpegDir', ffmpegDir);
       fd.append('command', commandEl.value);
       fd.append('quality', getQuality());
+      fd.append('format', getFormat());
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onUploadProgress(e.loaded / e.total);
@@ -277,7 +354,10 @@
         }
         if (data.commandLine) showRanCommand(data.commandLine);
         if (typeof data.percent === 'number') {
-          setProgress(15 + data.percent * 0.85, 'Извлекаю звук через ffmpeg…');
+          setProgress(
+            15 + data.percent * 0.85,
+            getFormat() === 'wav' ? 'Собираю WAV через ffmpeg…' : 'Извлекаю звук через ffmpeg…'
+          );
         }
         if (data.status === 'ready') finish(resolve, data);
         else if (data.status === 'failed') {
@@ -304,6 +384,16 @@
       };
     });
   }
+
+  formatInputs.forEach((el) => {
+    el.addEventListener('change', () => {
+      const format = setFormat(el.value);
+      localStorage.setItem(FORMAT_STORAGE_KEY, format);
+      syncQualityCopy();
+      commandDirty = false;
+      refreshCommand(true);
+    });
+  });
 
   qualityInputs.forEach((el) => {
     el.addEventListener('change', () => {
@@ -400,21 +490,21 @@
       return;
     }
     if (!currentFile) {
-      showError('Выберите видеофайл');
+      showError('Выберите видео или аудиофайл');
       return;
     }
 
     extractBtn.disabled = true;
     showRanCommand('');
-    setProgress(0, 'Загружаю видео…');
+    setProgress(0, 'Загружаю файл…');
 
     try {
       const job = await uploadJob(currentFile, ffmpegDir, (ratio) => {
-        setProgress(ratio * 15, 'Загружаю видео…');
+        setProgress(ratio * 15, 'Загружаю файл…');
       });
       localStorage.setItem(STORAGE_KEY, ffmpegDir);
       if (job.commandLine) showRanCommand(job.commandLine);
-      setProgress(15, 'Извлекаю звук через ffmpeg…');
+      setProgress(15, getFormat() === 'wav' ? 'Собираю WAV через ffmpeg…' : 'Извлекаю звук через ffmpeg…');
       const done = await watchProgress(job.id);
       setProgress(100, 'Готово');
       showResult(done);

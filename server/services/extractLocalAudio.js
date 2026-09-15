@@ -277,16 +277,28 @@ function resolveQuality(raw) {
   return QUALITY_PRESETS[id] || QUALITY_PRESETS.original;
 }
 
-function defaultOutputName(inputName) {
+function normalizeFormat(raw) {
+  return String(raw || 'mp3').trim().toLowerCase() === 'wav' ? 'wav' : 'mp3';
+}
+
+function formatArgs(quality, format) {
+  const preset = resolveQuality(quality);
+  if (normalizeFormat(format) !== 'wav') return preset.args;
+  if (preset.id === 'speech') return ['-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le'];
+  if (preset.id === 'low') return ['-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le'];
+  if (preset.id === 'compact') return ['-ar', '44100', '-c:a', 'pcm_s16le'];
+  return ['-c:a', 'pcm_s16le'];
+}
+
+function defaultOutputName(inputName, format) {
   const base = path
     .basename(inputName || 'audio', path.extname(inputName || ''))
     .replace(/[<>:"|?*\x00-\x1f]/g, '_')
     .slice(0, 80);
-  return `${base || 'audio'}.mp3`;
+  return `${base || 'audio'}.${normalizeFormat(format)}`;
 }
 
-function defaultArgv(ffmpegPath, inputPath, outputPath, quality) {
-  const preset = resolveQuality(quality);
+function defaultArgv(ffmpegPath, inputPath, outputPath, quality, format) {
   return [
     ffmpegPath,
     '-hide_banner',
@@ -295,7 +307,7 @@ function defaultArgv(ffmpegPath, inputPath, outputPath, quality) {
     '-i',
     inputPath,
     '-vn',
-    ...preset.args,
+    ...formatArgs(quality, format),
     '-progress',
     'pipe:1',
     '-nostats',
@@ -303,9 +315,10 @@ function defaultArgv(ffmpegPath, inputPath, outputPath, quality) {
   ];
 }
 
-function previewCommand(ffmpegDir, inputName, quality) {
+function previewCommand(ffmpegDir, inputName, quality, format) {
   const input = inputName || 'video.mp4';
   const preset = resolveQuality(quality);
+  const outFormat = normalizeFormat(format);
   let ffmpegPath = 'ffmpeg.exe';
   try {
     ffmpegPath = resolveFfmpeg(ffmpegDir);
@@ -317,11 +330,18 @@ function previewCommand(ffmpegDir, inputName, quality) {
         : path.join(path.resolve(trimmed), process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
     }
   }
-  const argv = defaultArgv(ffmpegPath, input, defaultOutputName(input), preset.id);
+  const argv = defaultArgv(
+    ffmpegPath,
+    input,
+    defaultOutputName(input, outFormat),
+    preset.id,
+    outFormat
+  );
   return {
     argv,
     commandLine: formatCommand(argv),
     quality: preset.id,
+    format: outFormat,
   };
 }
 
@@ -340,7 +360,7 @@ function sanitizeOutputName(raw) {
   return cleaned.slice(0, 120);
 }
 
-function applyUserCommand(ffmpeg, sourcePath, jobDirectory, commandString, originalName) {
+function applyUserCommand(ffmpeg, sourcePath, jobDirectory, commandString, originalName, format) {
   const argv = parseArgv(commandString).map((arg) =>
     arg.replaceAll('{ffmpeg}', ffmpeg).replaceAll('{input}', sourcePath)
   );
@@ -357,7 +377,7 @@ function applyUserCommand(ffmpeg, sourcePath, jobDirectory, commandString, origi
     throw bad('Последний аргумент команды должен быть выходным файлом');
   }
   const outName = sanitizeOutputName(
-    last.replaceAll('{output}', defaultOutputName(originalName))
+    last.replaceAll('{output}', defaultOutputName(originalName, format))
   );
   const outputPath = path.join(jobDirectory, outName);
   argv[argv.length - 1] = outputPath;
@@ -385,6 +405,7 @@ function publicJob(meta) {
     commandLine: meta.commandLine || null,
     quality: meta.quality || null,
     qualityLabel: meta.qualityLabel || null,
+    format: meta.format || meta.audioExt || null,
     error: meta.error || null,
     createdAt: meta.createdAt,
     downloadUrl:
@@ -488,12 +509,13 @@ function safeDownloadName(originalName, ext) {
   return `${base || 'audio'}.${ext}`;
 }
 
-function startExtractJob({ ffmpegDir, sourcePath, originalName, command, quality }) {
+function startExtractJob({ ffmpegDir, sourcePath, originalName, command, quality, format }) {
   const ffmpeg = resolveFfmpeg(ffmpegDir);
   const id = randomUUID();
   const dir = jobDir(id);
   fs.mkdirSync(dir, { recursive: true });
   const preset = resolveQuality(quality);
+  const outFormat = normalizeFormat(format);
 
   const ext = path.extname(originalName || '').toLowerCase() || '.dat';
   const storedSource = path.join(dir, `source${ext}`);
@@ -503,10 +525,10 @@ function startExtractJob({ ffmpegDir, sourcePath, originalName, command, quality
   try {
     planned =
       command && String(command).trim()
-        ? applyUserCommand(ffmpeg, storedSource, dir, command, originalName)
+        ? applyUserCommand(ffmpeg, storedSource, dir, command, originalName, outFormat)
         : (() => {
-            const outputPath = path.join(dir, defaultOutputName(originalName));
-            const argv = defaultArgv(ffmpeg, storedSource, outputPath, preset.id);
+            const outputPath = path.join(dir, defaultOutputName(originalName, outFormat));
+            const argv = defaultArgv(ffmpeg, storedSource, outputPath, preset.id, outFormat);
             return {
               argv,
               commandLine: formatCommand(argv),
@@ -534,6 +556,7 @@ function startExtractJob({ ffmpegDir, sourcePath, originalName, command, quality
     commandLine: planned.commandLine,
     quality: preset.id,
     qualityLabel: preset.label,
+    format: planned.audioExt || outFormat,
     downloadName: null,
     bytes: null,
     error: null,

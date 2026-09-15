@@ -27,7 +27,7 @@
     {
       "id": "extract-audio",
       "title": "Извлечение аудио",
-      "description": "Достаём звук из видео через локальный ffmpeg.exe",
+      "description": "Достаём звук из видео или переводим MP3 в WAV",
       "href": "/experiments/extract-audio/",
       "status": "wip",
       "tech": ["js", "ffmpeg"]

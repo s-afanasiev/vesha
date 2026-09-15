@@ -73,6 +73,10 @@ const AUDIO_SOURCE_EXT = new Set([
   '.wma',
 ]);
 
+const COMPRESSED_AUDIO_EXT = new Set(
+  [...AUDIO_SOURCE_EXT].filter((ext) => ext !== '.wav')
+);
+
 function isAudioSource(filePath) {
   return AUDIO_SOURCE_EXT.has(path.extname(filePath || '').toLowerCase());
 }
@@ -767,6 +771,10 @@ function publicJob(meta) {
       : null,
     audioUrl: audioExists ? `/api/summarize/jobs/${meta.id}/audio` : null,
     audioMp3Url: audioExists ? `/api/summarize/jobs/${meta.id}/audio.mp3` : null,
+    sourceWavUrl:
+      sourcePath && COMPRESSED_AUDIO_EXT.has(path.extname(sourcePath).toLowerCase())
+        ? `/api/summarize/jobs/${meta.id}/source.wav`
+        : null,
     transcript: meta.transcript || null,
     transcriptUrl: meta.transcript
       ? `/api/summarize/jobs/${meta.id}/transcript.txt`
@@ -923,6 +931,89 @@ async function ensureFirstFrameJpg(id) {
   return work;
 }
 
+const wavLocks = new Map();
+
+function compressedAudioCandidate(dir, meta) {
+  const names = [];
+  if (meta && meta.sourceFile) names.push(meta.sourceFile);
+  try {
+    names.push(...fs.readdirSync(dir));
+  } catch (_) {
+    /* ignore */
+  }
+  const unique = [...new Set(names.map((n) => path.basename(n)))];
+  for (const name of unique) {
+    const ext = path.extname(name).toLowerCase();
+    if (!COMPRESSED_AUDIO_EXT.has(ext)) continue;
+    const file = path.join(dir, name);
+    if (fs.existsSync(file) && fs.statSync(file).isFile()) return file;
+  }
+  return null;
+}
+
+async function ensurePcmWavFromSource(id) {
+  const meta = readMeta(id);
+  if (!meta) {
+    const err = new Error('Задание не найдено');
+    err.status = 404;
+    throw err;
+  }
+  const dir = jobDir(id);
+  const sourcePath = findSourceFile(dir);
+  const compressed =
+    compressedAudioCandidate(dir, meta) ||
+    (sourcePath && COMPRESSED_AUDIO_EXT.has(path.extname(sourcePath).toLowerCase())
+      ? sourcePath
+      : null);
+  const existingWav =
+    sourcePath && path.extname(sourcePath).toLowerCase() === '.wav' ? sourcePath : null;
+  if (!compressed && existingWav) return existingWav;
+  if (!compressed) {
+    const err = new Error('Нет MP3 или другого сжатого аудио, чтобы собрать WAV');
+    err.status = 404;
+    throw err;
+  }
+
+  const dest = path.join(dir, 'converted.wav');
+  try {
+    if (
+      fs.existsSync(dest) &&
+      fs.statSync(dest).mtimeMs >= fs.statSync(compressed).mtimeMs &&
+      fs.statSync(dest).size > 256
+    ) {
+      return dest;
+    }
+  } catch (_) {
+    // recode
+  }
+
+  const pending = wavLocks.get(id);
+  if (pending) return pending;
+
+  const work = (async () => {
+    const { ffmpeg } = requireBins({ needYtdlp: false });
+    const tmp = path.join(dir, 'converted.tmp.wav');
+    try {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    } catch (_) {}
+    await run(
+      ffmpeg,
+      ['-y', '-i', compressed, '-vn', '-c:a', 'pcm_s16le', '-f', 'wav', tmp],
+      { timeoutMs: config.summarizeTimeoutMs }
+    );
+    if (!fs.existsSync(tmp) || fs.statSync(tmp).size < 256) {
+      throw new Error('Не удалось собрать WAV из MP3');
+    }
+    fs.renameSync(tmp, dest);
+    return dest;
+  })().finally(() => {
+    wavLocks.delete(id);
+  });
+
+  wavLocks.set(id, work);
+  return work;
+}
+
 module.exports = {
   extractAudioFromUrl,
   extractAudioFromFile,
@@ -934,4 +1025,5 @@ module.exports = {
   assertHttpUrl,
   ensureDownloadMp3,
   ensureFirstFrameJpg,
+  ensurePcmWavFromSource,
 };

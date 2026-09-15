@@ -52,7 +52,8 @@ router.get('/preview', (req, res, next) => {
     const result = previewCommand(
       req.query.ffmpegDir,
       req.query.inputName,
-      req.query.quality
+      req.query.quality,
+      req.query.format
     );
     res.json(result);
   } catch (err) {
@@ -74,7 +75,7 @@ router.post('/jobs', upload.single('file'), (req, res, next) => {
   res.setTimeout(config.extractAudioTimeoutMs + 60 * 1000);
 
   if (!req.file) {
-    return res.status(400).json({ error: 'Выберите видеофайл' });
+    return res.status(400).json({ error: 'Выберите видео или аудиофайл' });
   }
 
   try {
@@ -84,6 +85,7 @@ router.post('/jobs', upload.single('file'), (req, res, next) => {
       originalName: req.file.originalname || 'video',
       command: req.body && req.body.command,
       quality: req.body && req.body.quality,
+      format: req.body && req.body.format,
     });
     res.status(202).json(publicJob(meta));
   } catch (err) {

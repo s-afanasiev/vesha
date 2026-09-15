@@ -188,6 +188,10 @@ body.page-extract-audio {
   gap: 0.5rem;
 }
 
+.ea-quality--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .ea-quality-opt {
   position: relative;
   display: block;
@@ -362,7 +366,8 @@ body.page-extract-audio {
 }
 
 @media (max-width: 720px) {
-  .ea-quality {
+  .ea-quality,
+  .ea-quality--2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -28,7 +28,7 @@
     <header class="experiments__header">
       <div class="ea-badge">ffmpeg lab</div>
       <h1>Извлечение аудио</h1>
-      <p>Укажите папку с локальным ffmpeg.exe, выберите видео и скачайте звук.</p>
+      <p>Укажите папку с локальным ffmpeg.exe, выберите видео или MP3 и скачайте звук в MP3 или WAV.</p>
     </header>
 
     <section class="ea-card">
@@ -49,17 +49,17 @@
       </label>
 
       <div class="ea-field">
-        <span class="ea-label">Видеофайл</span>
+        <span class="ea-label">Видео или аудио</span>
         <label class="ea-dropzone" id="file-dropzone">
-          <input type="file" id="file-input" accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.wmv,.flv" />
+          <input type="file" id="file-input" accept="video/*,audio/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.wmv,.flv,.mp3,.wav,.m4a,.ogg,.aac,.flac" />
           <div class="ea-dropzone-inner">
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.6">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <p>Перетащите видео сюда или <u>выберите файл</u></p>
-            <span>MP4, MOV, WebM, MKV, AVI до 2 ГБ</span>
+            <p>Перетащите файл сюда или <u>выберите</u></p>
+            <span>MP4, MOV, WebM, MP3, WAV, M4A до 2 ГБ</span>
           </div>
         </label>
         <div class="ea-file-chosen" id="file-chosen" hidden>
@@ -72,34 +72,54 @@
       </div>
 
       <div class="ea-field">
+        <span class="ea-label">Формат</span>
+        <div class="ea-quality ea-quality--2" role="radiogroup" aria-label="Формат">
+          <label class="ea-quality-opt">
+            <input type="radio" name="audio-format" value="mp3" checked />
+            <span class="ea-quality-card">
+              <strong>MP3</strong>
+              <small>Сжатый звук</small>
+            </span>
+          </label>
+          <label class="ea-quality-opt">
+            <input type="radio" name="audio-format" value="wav" />
+            <span class="ea-quality-card">
+              <strong>WAV</strong>
+              <small>PCM без сжатия</small>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="ea-field">
         <span class="ea-label">Качество звука</span>
         <div class="ea-quality" role="radiogroup" aria-label="Качество звука">
           <label class="ea-quality-opt">
             <input type="radio" name="audio-quality" value="original" checked />
             <span class="ea-quality-card">
               <strong>Как есть</strong>
-              <small>~190 кбит/с · стерео</small>
+              <small class="ea-quality-note">~190 кбит/с · стерео</small>
             </span>
           </label>
           <label class="ea-quality-opt">
             <input type="radio" name="audio-quality" value="compact" />
             <span class="ea-quality-card">
               <strong>Компактнее</strong>
-              <small>96 кбит/с · стерео</small>
+              <small class="ea-quality-note">96 кбит/с · стерео</small>
             </span>
           </label>
           <label class="ea-quality-opt">
             <input type="radio" name="audio-quality" value="low" />
             <span class="ea-quality-card">
               <strong>Хуже</strong>
-              <small>48 кбит/с · моно</small>
+              <small class="ea-quality-note">48 кбит/с · моно</small>
             </span>
           </label>
           <label class="ea-quality-opt">
             <input type="radio" name="audio-quality" value="speech" />
             <span class="ea-quality-card">
               <strong>Для речи</strong>
-              <small>32 кбит/с · 16 кГц</small>
+              <small class="ea-quality-note">32 кбит/с · 16 кГц</small>
             </span>
           </label>
         </div>
@@ -121,7 +141,7 @@
           rows="4"
           placeholder="Команда появится после указания ffmpeg и файла"
         ></textarea>
-        <span class="ea-hint">Буквальная команда, которую запустит сервер. Можно править. Плейсхолдеры {ffmpeg}, {input}, {output} подставятся сами. Пути -i и выходного файла сервер всё равно заменит на загруженный ролик.</span>
+        <span class="ea-hint">Буквальная команда, которую запустит сервер. Можно править. Плейсхолдеры {ffmpeg}, {input}, {output} подставятся сами. Пути -i и выходного файла сервер всё равно заменит на загруженный файл.</span>
       </div>
 
       <button type="button" class="vesha-btn vesha-btn--primary ea-extract" id="extract-btn">

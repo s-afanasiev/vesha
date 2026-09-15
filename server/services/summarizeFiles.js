@@ -81,12 +81,16 @@ function listStoredMedia() {
     }
     if (sourcePath && fs.existsSync(sourcePath)) {
       const kind = sourceKind(sourcePath);
+      const ext = path.extname(sourcePath).toLowerCase();
       files.push(
         fileInfo(sourcePath, {
           kind,
           role: 'source',
           url: `/api/summarize/jobs/${id}/source`,
           downloadUrl: `/api/summarize/jobs/${id}/source?download=1`,
+          convertWavUrl: AUDIO_EXT.has(ext) && ext !== '.wav'
+            ? `/api/summarize/jobs/${id}/source.wav`
+            : null,
         })
       );
     }

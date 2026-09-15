@@ -28,6 +28,7 @@
   const continueSummarizeBtn = document.getElementById('continue-summarize-btn');
   const downloadWavLink = document.getElementById('download-wav-link');
   const downloadMp3Link = document.getElementById('download-mp3-link');
+  const downloadSourceWavLink = document.getElementById('download-source-wav-link');
   const downloadTranscriptLink = document.getElementById('download-transcript-link');
 
   const runLog = document.getElementById('run-log');
@@ -357,6 +358,17 @@
     return '';
   }
 
+  function sourceWavHref(job) {
+    if (!job) return '';
+    if (job.sourceWavUrl) return job.sourceWavUrl;
+    return '';
+  }
+
+  function sourceWavLabel(job) {
+    const name = (job && (job.sourceName || '')) || '';
+    return /\.mp3$/i.test(name) ? 'WAV из MP3' : 'Собрать WAV';
+  }
+
   function setContinueDownloadLinks(job, { transcript = false } = {}) {
     if (downloadWavLink) {
       if (job && job.audioUrl) {
@@ -373,6 +385,16 @@
         downloadMp3Link.hidden = false;
       } else {
         downloadMp3Link.hidden = true;
+      }
+    }
+    if (downloadSourceWavLink) {
+      const wav = sourceWavHref(job);
+      if (wav) {
+        downloadSourceWavLink.href = wav;
+        downloadSourceWavLink.textContent = sourceWavLabel(job);
+        downloadSourceWavLink.hidden = false;
+      } else {
+        downloadSourceWavLink.hidden = true;
       }
     }
     if (downloadTranscriptLink) {
@@ -851,6 +873,11 @@
           }</p>`
         );
       }
+      if (job.sourceWavUrl) {
+        bits.push(
+          `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(job.sourceWavUrl)}">${escapeHtml(sourceWavLabel(job))}</a>`
+        );
+      }
       if (job.posterUrl) {
         bits.push(
           `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(job.posterUrl)}" download>Скриншот первого кадра</a>`
@@ -869,6 +896,11 @@
         bits.push(
           `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(audioMp3Href(job))}">Скачать MP3</a>`
         );
+        if (job.sourceWavUrl) {
+          bits.push(
+            `<a class="vesha-btn vesha-btn--sm vesha-btn--outline" href="${escapeHtml(job.sourceWavUrl)}">${escapeHtml(sourceWavLabel(job))}</a>`
+          );
+        }
       }
       if (job.videoUrl && !hasDownloadStep && status === 'done') {
         bits.push(
@@ -1902,6 +1934,14 @@
         dlMp3.setAttribute('download', '');
         actions.appendChild(dlMp3);
       }
+      if (item.sourceWavUrl) {
+        const dlSrcWav = document.createElement('a');
+        dlSrcWav.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
+        dlSrcWav.href = item.sourceWavUrl;
+        dlSrcWav.textContent = sourceWavLabel(item);
+        dlSrcWav.setAttribute('download', '');
+        actions.appendChild(dlSrcWav);
+      }
       if (actions.childNodes.length) card.appendChild(actions);
       if (item.sourceServerPath) {
         const serverPathEl = document.createElement('p');
@@ -2109,6 +2149,14 @@
         dl.href = file.downloadUrl;
         dl.textContent = 'Скачать';
         actions.appendChild(dl);
+        if (file.convertWavUrl) {
+          const wav = document.createElement('a');
+          wav.className = 'vesha-btn vesha-btn--sm vesha-btn--outline';
+          wav.href = file.convertWavUrl;
+          wav.textContent = /\.mp3$/i.test(file.diskName || '') ? 'WAV из MP3' : 'Собрать WAV';
+          wav.setAttribute('download', '');
+          actions.appendChild(wav);
+        }
         row.appendChild(actions);
         card.appendChild(row);
       });

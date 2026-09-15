@@ -103,6 +103,9 @@ function publicRow(row) {
       : null,
     audioUrl: audioExists ? `/api/summarize/jobs/${row.id}/audio` : null,
     audioMp3Url: audioExists ? `/api/summarize/jobs/${row.id}/audio.mp3` : null,
+    sourceWavUrl: ['.mp3', '.m4a', '.ogg', '.aac', '.flac', '.opus', '.wma'].includes(sourceExt)
+      ? `/api/summarize/jobs/${row.id}/source.wav`
+      : null,
   };
 }
 
