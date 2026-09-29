@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Радар болей — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./pain-radar.css" />
+</head>
+<body class="page-experiments page-pain-radar">
+  <main class="experiments">
+    <div class="experiments__nav">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+        <div data-vesha-auth-widget></div>
+      </div>
+    </div>
+
+    <header class="experiments__header">
+      <div class="pr-badge">mock</div>
+      <h1>Радар болей</h1>
+      <p>Собираем негативные отзывы с карт (Яндекс Карты, 2ГИС), вытаскиваем боли пользователей и считаем статистику. Пока — моковые данные.</p>
+    </header>
+
+    <section class="pr-stats" id="stats" aria-label="Сводка"></section>
+
+    <section class="pr-card">
+      <table class="pr-table">
+        <thead>
+          <tr>
+            <th>Источник</th>
+            <th>Организация</th>
+            <th>Боль</th>
+            <th>Цитата</th>
+            <th>Оценка</th>
+            <th>Дата</th>
+          </tr>
+        </thead>
+        <tbody id="reviews-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/theme.js"></script>
+  <script src="/auth.js"></script>
+  <script src="./pain-radar.js"></script>
+</body>
+</html>

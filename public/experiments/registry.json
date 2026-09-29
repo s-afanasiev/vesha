@@ -39,6 +39,14 @@
       "href": "/experiments/notes-export/",
       "status": "wip",
       "tech": ["js", "llm", "marked"]
+    },
+    {
+      "id": "pain-radar",
+      "title": "Радар болей",
+      "description": "Негативные отзывы с карт → боли пользователей и статистика",
+      "href": "/experiments/pain-radar/",
+      "status": "wip",
+      "tech": ["js", "parsing", "llm"]
     }
   ]
 }

@@ -1,0 +1,110 @@
+/* Радар болей — локальные стили эксперимента */
+
+.page-pain-radar .pr-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--accent-soft, #e8e0d4);
+  color: var(--accent, #8a6d3b);
+  margin-bottom: 8px;
+}
+
+.page-pain-radar .pr-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.page-pain-radar .pr-stat {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e3ddd2);
+  background: var(--card-bg, #fff);
+}
+
+.page-pain-radar .pr-stat__value {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.page-pain-radar .pr-stat__label {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.page-pain-radar .pr-card {
+  border: 1px solid var(--border, #e3ddd2);
+  border-radius: 12px;
+  background: var(--card-bg, #fff);
+  overflow-x: auto;
+}
+
+.page-pain-radar .pr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.page-pain-radar .pr-table th,
+.page-pain-radar .pr-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border, #e3ddd2);
+}
+
+.page-pain-radar .pr-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+.page-pain-radar .pr-table tr:last-child td {
+  border-bottom: none;
+}
+
+.page-pain-radar .pr-source {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.page-pain-radar .pr-source--yandex {
+  background: #ffe9e9;
+  color: #b3261e;
+}
+
+.page-pain-radar .pr-source--2gis {
+  background: #e4f4e8;
+  color: #1e7d3c;
+}
+
+.page-pain-radar .pr-pain {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.page-pain-radar .pr-quote {
+  max-width: 420px;
+  opacity: 0.85;
+}
+
+.page-pain-radar .pr-rating {
+  white-space: nowrap;
+  font-weight: 600;
+  color: #b3261e;
+}
