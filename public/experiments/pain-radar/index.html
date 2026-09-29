@@ -13,6 +13,7 @@
     }
   </script>
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/llm-picker.css" />
   <link rel="stylesheet" href="./pain-radar.css" />
 </head>
 <body class="page-experiments page-pain-radar">
@@ -26,32 +27,317 @@
     </div>
 
     <header class="experiments__header">
-      <div class="pr-badge">mock</div>
+      <div class="pr-badge">mock · демо-данные</div>
       <h1>Радар болей</h1>
-      <p>Собираем негативные отзывы с карт (Яндекс Карты, 2ГИС), вытаскиваем боли пользователей и считаем статистику. Пока — моковые данные.</p>
+      <p>Жалобы из отзывов на картах → боли клиентов локального бизнеса → карта востребованных ниш и идеи дела. Сейчас — интерфейс первой версии на демо-данных, без бэкенда.</p>
     </header>
 
-    <section class="pr-stats" id="stats" aria-label="Сводка"></section>
+    <nav class="pr-tabs" id="pr-tabs" role="tablist" aria-label="Разделы радара">
+      <button type="button" class="pr-tab" role="tab" id="tab-map" aria-controls="panel-map" data-tab="map">Карта болей</button>
+      <button type="button" class="pr-tab" role="tab" id="tab-collect" aria-controls="panel-collect" data-tab="collect">Сбор</button>
+      <button type="button" class="pr-tab" role="tab" id="tab-ideas" aria-controls="panel-ideas" data-tab="ideas">Идеи</button>
+      <button type="button" class="pr-tab" role="tab" id="tab-history" aria-controls="panel-history" data-tab="history">История</button>
+    </nav>
 
-    <section class="pr-card">
-      <table class="pr-table">
-        <thead>
-          <tr>
-            <th>Источник</th>
-            <th>Организация</th>
-            <th>Боль</th>
-            <th>Цитата</th>
-            <th>Оценка</th>
-            <th>Дата</th>
-          </tr>
-        </thead>
-        <tbody id="reviews-body"></tbody>
-      </table>
+    <section class="pr-panel" id="panel-map" role="tabpanel" aria-labelledby="tab-map">
+      <div class="pr-card">
+        <div class="pr-filters">
+          <label class="pr-field">
+            <span class="pr-label">Город</span>
+            <select id="map-city">
+              <option>Томск</option>
+              <option>Новосибирск</option>
+              <option>Кемерово</option>
+            </select>
+          </label>
+          <label class="pr-field">
+            <span class="pr-label">Ниша</span>
+            <select id="map-niche">
+              <option>Автосервисы</option>
+              <option>Стоматологии</option>
+              <option>Кофейни</option>
+              <option>Салоны красоты</option>
+            </select>
+          </label>
+          <label class="pr-field">
+            <span class="pr-label">Период</span>
+            <select id="map-period">
+              <option value="3">за 3 месяца</option>
+              <option value="6">за 6 месяцев</option>
+              <option value="12" selected>за 12 месяцев</option>
+              <option value="24">за 24 месяца</option>
+            </select>
+          </label>
+          <div class="pr-field">
+            <span class="pr-label">Источники</span>
+            <div class="pr-chips">
+              <span class="pr-chip">2ГИС</span>
+              <span class="pr-chip pr-chip--off" title="Второй источник — фаза 6">Яндекс · скоро</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pr-toggles">
+          <label class="pr-switch">
+            <input type="checkbox" id="map-four-stars" checked />
+            <span class="pr-switch__ui" aria-hidden="true"></span>
+            <span class="pr-switch__text">4★ с «но» — тоже негатив</span>
+          </label>
+          <label class="pr-switch">
+            <input type="checkbox" id="map-soft-only" checked />
+            <span class="pr-switch__ui" aria-hidden="true"></span>
+            <span class="pr-switch__text">Только софт-категории</span>
+          </label>
+          <div class="pr-metric">
+            <span class="pr-hint">Считать</span>
+            <div class="pr-seg" role="radiogroup" aria-label="Мера боли">
+              <label><input type="radio" name="map-metric" value="share" checked /><span>Доля организаций</span></label>
+              <label><input type="radio" name="map-metric" value="count" /><span>Число жалоб</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="pr-context" id="map-context"></p>
+      <div class="pr-kpis" id="map-kpis" aria-live="polite"></div>
+
+      <div class="pr-card">
+        <div class="pr-card__head">
+          <h2>Боли ниши</h2>
+          <span class="pr-hint">Нажмите на боль — ниже появятся цитаты и носители</span>
+        </div>
+        <div class="pr-rank">
+          <div class="pr-rank__head" aria-hidden="true">
+            <span>Боль → какой софт нужен</span>
+            <span id="map-rank-measure">Доля организаций с болью</span>
+            <span></span>
+            <span>Тренд</span>
+          </div>
+          <div id="map-rank"></div>
+        </div>
+        <p class="pr-meta" id="map-rank-meta"></p>
+      </div>
+
+      <div class="pr-card" id="map-detail" aria-live="polite"></div>
+    </section>
+
+    <section class="pr-panel" id="panel-collect" role="tabpanel" aria-labelledby="tab-collect" hidden>
+      <div class="pr-card">
+        <div class="pr-card__head">
+          <h2>Новый сбор</h2>
+          <span class="pr-tag">гостю — 1 сбор в день</span>
+        </div>
+
+        <div class="pr-seg" role="radiogroup" aria-label="Что собираем">
+          <label><input type="radio" name="collect-mode" value="url" checked /><span>Ссылка на организацию</span></label>
+          <label><input type="radio" name="collect-mode" value="niche" /><span>Ниша и город</span></label>
+          <label><input type="radio" name="collect-mode" value="paste" /><span>Вставить отзывы</span></label>
+        </div>
+
+        <div data-collect-mode="url">
+          <label class="pr-field">
+            <span class="pr-label">Ссылка на карточку в 2ГИС</span>
+            <input type="url" id="collect-url" placeholder="https://2gis.ru/tomsk/firm/70000001012345678" autocomplete="off" />
+          </label>
+        </div>
+
+        <div data-collect-mode="niche" hidden>
+          <div class="pr-grid">
+            <label class="pr-field">
+              <span class="pr-label">Город</span>
+              <select id="collect-city">
+                <option>Томск</option>
+                <option>Новосибирск</option>
+                <option>Кемерово</option>
+              </select>
+            </label>
+            <label class="pr-field">
+              <span class="pr-label">Ниша (рубрика 2ГИС)</span>
+              <select id="collect-niche">
+                <option>Автосервисы</option>
+                <option>Стоматологии</option>
+                <option>Кофейни</option>
+                <option>Салоны красоты</option>
+              </select>
+            </label>
+            <label class="pr-field">
+              <span class="pr-label">Организаций, не больше: <output id="collect-max-out" for="collect-max">40</output></span>
+              <input type="range" id="collect-max" min="10" max="100" step="10" value="40" />
+            </label>
+          </div>
+        </div>
+
+        <div data-collect-mode="paste" hidden>
+          <label class="pr-field">
+            <span class="pr-label">Отзывы — по одному в строке или CSV «оценка;дата;текст»</span>
+            <textarea id="collect-paste" rows="6" spellcheck="false" placeholder="2;12.09.2026;Дозвониться невозможно, записался через знакомого"></textarea>
+          </label>
+          <p class="pr-hint">Проверка тезиса до парсера: разметка работает на вставленном тексте, источник не трогаем.</p>
+        </div>
+
+        <div class="pr-grid">
+          <label class="pr-field">
+            <span class="pr-label">Глубина истории</span>
+            <select id="collect-depth">
+              <option value="6">6 месяцев</option>
+              <option value="12">12 месяцев</option>
+              <option value="24" selected>24 месяца</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="pr-switch">
+          <input type="checkbox" id="collect-llm" checked />
+          <span class="pr-switch__ui" aria-hidden="true"></span>
+          <span class="pr-switch__text">
+            <strong>Размечать боли через LLM</strong>
+            <small>Выкл — только отбор негатива по оценке, как на фазе 2.</small>
+          </span>
+        </label>
+
+        <div id="collect-llm-box">
+          <div data-vesha-llm-picker></div>
+        </div>
+
+        <p class="pr-error" id="collect-error" role="alert" hidden></p>
+        <div class="pr-actions">
+          <button type="button" class="vesha-btn vesha-btn--primary" id="collect-run">Запустить сбор</button>
+          <span class="pr-hint">Демо: квота не списывается, сбор имитируется.</span>
+        </div>
+      </div>
+
+      <div class="pr-card" id="collect-job" aria-live="polite" hidden></div>
+    </section>
+
+    <section class="pr-panel" id="panel-ideas" role="tabpanel" aria-labelledby="tab-ideas" hidden>
+      <div class="pr-card">
+        <div class="pr-card__head">
+          <h2>Идеи на реальных болях</h2>
+          <span class="pr-hint" id="ideas-llm">LLM: выбор на вкладке «Сбор»</span>
+        </div>
+
+        <div class="pr-seg" role="radiogroup" aria-label="Режим">
+          <label><input type="radio" name="ideas-mode" value="pick" checked /><span>Подобрать идеи</span></label>
+          <label><input type="radio" name="ideas-mode" value="check" /><span>Проверить мою идею</span></label>
+        </div>
+
+        <div data-ideas-mode="pick">
+          <div class="pr-grid">
+            <label class="pr-field">
+              <span class="pr-label">Город</span>
+              <select id="ideas-city">
+                <option>Томск</option>
+                <option>Новосибирск</option>
+                <option>Кемерово</option>
+              </select>
+            </label>
+            <label class="pr-field">
+              <span class="pr-label">Бюджет на старт</span>
+              <select id="ideas-budget">
+                <option>до 300 тыс ₽</option>
+                <option selected>300 тыс – 1 млн ₽</option>
+                <option>1–5 млн ₽</option>
+                <option>больше 5 млн ₽</option>
+              </select>
+            </label>
+            <label class="pr-field">
+              <span class="pr-label">Формат</span>
+              <select id="ideas-format">
+                <option>не важно</option>
+                <option>офлайн-точка</option>
+                <option>онлайн-сервис</option>
+              </select>
+            </label>
+            <label class="pr-field">
+              <span class="pr-label">Навыки</span>
+              <input type="text" id="ideas-skills" placeholder="продажи, 1С, ремонт авто" autocomplete="off" />
+            </label>
+            <label class="pr-field">
+              <span class="pr-label">Образование</span>
+              <input type="text" id="ideas-education" placeholder="инженер-механик" autocomplete="off" />
+            </label>
+            <label class="pr-field">
+              <span class="pr-label">Время</span>
+              <select id="ideas-time">
+                <option>полный день</option>
+                <option>по вечерам и выходным</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="pr-fun">
+            <label class="pr-switch">
+              <input type="checkbox" id="ideas-fun" />
+              <span class="pr-switch__ui" aria-hidden="true"></span>
+              <span class="pr-switch__text">
+                <strong>Игровые поля</strong>
+                <small>Влияют только на тон ответа, не на подбор.</small>
+              </span>
+            </label>
+            <label class="pr-field pr-field--compact" id="ideas-sign-field" hidden>
+              <span class="pr-label">Знак зодиака</span>
+              <select id="ideas-sign">
+                <option>Овен</option>
+                <option>Телец</option>
+                <option>Близнецы</option>
+                <option>Рак</option>
+                <option>Лев</option>
+                <option>Дева</option>
+                <option>Весы</option>
+                <option>Скорпион</option>
+                <option>Стрелец</option>
+                <option>Козерог</option>
+                <option>Водолей</option>
+                <option>Рыбы</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div data-ideas-mode="check" hidden>
+          <label class="pr-field">
+            <span class="pr-label">Опишите идею</span>
+            <textarea id="ideas-idea" rows="3" placeholder="Онлайн-запись с напоминаниями для автосервисов в Томске"></textarea>
+          </label>
+        </div>
+
+        <p class="pr-error" id="ideas-error" role="alert" hidden></p>
+        <div class="pr-actions">
+          <button type="button" class="vesha-btn vesha-btn--primary" id="ideas-run">Подобрать идеи</button>
+          <span class="pr-hint">Модель — общий выбор LLM на вкладке «Сбор».</span>
+        </div>
+      </div>
+
+      <div id="ideas-result" aria-live="polite"></div>
+    </section>
+
+    <section class="pr-panel" id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+      <div class="pr-card">
+        <div class="pr-card__head">
+          <h2>История запусков</h2>
+          <span class="pr-hint">Сборы и подборы идей этого браузера</span>
+        </div>
+        <div class="pr-table-wrap">
+          <table class="pr-table">
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Тип</th>
+                <th>Запрос</th>
+                <th>Итог</th>
+                <th><span class="pr-visually-hidden">Действие</span></th>
+              </tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </main>
 
   <script src="/theme.js"></script>
   <script src="/auth.js"></script>
+  <script src="/llm-picker.js"></script>
   <script src="./pain-radar.js"></script>
 </body>
 </html>
