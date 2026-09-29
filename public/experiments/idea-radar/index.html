@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Радар идей — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./idea-radar.css" />
+</head>
+<body class="page-experiments page-idea-radar">
+  <main class="experiments">
+    <div class="experiments__nav">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+        <div data-vesha-auth-widget></div>
+      </div>
+    </div>
+
+    <header class="experiments__header">
+      <div class="ir-badge">фаза 1 · без LLM</div>
+      <h1>Радар идей</h1>
+      <p>Сырьё из открытых лент Курской области: госакты, новости, вакансии. Персона — человек, которому близок ремонт автомобилей. Пока только сбор и подсчёт упоминаний, без разметки сдвигов.</p>
+    </header>
+
+    <section class="ir-card" aria-labelledby="sources-title">
+      <div class="ir-card__head">
+        <h2 id="sources-title">Источники</h2>
+        <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="poll-all">Опросить все</button>
+      </div>
+      <p class="ir-status" id="poll-status" role="status" aria-live="polite"></p>
+      <div class="ir-table-wrap">
+        <table class="ir-table ir-sources">
+          <thead>
+            <tr>
+              <th scope="col">Источник</th>
+              <th scope="col">Последний опрос</th>
+              <th scope="col" class="ir-num">Новых</th>
+              <th scope="col" class="ir-num">Всего</th>
+              <th scope="col">Свежая публикация</th>
+              <th scope="col"><span class="ir-visually-hidden">Действие</span></th>
+            </tr>
+          </thead>
+          <tbody id="sources-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="ir-card" aria-labelledby="counts-title">
+      <div class="ir-card__head">
+        <h2 id="counts-title">Упоминания ниш по неделям</h2>
+        <span class="ir-hint">Совпадения по синонимам из словаря ниш. Нажмите на число — лента ниже покажет эти публикации</span>
+      </div>
+      <div class="ir-table-wrap">
+        <table class="ir-table ir-counts" id="counts-table"></table>
+      </div>
+      <p class="ir-meta">Неделя — с понедельника по московскому времени. Публикации без даты не считаются. Строка «Всего публикаций» — знаменатель: без неё рост ниши не отличить от роста потока.</p>
+    </section>
+
+    <section class="ir-card" aria-labelledby="feed-title">
+      <div class="ir-card__head">
+        <h2 id="feed-title">Лента</h2>
+        <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="feed-reset" hidden>Сбросить фильтры</button>
+      </div>
+      <form class="ir-filters" id="feed-filters">
+        <label class="ir-field">
+          <span class="ir-label">Источник</span>
+          <select id="feed-source"><option value="">все</option></select>
+        </label>
+        <label class="ir-field">
+          <span class="ir-label">Ниша</span>
+          <select id="feed-niche"><option value="">все</option></select>
+        </label>
+        <label class="ir-field">
+          <span class="ir-label">Неделя</span>
+          <select id="feed-week"><option value="">все</option></select>
+        </label>
+        <label class="ir-field ir-field--grow">
+          <span class="ir-label">Поиск</span>
+          <input type="search" id="feed-q" placeholder="слово в заголовке или лиде" autocomplete="off" />
+        </label>
+      </form>
+      <ol class="ir-feed" id="feed-list" aria-live="polite"></ol>
+      <p class="ir-empty" id="feed-empty" hidden>Пока пусто. Нажмите «Опросить все».</p>
+      <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm ir-more" id="feed-more" hidden>Показать ещё</button>
+    </section>
+  </main>
+
+  <script src="/theme.js"></script>
+  <script src="/auth.js"></script>
+  <script src="./idea-radar.js"></script>
+</body>
+</html>

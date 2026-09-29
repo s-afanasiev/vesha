@@ -21,6 +21,7 @@
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "fast-xml-parser": "^5.11.2",
     "google-auth-library": "^11.0.1",
     "marked": "^18.0.13",
     "multer": "^2.2.0",

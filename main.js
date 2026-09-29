@@ -11,6 +11,8 @@ const summarizeRoutes = require('./server/routes/summarize');
 const extractAudioRoutes = require('./server/routes/extractAudio');
 const notesExportRoutes = require('./server/routes/notesExport');
 const llmRoutes = require('./server/routes/llm');
+const ideaRadarRoutes = require('./server/routes/ideaRadar');
+const { startIdeaRadarSchedule } = require('./server/services/idea-radar/schedule');
 
 const app = express();
 
@@ -29,6 +31,7 @@ app.use('/api/summarize', summarizeRoutes);
 app.use('/api/extract-audio', extractAudioRoutes);
 app.use('/api/notes-export', notesExportRoutes);
 app.use('/api/llm', llmRoutes);
+app.use('/api/idea-radar', ideaRadarRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);
 
@@ -66,6 +69,7 @@ async function start() {
     } catch (histErr) {
       console.warn('summarize_jobs table missing/unavailable:', histErr.message);
     }
+    startIdeaRadarSchedule();
   } catch (err) {
     console.warn('DB migrate skipped/failed:', err.message);
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');

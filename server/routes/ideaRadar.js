@@ -1,0 +1,85 @@
+// /api/idea-radar — фаза 1: источники, ручной опрос, лента, примитивный счётчик ниш.
+// Ручки тонкие: ошибки ловит общий обработчик в main.js (Express 5 передаёт ему отклонённые промисы).
+const express = require('express');
+const { pollAll } = require('../services/idea-radar/poller');
+const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
+const { lastWeeks, weekStartsAt, weeklyNicheCounts } = require('../services/idea-radar/keywords');
+const { loadNiches, buildNicheMatcher } = require('../services/radar/niches');
+
+const router = express.Router();
+
+// Фильтр по нише считается в JS по свежему окну ленты — на объёмах фазы 1 этого хватает.
+const NICHE_FILTER_WINDOW = 3000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function intParam(value, fallback, min, max) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function textParam(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text ? text.slice(0, 200) : null;
+}
+
+function weekRange(week) {
+  if (!week || !/^\d{4}-\d{2}-\d{2}$/.test(week)) return {};
+  const from = weekStartsAt(week);
+  if (!Number.isFinite(from.getTime())) return {};
+  return { from, to: new Date(from.getTime() + WEEK_MS) };
+}
+
+function searchableText(pub) {
+  return `${pub.title} ${pub.lead || ''}`;
+}
+
+router.get('/sources', async (_req, res) => {
+  res.json({ sources: await listSources() });
+});
+
+router.post('/polls', async (req, res) => {
+  const results = await pollAll({ sourceSlug: textParam(req.body && req.body.source) });
+  res.json({ results, sources: await listSources() });
+});
+
+router.get('/publications', async (req, res) => {
+  const limit = intParam(req.query.limit, 50, 1, 200);
+  const offset = intParam(req.query.offset, 0, 0, 100000);
+  const niche = textParam(req.query.niche);
+  const filters = {
+    sourceSlug: textParam(req.query.source),
+    q: textParam(req.query.q),
+    ...weekRange(textParam(req.query.week)),
+  };
+  const matchNiches = buildNicheMatcher(await loadNiches());
+
+  let items;
+  let hasMore;
+  if (niche) {
+    const window = await listPublications({ ...filters, limit: NICHE_FILTER_WINDOW, offset: 0 });
+    const matched = window.filter((pub) => matchNiches(searchableText(pub)).includes(niche));
+    items = matched.slice(offset, offset + limit);
+    hasMore = matched.length > offset + limit;
+  } else {
+    const rows = await listPublications({ ...filters, limit: limit + 1, offset });
+    items = rows.slice(0, limit);
+    hasMore = rows.length > limit;
+  }
+
+  res.json({
+    items: items.map((pub) => ({ ...pub, niches: matchNiches(searchableText(pub)) })),
+    hasMore,
+  });
+});
+
+router.get('/keywords', async (req, res) => {
+  const weeks = lastWeeks(new Date(), intParam(req.query.weeks, 8, 1, 26));
+  const niches = await loadNiches();
+  const publications = await publicationsSince(weekStartsAt(weeks[0]));
+  res.json(
+    weeklyNicheCounts({ publications, niches, matchNiches: buildNicheMatcher(niches), weeks })
+  );
+});
+
+module.exports = router;

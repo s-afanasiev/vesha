@@ -47,6 +47,14 @@
       "href": "/experiments/pain-radar/",
       "status": "wip",
       "tech": ["js", "parsing", "llm"]
+    },
+    {
+      "id": "idea-radar",
+      "title": "Радар идей",
+      "description": "Новости, госакты и вакансии региона → сдвиги и идеи",
+      "href": "/experiments/idea-radar/",
+      "status": "wip",
+      "tech": ["js", "rss", "postgres"]
     }
   ]
 }

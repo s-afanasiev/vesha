@@ -113,6 +113,12 @@ const config = {
     ),
   extractAudioTimeoutMs: intEnv('EXTRACT_AUDIO_TIMEOUT_MS', 30 * 60 * 1000),
   extractAudioMaxFilesize: intEnv('EXTRACT_AUDIO_MAX_FILESIZE', 2 * 1024 * 1024 * 1024),
+  // Радар идей: опрос лент. Таймаут страницы меньше дедлайна опроса источника (П23).
+  ideaRadarMinPollIntervalSec: intEnv('IDEA_RADAR_MIN_POLL_INTERVAL_SEC', 300),
+  ideaRadarPollEveryMin: intEnv('IDEA_RADAR_POLL_EVERY_MIN', 0),
+  ideaRadarPageTimeoutMs: intEnv('IDEA_RADAR_PAGE_TIMEOUT_MS', 20 * 1000),
+  ideaRadarPollDeadlineMs: intEnv('IDEA_RADAR_POLL_DEADLINE_MS', 90 * 1000),
+  ideaRadarMaxBytes: intEnv('IDEA_RADAR_MAX_BYTES', 5 * 1024 * 1024),
 };
 
 module.exports = config;

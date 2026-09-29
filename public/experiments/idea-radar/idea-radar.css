@@ -1,0 +1,384 @@
+/* Радар идей — локальные стили эксперимента */
+
+:root {
+  --ir-accent: #2f6f6a;
+  --ir-accent-soft: rgba(47, 111, 106, 0.1);
+  --ir-accent-border: rgba(47, 111, 106, 0.35);
+  --ir-warn-text: #9a5b0b;
+  --ir-warn-bg: rgba(202, 138, 4, 0.12);
+  --ir-warn-border: rgba(202, 138, 4, 0.35);
+}
+
+html[data-theme="sand"] {
+  --ir-accent: #4f6b3a;
+  --ir-accent-soft: rgba(79, 107, 58, 0.14);
+  --ir-accent-border: rgba(79, 107, 58, 0.4);
+}
+
+body.page-idea-radar [hidden] {
+  display: none !important;
+}
+
+body.page-idea-radar .experiments {
+  width: min(1040px, 100%);
+}
+
+.page-idea-radar .ir-badge {
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ir-accent);
+  background: var(--ir-accent-soft);
+  border: 1px solid var(--ir-accent-border);
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+}
+
+.ir-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Карточки */
+
+.ir-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+  padding: 1.15rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px var(--shadow);
+  min-width: 0;
+}
+
+.ir-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ir-card__head h2 {
+  margin: 0;
+  font-size: 1.12rem;
+  color: var(--text-heading);
+}
+
+.page-idea-radar .ir-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.page-idea-radar .ir-meta {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.ir-status {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.ir-status:empty {
+  display: none;
+}
+
+.ir-status--error {
+  color: var(--danger-text);
+}
+
+/* Таблицы */
+
+/* position: relative — иначе скрытая подпись колонки (absolute) вылезает за прокрутку и расширяет страницу на телефоне */
+.ir-table-wrap {
+  position: relative;
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+}
+
+.ir-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.ir-table th,
+.ir-table td {
+  padding: 0.5rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+
+.ir-table thead th {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ir-table tbody tr:last-child td,
+.ir-table tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+.ir-table .ir-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ir-source-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.ir-source-name a {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.ir-source-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.ir-chip {
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--ir-accent);
+  background: var(--ir-accent-soft);
+  border: 1px solid var(--ir-accent-border);
+  padding: 0.05rem 0.4rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.ir-chip--muted {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border);
+}
+
+.ir-outcome {
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.05rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ir-outcome--ok {
+  color: var(--ok-text);
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+}
+
+.ir-outcome--partial,
+.ir-outcome--skipped {
+  color: var(--ir-warn-text);
+  background: var(--ir-warn-bg);
+  border-color: var(--ir-warn-border);
+}
+
+.ir-outcome--failed {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.ir-poll-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 9rem;
+}
+
+.ir-poll-when {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ir-poll-error {
+  font-size: 0.76rem;
+  color: var(--danger-text);
+  overflow-wrap: anywhere;
+}
+
+/* Счётчик */
+
+.ir-counts th[scope="row"] {
+  font-weight: 500;
+  color: var(--text);
+  min-width: 12rem;
+}
+
+.ir-counts .ir-row--parent th[scope="row"] {
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.ir-counts .ir-row--child th[scope="row"] {
+  padding-left: 1.2rem;
+}
+
+.ir-counts .ir-row--total th,
+.ir-counts .ir-row--total td {
+  color: var(--text-muted);
+  border-top: 2px solid var(--border);
+}
+
+.ir-cell-btn {
+  appearance: none;
+  min-width: 2rem;
+  padding: 0.1rem 0.35rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-heading);
+  background: var(--ir-accent-soft);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ir-cell-btn:hover,
+.ir-cell-btn:focus-visible {
+  border-color: var(--ir-accent-border);
+  outline: none;
+}
+
+.ir-cell-btn[aria-pressed="true"] {
+  color: var(--btn-primary-text);
+  background: var(--ir-accent);
+}
+
+.ir-zero {
+  color: var(--text-faint);
+}
+
+/* Фильтры и лента */
+
+.ir-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.75rem;
+}
+
+.ir-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 9rem;
+}
+
+.ir-field--grow {
+  flex: 1 1 14rem;
+}
+
+.ir-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.ir-field select,
+.ir-field input {
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.ir-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ir-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+
+.ir-item:last-child {
+  border-bottom: 0;
+}
+
+.ir-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.ir-item__title {
+  font-weight: 600;
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+
+.ir-item__lead {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.ir-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.ir-more {
+  align-self: flex-start;
+}
+
+@media (max-width: 640px) {
+  .ir-card {
+    padding: 0.9rem;
+  }
+
+  .ir-field {
+    flex: 1 1 100%;
+  }
+}
