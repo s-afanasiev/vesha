@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Суперсправочник — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./super-notes.css" />
+</head>
+<body class="page-experiments page-super-notes">
+  <main class="experiments">
+    <div class="experiments__nav">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+        <div data-vesha-auth-widget></div>
+      </div>
+    </div>
+
+    <header class="experiments__header sn-header">
+      <div class="sn-header__badge">эксперимент · pgvector & FTS</div>
+      <div class="sn-header__row">
+        <div>
+          <h1>📚 Суперсправочник</h1>
+          <p class="sn-subtitle">Персональный хаб для заметок, полезных ссылок, сниппетов и иерархических подборок с поиском по смыслу.</p>
+        </div>
+        <button type="button" class="vesha-btn vesha-btn--primary sn-new-btn" id="btn-open-create">
+          + Новая заметка
+        </button>
+      </div>
+    </header>
+
+    <!-- Поисковая панель -->
+    <section class="sn-search-bar-wrap">
+      <div class="sn-search-bar">
+        <span class="sn-search-icon">🔍</span>
+        <input 
+          type="search" 
+          id="sn-search-input" 
+          class="sn-search-input" 
+          placeholder="Поиск по заметкам, ссылкам, тегам или смыслу... (Ctrl+K)" 
+          autocomplete="off"
+        />
+        <button type="button" id="sn-search-clear" class="sn-search-clear" title="Очистить" hidden>✕</button>
+        <div class="sn-search-mode">
+          <label class="sn-mode-label" title="Семантический поиск понимает смысл фразы, даже если слова не совпадают">
+            <input type="checkbox" id="sn-semantic-toggle" />
+            <span class="sn-mode-text">🧠 По смыслу (AI)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Активные фильтры -->
+      <div class="sn-active-filters" id="sn-active-filters" hidden>
+        <span class="sn-filter-label">Фильтр:</span>
+        <span class="sn-filter-pill" id="sn-active-filter-pill">
+          <span id="sn-active-filter-text"></span>
+          <button type="button" id="sn-active-filter-remove">✕</button>
+        </span>
+      </div>
+    </section>
+
+    <!-- Основной лейаут: Сайдбар + Лента -->
+    <div class="sn-layout">
+      <!-- Боковая колонка -->
+      <aside class="sn-sidebar">
+        <!-- Навигация -->
+        <div class="sn-side-card">
+          <h3 class="sn-side-title">Навигация</h3>
+          <nav class="sn-nav-list">
+            <button type="button" class="sn-nav-item active" data-filter="all">
+              <span>📋 Все заметки</span>
+              <span class="sn-badge" id="count-all">0</span>
+            </button>
+            <button type="button" class="sn-nav-item" data-filter="pinned">
+              <span>📌 Закрепленные</span>
+              <span class="sn-badge" id="count-pinned">0</span>
+            </button>
+            <button type="button" class="sn-nav-item" data-filter="trees">
+              <span>🌳 Подборки и деревья</span>
+              <span class="sn-badge" id="count-trees">0</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Облако тегов -->
+        <div class="sn-side-card">
+          <div class="sn-side-card-head">
+            <h3 class="sn-side-title">🏷️ Облако тегов</h3>
+            <span class="sn-side-hint" id="tags-total-count">0</span>
+          </div>
+          <div class="sn-tag-cloud" id="sn-tag-cloud">
+            <p class="sn-empty-hint">Пока нет тегов</p>
+          </div>
+        </div>
+
+        <!-- Быстрый демо-генератор -->
+        <div class="sn-side-card sn-quick-card">
+          <h3 class="sn-side-title">💡 Демо-кейс</h3>
+          <p class="sn-side-text">Загрузить пример иерархической заметки (4 менеджера пакетов Linux под одним корнем):</p>
+          <button type="button" class="vesha-btn vesha-btn--sm" id="btn-seed-linux">
+            + Пример с Linux-пакетами
+          </button>
+        </div>
+      </aside>
+
+      <!-- Центральная лента заметок -->
+      <section class="sn-content">
+        <!-- Блок быстрого создания (разворачиваемый) -->
+        <div class="sn-form-card" id="sn-create-card" hidden>
+          <div class="sn-form-head">
+            <h2 id="sn-form-title">Новая запись</h2>
+            <button type="button" class="sn-close-btn" id="btn-close-form">✕</button>
+          </div>
+
+          <form id="sn-note-form" class="sn-form">
+            <input type="hidden" id="note-id" value="" />
+
+            <div class="sn-form-field">
+              <label for="note-title">Заголовок</label>
+              <input type="text" id="note-title" required placeholder="Например: Пакетные менеджеры Linux или Рецепты Docker" />
+            </div>
+
+            <div class="sn-form-field">
+              <label for="note-tags">Теги (через запятую или #)</label>
+              <input type="text" id="note-tags" placeholder="#linux, #tools, devops" />
+            </div>
+
+            <div class="sn-form-field">
+              <div class="sn-label-row">
+                <label for="note-content">Содержимое (текст, ссылки, списки)</label>
+                <span class="sn-field-hint">Поддерживает формат: Название - URL - Описание</span>
+              </div>
+              <textarea 
+                id="note-content" 
+                rows="6" 
+                placeholder="plasma-discover - https://userbase.kde.org/Discover - GUI центр KDE&#10;stplr - https://github.com/stplr - CLI менеджер&#10;apm - https://atom.io - Пакетный менеджер&#10;flatpak - https://flatpak.org - Песочницы приложений"
+              ></textarea>
+            </div>
+
+            <div class="sn-form-row">
+              <label class="sn-checkbox-label">
+                <input type="checkbox" id="note-pinned" />
+                <span>📌 Закрепить вверху</span>
+              </label>
+
+              <div class="sn-form-actions">
+                <button type="button" class="vesha-btn" id="btn-cancel-form">Отмена</button>
+                <button type="submit" class="vesha-btn vesha-btn--primary" id="btn-submit-note">Сохранить</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Статус загрузки или ошибок -->
+        <div id="sn-status-message" class="sn-status" role="status" aria-live="polite" hidden></div>
+
+        <!-- Лента карточек -->
+        <div class="sn-notes-grid" id="sn-notes-grid">
+          <div class="sn-loading-skeleton">Загрузка заметок...</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="/auth.js"></script>
+  <script type="module" src="./super-notes.js"></script>
+</body>
+</html>

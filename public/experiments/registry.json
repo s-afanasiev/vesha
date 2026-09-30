@@ -55,6 +55,14 @@
       "href": "/experiments/idea-radar/",
       "status": "wip",
       "tech": ["js", "rss", "postgres"]
+    },
+    {
+      "id": "super-notes",
+      "title": "Суперсправочник",
+      "description": "Заметки, полезные ссылки, иерархические подборки и семантический поиск",
+      "href": "/experiments/super-notes/",
+      "status": "wip",
+      "tech": ["js", "postgres", "pgvector"]
     }
   ]
 }

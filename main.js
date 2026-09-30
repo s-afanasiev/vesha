@@ -12,6 +12,7 @@ const extractAudioRoutes = require('./server/routes/extractAudio');
 const notesExportRoutes = require('./server/routes/notesExport');
 const llmRoutes = require('./server/routes/llm');
 const ideaRadarRoutes = require('./server/routes/ideaRadar');
+const superNotesRoutes = require('./server/routes/superNotes');
 const { startIdeaRadarSchedule } = require('./server/services/idea-radar/schedule');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api/extract-audio', extractAudioRoutes);
 app.use('/api/notes-export', notesExportRoutes);
 app.use('/api/llm', llmRoutes);
 app.use('/api/idea-radar', ideaRadarRoutes);
+app.use('/api/super-notes', superNotesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);
 
