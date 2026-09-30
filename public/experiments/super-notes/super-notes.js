@@ -328,7 +328,14 @@ async function handleFormSubmit(e) {
       });
     }
 
-    if (!res.ok) throw new Error('Не удалось сохранить заметку');
+    if (!res.ok) {
+      let serverErr = '';
+      try {
+        const errJson = await res.json();
+        serverErr = errJson && errJson.error ? errJson.error : '';
+      } catch {}
+      throw new Error(serverErr ? `Ошибка сервера: ${serverErr}` : 'Не удалось сохранить заметку');
+    }
     closeForm();
     showStatus(state.editingNoteId ? 'Заметка обновлена' : 'Заметка создана');
     await Promise.all([loadNotes(), loadTags()]);
@@ -358,7 +365,14 @@ flatpak - https://flatpak.org - Универсальная система дис
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error('Ошибка создания демо-заметки');
+    if (!res.ok) {
+      let serverErr = '';
+      try {
+        const errJson = await res.json();
+        serverErr = errJson && errJson.error ? errJson.error : '';
+      } catch {}
+      throw new Error(serverErr ? `Ошибка сервера: ${serverErr}` : 'Ошибка создания демо-заметки');
+    }
     showStatus('Демо-заметка с 4 пакетами Linux успешно добавлена!');
     await Promise.all([loadNotes(), loadTags()]);
   } catch (err) {
