@@ -514,6 +514,71 @@ async function completeOpenai({
   };
 }
 
+// Баланс. Единого стандарта нет: пробуем известные endpoint'ы и распознаём
+// распространённые формы ответа. Gemini и YandexGPT отдают баланс только в консоли
+// провайдера — честно говорим об этом, а не выдумываем числа (П14: вердикт с причиной).
+function parseBalance(data) {
+  const d = data && typeof data.data === 'object' && data.data !== null ? data.data : data;
+  if (!d || typeof d !== 'object') return null;
+  if (Number.isFinite(Number(d.total_available))) return Number(d.total_available);
+  if (
+    Number.isFinite(Number(d.total_credits)) &&
+    Number.isFinite(Number(d.total_usage))
+  ) {
+    return Number(d.total_credits) - Number(d.total_usage);
+  }
+  if (Number.isFinite(Number(d.total_granted)) && Number.isFinite(Number(d.total_used))) {
+    return Number(d.total_granted) - Number(d.total_used);
+  }
+  if (Number.isFinite(Number(d.balance))) return Number(d.balance);
+  return null;
+}
+
+async function checkBalance(selection = {}) {
+  const parsed = parseClientOptions(selection);
+  if (parsed.provider !== 'openai') {
+    return {
+      available: false,
+      reason: 'У этого провайдера нет API баланса — смотрите консоль или кабинет сервиса.',
+    };
+  }
+  const usesUserProfile = Boolean(parsed.apiKey);
+  const key = usesUserProfile ? parsed.apiKey : String(config.openaiApiKey || '').trim();
+  if (!key) return { available: false, reason: 'Для проверки баланса нужен API ключ.' };
+  const chatUrl = openaiChatUrl(usesUserProfile ? parsed.baseUrl || config.openaiBaseUrl : config.openaiBaseUrl);
+  if (usesUserProfile && chatUrl.href !== openaiChatUrl(config.openaiBaseUrl).href) {
+    await assertCustomEndpointAllowed(chatUrl);
+  }
+  const origin = chatUrl.origin;
+  const candidates = [
+    '/v1/credits',
+    '/dashboard/billing/credit_grants',
+    '/dashboard/billing/subscription',
+  ];
+  for (const path of candidates) {
+    let data;
+    try {
+      const res = await fetch(`${origin}${path}`, {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(15000),
+        redirect: 'manual',
+      });
+      if (res.status >= 300 && res.status < 400) {
+        return { available: false, reason: 'Редиректы к балансу запрещены.' };
+      }
+      if (!res.ok) continue;
+      data = await readJson(res, 'balance');
+    } catch {
+      continue;
+    }
+    const balance = parseBalance(data);
+    if (balance !== null) {
+      return { available: true, balance, source: path };
+    }
+  }
+  return { available: false, reason: 'Не нашёл известный endpoint баланса у этого сервиса.' };
+}
+
 async function completeChat(options = {}) {
   const parsed = parseClientOptions(options.selection || options);
   const messages = normalizeMessages(options.messages);
@@ -555,9 +620,11 @@ module.exports = {
   publicStatus,
   parseClientOptions,
   completeChat,
+  checkBalance,
   __test: {
     isBlockedIp,
     openaiChatUrl,
     assertCustomEndpointAllowed,
+    parseBalance,
   },
 };

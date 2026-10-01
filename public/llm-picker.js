@@ -272,6 +272,32 @@
         emit();
       });
     });
+    const balanceBtn = root.querySelector('[data-llm-balance]');
+    if (balanceBtn) {
+      balanceBtn.addEventListener('click', async () => {
+        const out = root.querySelector('[data-llm-balance-out]');
+        balanceBtn.disabled = true;
+        if (out) out.textContent = 'проверяю…';
+        try {
+          const res = await fetch('/api/llm/balance', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ llm: getPayload() }),
+          });
+          const data = await res.json();
+          if (out) {
+            out.textContent = data.available
+              ? `баланс ≈ ${Number(data.balance).toLocaleString('ru-RU')} (валюта сервиса)`
+              : data.reason || 'баланс недоступен';
+          }
+        } catch (_) {
+          if (out) out.textContent = 'не удалось проверить';
+        } finally {
+          balanceBtn.disabled = false;
+        }
+      });
+    }
   }
 
   function render(root) {
@@ -361,6 +387,10 @@
                     state.openai.maxTokens
                   )}" />
                 </label>
+              </div>
+              <div class="llm-picker__row llm-picker__row--balance">
+                <button type="button" class="llm-picker__balance-btn" data-llm-balance>Проверить баланс</button>
+                <span class="llm-picker__balance-out" data-llm-balance-out></span>
               </div>
             `
             : ''
