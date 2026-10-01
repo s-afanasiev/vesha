@@ -1,9 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { buildNicheMatcher, matchableText } = require('../server/services/radar/niches');
 const { weekStart, lastWeeks, weeklyNicheCounts } = require('../server/services/idea-radar/keywords');
 const { buildNoiseRule } = require('../server/services/idea-radar/relevance');
 const { parseFeed } = require('../server/services/collectors/adapters/rss');
+const { extractPdfText } = require('../server/services/collectors/adapters/pravo');
+const { hasUsefulText } = require('../server/services/idea-radar/govTexts');
 const { trigramJaccard } = require('../server/services/collectors/similarity');
 const { buildDuplicateRule, clusterStories } = require('../server/services/idea-radar/stories');
 const { plainText, parseMoscowDate, contentHash } = require('../server/services/collectors/text');
@@ -180,6 +184,27 @@ test('story clustering skips undated publications', () => {
   });
   assert.equal(clusters.length, 1);
   assert.deepEqual(clusters[0].pubIds, ['b']);
+});
+
+test('pdf text extraction keeps the official act readable', async () => {
+  // Официальный документ — не объект авторского права (ст. 1259 п. 6 ГК РФ).
+  const fixture = path.join(__dirname, 'fixtures', 'pravo-act-sample.pdf');
+  const text = await extractPdfText(fs.readFileSync(fixture));
+  assert.ok(text.includes('ПОСТАНОВЛЯЕТ'), 'в тексте есть постановляющая часть');
+  assert.ok(text.includes('привлечения остатков'), 'предмет акта читается');
+  assert.equal(hasUsefulText(text), true, 'настоящий акт проходит правило достаточности');
+});
+
+test('hasUsefulText rejects scanned pdfs that only carry page markers', () => {
+  assert.equal(hasUsefulText('-- 1 of 3 --\n-- 2 of 3 --\n-- 3 of 3 --'), false);
+  assert.equal(hasUsefulText(''), false);
+  assert.equal(
+    hasUsefulText(
+      'В соответствии со статьей 236 Бюджетного кодекса Российской Федерации ' +
+        'Правительство Курской области ПОСТАНОВЛЯЕТ: Утвердить прилагаемые изменения.'
+    ),
+    true
+  );
 });
 
 test('rss parser keeps title, lead and link, drops markup', () => {  const xml = `<?xml version="1.0" encoding="utf-8"?>

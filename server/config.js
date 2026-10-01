@@ -119,6 +119,8 @@ const config = {
   ideaRadarPageTimeoutMs: intEnv('IDEA_RADAR_PAGE_TIMEOUT_MS', 20 * 1000),
   ideaRadarPollDeadlineMs: intEnv('IDEA_RADAR_POLL_DEADLINE_MS', 90 * 1000),
   ideaRadarMaxBytes: intEnv('IDEA_RADAR_MAX_BYTES', 5 * 1024 * 1024),
+  // Доставка текста госактов: сколько PDF разбирать за один запуск.
+  ideaRadarGovTextsBatch: intEnv('IDEA_RADAR_GOV_TEXTS_BATCH', 20),
   // Путь для замера свободного места: на сервере данные могут жить на другом томе.
   diskInfoPath: process.env.DISK_INFO_PATH || process.cwd(),
 };

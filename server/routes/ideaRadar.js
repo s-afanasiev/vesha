@@ -4,6 +4,7 @@ const express = require('express');
 const config = require('../config');
 const { refreshAll } = require('../services/idea-radar/refresh');
 const { rebuildStories } = require('../services/idea-radar/stories');
+const { deliverPendingActs } = require('../services/idea-radar/govTexts');
 const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
 const { getStorageInfo } = require('../services/storageInfo');
 const { lastWeeks, weekStartsAt, weeklyNicheCounts } = require('../services/idea-radar/keywords');
@@ -53,6 +54,12 @@ router.post('/polls', async (req, res) => {
 // Ручная пересборка сюжетов по всему корпусу (после опроса происходит сама).
 router.post('/stories', async (_req, res) => {
   res.json({ stories: await rebuildStories() });
+});
+
+// Доставка текста госактов: батч за раз, повтор безопасен — берёт только пустые body.
+router.post('/gov-texts', async (req, res) => {
+  const limit = intParam(req.body && req.body.limit, config.ideaRadarGovTextsBatch, 1, 200);
+  res.json({ delivery: await deliverPendingActs({ limit }) });
 });
 
 router.get('/publications', async (req, res) => {

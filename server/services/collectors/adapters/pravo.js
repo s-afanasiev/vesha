@@ -1,7 +1,8 @@
 // Адаптер «Официальное опубликование правовых актов» (publication.pravo.gov.ru).
 // Отдаёт страницы от новых к старым; раннер перестаёт листать на странице без новых актов.
-// Официальные документы не объекты авторского права, но в списке API текста нет — только реквизиты.
-const { fetchJson } = require('../http');
+// В списке API текста нет — только реквизиты; текст акта живёт в PDF по /file/pdf
+// (официальные документы не объекты авторского права, ст. 1259 п. 6 ГК РФ).
+const { fetchJson, fetchBuffer, SourceHttpError } = require('../http');
 const { plainText, parseMoscowDate } = require('../text');
 
 const API_BASE = 'http://publication.pravo.gov.ru';
@@ -39,6 +40,38 @@ async function* pages(source, ctx) {
   }
 }
 
+// Текст акта: PDF по номеру опубликования. pdf-parse (pdf.js) тяжёл и нужен только
+// здесь — подключается лениво, опрос лент его не тянет.
+let pdfParseCtor;
+function getPdfParse() {
+  pdfParseCtor ??= require('pdf-parse').PDFParse;
+  return pdfParseCtor;
+}
+
+async function fetchActPdf(eoNumber, ctx) {
+  const { buffer } = await fetchBuffer(`${API_BASE}/file/pdf?eoNumber=${encodeURIComponent(eoNumber)}`, {
+    signal: ctx.signal,
+    timeoutMs: ctx.pageTimeoutMs,
+    maxBytes: ctx.maxBytes,
+    accept: 'application/pdf',
+  });
+  return buffer;
+}
+
+async function extractPdfText(buffer) {
+  const parser = new (getPdfParse())({ data: new Uint8Array(buffer) });
+  try {
+    const result = await parser.getText();
+    return result.text;
+  } catch (err) {
+    throw new SourceHttpError('bad_pdf', `PDF не разбирается: ${err.message}`);
+  } finally {
+    await parser.destroy().catch(() => {});
+  }
+}
+
 module.exports = {
   pages,
+  fetchActPdf,
+  extractPdfText,
 };

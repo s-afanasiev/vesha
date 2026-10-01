@@ -47,7 +47,8 @@ async function readLimited(res, maxBytes) {
   return Buffer.concat(chunks);
 }
 
-async function fetchText(url, { signal, timeoutMs, maxBytes, accept } = {}) {
+// Общий запрос чужого источника: таймаут, потолок байт, ошибки с кодами.
+async function request(url, { signal, timeoutMs, maxBytes, accept } = {}) {
   const deadline = AbortSignal.timeout(timeoutMs);
   let res;
   try {
@@ -67,9 +68,19 @@ async function fetchText(url, { signal, timeoutMs, maxBytes, accept } = {}) {
     throw new SourceHttpError(`http_${res.status}`, `Источник ответил ${res.status}`, res.status);
   }
   const buffer = await readLimited(res, maxBytes);
-  const contentType = res.headers.get('content-type') || '';
+  return { buffer, contentType: res.headers.get('content-type') || '' };
+}
+
+async function fetchText(url, options = {}) {
+  const { buffer, contentType } = await request(url, options);
   const head = buffer.subarray(0, 200).toString('latin1');
   return { text: decode(buffer, pickCharset(contentType, head)), contentType };
+}
+
+// Бинарный ответ (например, PDF госакта) — без декодирования.
+async function fetchBuffer(url, options = {}) {
+  const { buffer, contentType } = await request(url, options);
+  return { buffer, contentType };
 }
 
 async function fetchJson(url, options) {
@@ -84,5 +95,6 @@ async function fetchJson(url, options) {
 module.exports = {
   fetchText,
   fetchJson,
+  fetchBuffer,
   SourceHttpError,
 };
