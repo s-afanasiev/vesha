@@ -1,8 +1,9 @@
 // Склейка перепечаток в сюжеты (И10, ступень B): одно событие, покрытое несколькими
 // изданиями, — один сигнал с известным охватом. Похожесть — каркас (collectors/similarity),
 // сюжет — домен idea-radar. Решение отдельно от применения (П15): кластеризация — чистое
-// действие, запись — отдельный проход в транзакции. Пересборка полная, пока на сюжеты не
-// ссылаются сдвиги; с их появлением — стабильные id (П32).
+// действие, запись — отдельный проход в транзакции. Полная пересборка — только пока на
+// сюжеты не ссылаются сдвиги и журнал разметки; дальше — мягкое прикрепление новых
+// публикаций (удаление сюжета каскадом стёрло бы разметку; П26, П32).
 const db = require('../../db');
 const { trigramJaccard } = require('../collectors/similarity');
 
@@ -55,10 +56,20 @@ function clusterStories({ publications, windowDays = 3, rule, similarity = trigr
   }));
 }
 
-// Пересборка полная и детерминированная: сюжеты — производное от публикаций (П26),
-// на них пока ничего не ссылается. Возвращается краткая сводка с примерами.
-async function rebuildStories({ windowDays, threshold } = {}) {
+// Пересборка: полная, только пока на сюжеты не ссылаются сдвиги и журнал разметки
+// (их удаление каскадом стёр бы разметку). После появления ссылок — только мягкое
+// прикрепление новых публикаций к существующим сюжетам или новым (П26, П32).
+async function rebuildStories({ windowDays = 3, threshold } = {}) {
   const rule = buildDuplicateRule({ threshold });
+  const { rows: refs } = await db.query(
+    `SELECT (EXISTS(SELECT 1 FROM idea_radar_shifts)
+          OR EXISTS(SELECT 1 FROM idea_radar_markings)) AS has_refs`
+  );
+  if (refs[0].has_refs) return attachNewPublications({ windowDays, rule });
+  return fullRebuild({ windowDays, rule });
+}
+
+async function fullRebuild({ windowDays, rule }) {
   const { rows } = await db.query(
     `SELECT p.id, p.title, p.published_at, s.id AS source_id
      FROM idea_radar_publications p
@@ -111,6 +122,57 @@ async function rebuildStories({ windowDays, threshold } = {}) {
     ...summary,
     singles: summary.stories - summary.multiSource,
     examples: examples.sort((a, b) => b.copies - a.copies).slice(0, 5),
+  };
+}
+
+// Мягкий путь: публикации без сюжета прикрепляются к существующим сюжетам в окне
+// ±windowDays или образуют новые. Существующие склейки не трогаются.
+async function attachNewPublications({ windowDays = 3, rule }) {
+  const { rows: fresh } = await db.query(
+    `SELECT p.id, p.title, p.published_at, s.id AS source_id
+     FROM idea_radar_publications p
+     JOIN idea_radar_sources s ON s.id = p.source_id
+     WHERE p.story_id IS NULL AND p.published_at IS NOT NULL AND s.kind <> 'serendipity'
+     ORDER BY p.published_at`
+  );
+
+  let attached = 0;
+  let created = 0;
+  for (const pub of fresh) {
+    const { rows: neighbors } = await db.query(
+      `SELECT sp.story_id, sp.title
+       FROM idea_radar_publications sp
+       JOIN idea_radar_sources ss ON ss.id = sp.source_id
+       WHERE sp.story_id IS NOT NULL AND ss.kind <> 'serendipity'
+         AND sp.published_at BETWEEN $1 AND $2`,
+      [new Date(pub.published_at.getTime() - windowDays * DAY_MS), new Date(pub.published_at.getTime() + windowDays * DAY_MS)]
+    );
+    let best = null;
+    for (const neighbor of neighbors) {
+      const sim = trigramJaccard(pub.title, neighbor.title);
+      const verdict = rule({ similarity: sim });
+      if (verdict.duplicate && (!best || sim > best.sim)) best = { storyId: neighbor.story_id, sim };
+    }
+    if (best) {
+      await db.query('UPDATE idea_radar_publications SET story_id = $1 WHERE id = $2', [best.storyId, pub.id]);
+      attached += 1;
+    } else {
+      const { rows: createdStory } = await db.query(
+        'INSERT INTO idea_radar_stories (title) VALUES ($1) RETURNING id',
+        [pub.title]
+      );
+      await db.query('UPDATE idea_radar_publications SET story_id = $1 WHERE id = $2', [createdStory[0].id, pub.id]);
+      created += 1;
+    }
+  }
+
+  return {
+    mode: 'attach',
+    stories: attached + created,
+    clustered: fresh.length,
+    multiSource: null,
+    attached,
+    created,
   };
 }
 
