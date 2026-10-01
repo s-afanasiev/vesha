@@ -13,6 +13,7 @@
     }
   </script>
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/llm-picker.css" />
   <link rel="stylesheet" href="./idea-radar.css" />
 </head>
 <body class="page-experiments page-idea-radar">
@@ -27,7 +28,8 @@
 
     <header class="experiments__header">
       <div class="ir-badges">
-        <span class="ir-badge">фаза 1 · без LLM</span>
+        <span class="ir-badge">фаза 2 · разметка сдвигов</span>
+        <span class="ir-badge ir-badge--muted" id="poll-next-badge" hidden></span>
         <span class="ir-badge ir-badge--muted" id="disk-badge" hidden></span>
       </div>
       <h1>Радар идей</h1>
@@ -69,6 +71,16 @@
       <p class="ir-meta">Неделя — с понедельника по московскому времени. Публикации без даты и шумовые рубрики (спорт, происшествия) не считаются. Строки «Всего» — знаменатель по потоку источника: без него рост ниши не отличить от роста потока.</p>
     </section>
 
+    <section class="ir-card" aria-labelledby="marking-title">
+      <div class="ir-card__head">
+        <h2 id="marking-title">Разметка сдвигов</h2>
+        <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="mark-run" disabled>Разметить 5 сюжетов</button>
+      </div>
+      <p class="ir-status" id="mark-status" role="status" aria-live="polite"></p>
+      <div data-vesha-llm-picker></div>
+      <p class="ir-meta" id="mark-metrics">Метрики разметки ещё не загружены.</p>
+    </section>
+
     <section class="ir-card" aria-labelledby="feed-title">
       <div class="ir-card__head">
         <h2 id="feed-title">Лента</h2>
@@ -100,6 +112,7 @@
 
   <script src="/theme.js"></script>
   <script src="/auth.js"></script>
+  <script src="/llm-picker.js"></script>
   <script src="./idea-radar.js"></script>
 </body>
 </html>

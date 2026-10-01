@@ -1,9 +1,20 @@
-// Опрос по таймеру — выключен по умолчанию (IDEA_RADAR_POLL_EVERY_MIN=0).
-// Ленты региональных СМИ помнят около суток, поэтому для рядов по неделям опрос нужен хотя бы раз в день.
+// Опрос по таймеру — включён (IDEA_RADAR_POLL_EVERY_MIN=360, раз в 6 часов).
+// Ленты региональных СМИ помнят около суток — для рядов по неделям нужен хотя бы
+// ежедневный опрос. Доставку текстов госактов в таймер сознательно не включали.
 const config = require('../../config');
 const { refreshAll } = require('./refresh');
 
 const FIRST_POLL_DELAY_MS = 30 * 1000;
+
+let nextPollAtMs = null;
+
+// Снимок расписания для UI: когда будет следующий автоматический опрос.
+function scheduleInfo() {
+  return {
+    pollEveryMin: config.ideaRadarPollEveryMin,
+    nextPollAt: nextPollAtMs ? new Date(nextPollAtMs).toISOString() : null,
+  };
+}
 
 function summarize(results, stories) {
   const polls = results
@@ -18,14 +29,18 @@ function summarize(results, stories) {
 function startIdeaRadarSchedule() {
   const everyMin = config.ideaRadarPollEveryMin;
   if (!everyMin || everyMin <= 0) return null;
+  const intervalMs = everyMin * 60 * 1000;
 
-  const tick = () =>
+  nextPollAtMs = Date.now() + FIRST_POLL_DELAY_MS;
+  const tick = () => {
+    nextPollAtMs = Date.now() + intervalMs;
     refreshAll()
       .then(({ results, stories }) => console.log('idea-radar poll:', summarize(results, stories)))
       .catch((err) => console.warn('idea-radar poll failed:', err.message));
+  };
 
   setTimeout(tick, FIRST_POLL_DELAY_MS).unref();
-  const timer = setInterval(tick, everyMin * 60 * 1000);
+  const timer = setInterval(tick, intervalMs);
   timer.unref();
   console.log(`idea-radar: опрос лент каждые ${everyMin} мин`);
   return timer;
@@ -33,4 +48,5 @@ function startIdeaRadarSchedule() {
 
 module.exports = {
   startIdeaRadarSchedule,
+  scheduleInfo,
 };

@@ -148,9 +148,64 @@ async function publicationsSince(since) {
   }));
 }
 
+// Метрики И8: доля сюжетов без сдвигов (норма — большая), доля other, неподтверждённые
+// цитаты. precision@30 — сюжет ручной проверки, до него здесь честный null.
+async function getMarkingMetrics({ promptVersion }) {
+  const [candidatesQ, markings, shifts, byType] = await Promise.all([
+    db.query(
+      `SELECT count(DISTINCT st.id)::int AS n
+       FROM idea_radar_stories st
+       JOIN idea_radar_publications p ON p.story_id = st.id
+       JOIN idea_radar_sources s ON s.id = p.source_id
+       WHERE s.kind <> 'serendipity'`
+    ),
+    db.query(
+      `SELECT count(*) FILTER (WHERE model <> 'noise-rule')::int AS marked,
+              count(*) FILTER (WHERE model <> 'noise-rule' AND shifts_found = 0)::int AS without_shifts,
+              count(*) FILTER (WHERE model = 'noise-rule')::int AS skipped_by_noise
+       FROM idea_radar_markings WHERE prompt_version = $1`,
+      [promptVersion]
+    ),
+    db.query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE type = 'other')::int AS other,
+              count(*) FILTER (WHERE NOT quote_verified)::int AS unverified_quotes
+       FROM idea_radar_shifts`
+    ),
+    db.query(`SELECT type, count(*)::int AS n FROM idea_radar_shifts GROUP BY type ORDER BY n DESC, type`),
+  ]);
+
+  const marked = markings.rows[0].marked;
+  const skippedByNoise = markings.rows[0].skipped_by_noise;
+  const withoutShifts = markings.rows[0].without_shifts;
+  const candidates = candidatesQ.rows[0].n;
+  const shares = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : null);
+
+  return {
+    promptVersion,
+    stories: {
+      candidates,
+      marked,
+      pending: Math.max(0, candidates - marked - skippedByNoise),
+      skippedByNoise,
+      withoutShifts,
+      withoutShiftsShare: shares(withoutShifts, marked),
+    },
+    shifts: {
+      total: shifts.rows[0].total,
+      other: shifts.rows[0].other,
+      otherShare: shares(shifts.rows[0].other, shifts.rows[0].total),
+      unverifiedQuotes: shifts.rows[0].unverified_quotes,
+      byType: byType.rows,
+    },
+    precisionReview: null,
+  };
+}
+
 module.exports = {
   listSources,
   listPublications,
   publicationsSince,
   activeSourceWhere,
+  getMarkingMetrics,
 };

@@ -20,16 +20,37 @@
       onPick: (filter) => feed.show(filter),
       onLoaded: (data) => feed.setVocabulary(data.niches, data.weeks),
     });
+    new MarkingView(api, {
+      run: byId('mark-run'),
+      status: byId('mark-status'),
+      metrics: byId('mark-metrics'),
+    });
     const sources = new SourcesView(api, byId('sources-body'), byId('poll-status'), byId('poll-all'), {
       onSources: (list) => feed.setSources(list),
       onPolled: () => {
         counts.load();
         feed.load();
       },
+      onSchedule: (schedule) => renderScheduleBadge(byId('poll-next-badge'), schedule),
     });
     feed.onFilterChange = (filter) => counts.highlight(filter);
     [sources, counts, feed].forEach((part) => part.load());
     loadDiskIndicator(api, byId('disk-badge'));
+  }
+
+  // Когда следующий автоматический опрос (расписание таймера на сервере).
+  function renderScheduleBadge(badge, schedule) {
+    if (!badge) return;
+    if (!schedule || !schedule.pollEveryMin || !schedule.nextPollAt) {
+      badge.hidden = true;
+      return;
+    }
+    const every =
+      schedule.pollEveryMin % 60 === 0
+        ? `раз в ${schedule.pollEveryMin / 60} ч`
+        : `раз в ${schedule.pollEveryMin} мин`;
+    badge.textContent = `опрос ${every} · следующий в ${formatDateTime(schedule.nextPollAt)}`;
+    badge.hidden = false;
   }
 
   // Место на диске в шапке: ряды растут с включённым таймером; предупреждение, когда мало.
@@ -92,6 +113,14 @@
     disk() {
       return this.request('/disk');
     }
+
+    mark(body) {
+      return this.request('/mark', { method: 'POST', body: JSON.stringify(body) });
+    }
+
+    metrics() {
+      return this.request('/metrics');
+    }
   }
 
   // ---------- Источники ----------
@@ -113,21 +142,23 @@
   };
 
   class SourcesView {
-    constructor(api, body, status, pollAllBtn, { onSources, onPolled }) {
+    constructor(api, body, status, pollAllBtn, { onSources, onPolled, onSchedule }) {
       this.api = api;
       this.body = body;
       this.status = status;
       this.pollAllBtn = pollAllBtn;
       this.onSources = onSources;
       this.onPolled = onPolled;
+      this.onSchedule = onSchedule;
       this.busy = false;
       this.pollAllBtn.addEventListener('click', () => this.poll(null));
     }
 
     async load() {
       try {
-        const { sources } = await this.api.sources();
+        const { sources, schedule } = await this.api.sources();
         this.render(sources);
+        if (this.onSchedule) this.onSchedule(schedule);
       } catch (err) {
         this.say(`Не удалось загрузить источники: ${err.message}`, true);
       }
@@ -191,10 +222,11 @@
       this.setBusy(true);
       this.say(slug ? 'Опрашиваю источник…' : 'Опрашиваю все источники — до полутора минут…');
       try {
-        const { results, sources } = await this.api.poll(slug);
+        const { results, sources, schedule } = await this.api.poll(slug);
         this.setBusy(false);
         this.render(sources);
         this.say(summarizePoll(results));
+        if (this.onSchedule) this.onSchedule(schedule);
         this.onPolled();
       } catch (err) {
         this.setBusy(false);
@@ -346,6 +378,105 @@
       });
       btn.addEventListener('click', () => this.onPick({ niche, week }));
       return btn;
+    }
+  }
+
+  // ---------- Разметка сдвигов ----------
+
+  class MarkingView {
+    constructor(api, els) {
+      this.api = api;
+      this.els = els;
+      this.running = false;
+      document.addEventListener('llm:change', () => this.refreshReady());
+      this.refreshReady();
+      this.load();
+      this.els.run.addEventListener('click', () => this.run());
+    }
+
+    refreshReady() {
+      const picker = globalThis.VeshaLlm;
+      this.els.run.disabled = this.running || !picker || !picker.isReady();
+    }
+
+    async load() {
+      try {
+        const { metrics } = await this.api.metrics();
+        this.renderMetrics(metrics);
+      } catch (err) {
+        this.els.metrics.textContent = `Метрики недоступны: ${err.message}`;
+      }
+    }
+
+    renderMetrics(m) {
+      const parts = [
+        `кандидатов: ${m.stories.candidates}`,
+        `размечено: ${m.stories.marked} (ожидает ${m.stories.pending})`,
+      ];
+      if (m.stories.skippedByNoise) parts.push(`мимо по шуму: ${m.stories.skippedByNoise}`);
+      if (m.stories.marked > 0) {
+        parts.push(`без сдвигов: ${m.stories.withoutShifts} из ${m.stories.marked} (${m.stories.withoutShiftsShare ?? '—'}%)`);
+      }
+      if (m.shifts.total > 0) {
+        parts.push(`сдвигов: ${m.shifts.total}, other: ${m.shifts.other} (${m.shifts.otherShare ?? '—'}%)`);
+        parts.push(`цитат не подтверждено: ${m.shifts.unverifiedQuotes}`);
+      }
+      this.els.metrics.textContent = `И8 — ${parts.join(' · ')}`;
+    }
+
+    async run() {
+      if (this.running) return;
+      const picker = globalThis.VeshaLlm;
+      if (!picker || !picker.isReady()) {
+        this.say('Сначала выберите нейросеть и введите ключ в блоке выше.', true);
+        return;
+      }
+      const llm = picker.getPayload();
+      this.running = true;
+      this.els.run.disabled = true;
+      this.say('Размечаю 5 сюжетов — до минуты на сюжет…');
+      try {
+        const { marking, metrics } = await this.api.mark({ llm, limit: 5 });
+        const parts = [
+          `размечено: ${marking.marked}`,
+          `сдвигов: ${marking.shiftsFound}`,
+          `без сдвигов: ${marking.withoutShifts}`,
+        ];
+        if (marking.skippedByNoise) parts.push(`мимо по шуму: ${marking.skippedByNoise}`);
+        if (marking.errors.length) {
+          parts.push(`ошибок: ${marking.errors.length} (${marking.errors[0].error})`);
+        }
+        this.say(parts.join(' · '));
+        if (llm.provider === 'openai') await this.sayBalance(llm);
+        this.renderMetrics(metrics);
+      } catch (err) {
+        this.say(`Разметка не удалась: ${err.message}`, true);
+      } finally {
+        this.running = false;
+        this.refreshReady();
+      }
+    }
+
+    async sayBalance(llm) {
+      try {
+        const res = await fetch('/api/llm/balance', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ llm }),
+        });
+        const data = await res.json();
+        if (data.available) {
+          this.say(`${this.els.status.textContent} · баланс ≈ ${Number(data.balance).toLocaleString('ru-RU')} (валюта сервиса)`);
+        }
+      } catch (_) {
+        /* баланс — украшение, не блокируем */
+      }
+    }
+
+    say(text, isError = false) {
+      this.els.status.textContent = text;
+      this.els.status.classList.toggle('ir-status--error', isError);
     }
   }
 

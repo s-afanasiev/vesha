@@ -8,6 +8,8 @@ const { buildNoiseRule } = require('../server/services/idea-radar/relevance');
 const { parseFeed } = require('../server/services/collectors/adapters/rss');
 const { extractPdfText } = require('../server/services/collectors/adapters/pravo');
 const { hasUsefulText } = require('../server/services/idea-radar/govTexts');
+const { __test: marking } = require('../server/services/idea-radar/marking');
+const { __test: llmTest } = require('../server/services/llm');
 const { trigramJaccard } = require('../server/services/collectors/similarity');
 const { buildDuplicateRule, clusterStories } = require('../server/services/idea-radar/stories');
 const { plainText, parseMoscowDate, contentHash } = require('../server/services/collectors/text');
@@ -205,6 +207,68 @@ test('hasUsefulText rejects scanned pdfs that only carry page markers', () => {
     ),
     true
   );
+});
+
+test('shift parsing validates types, directions and niches', () => {
+  const raw = JSON.stringify({
+    shifts: [
+      {
+        type: 'new_duty',
+        subject: 'Маркировка шин',
+        subject_raw: 'маркировку пивной продукции',
+        effective_date: '2026-12-01',
+        summary: 'С 1 декабря шины подлежат обязательной маркировке',
+        quote: 'шины подлежат обязательной маркировке',
+        niches: [
+          { slug: 'auto_tires', direction: 'duty' },
+          { slug: 'unknown_niche', direction: 'duty' },
+          { slug: 'auto', direction: 'whatever' },
+        ],
+      },
+      { type: 'weird_type', subject: 'Что-то новое', summary: 'Тип не из таксономии', niches: [] },
+      { subject: 'Без summary' },
+    ],
+  });
+  const shifts = marking.parseShifts('```json\n' + raw + '\n```');
+  assert.equal(shifts.length, 2);
+  assert.equal(shifts[0].type, 'new_duty');
+  assert.equal(shifts[0].effectiveDate, '2026-12-01');
+  // Парсер отсекает только кривое направление; чужой slug отсеет словарь на вставке.
+  assert.deepEqual(shifts[0].niches, [
+    { slug: 'auto_tires', direction: 'duty' },
+    { slug: 'unknown_niche', direction: 'duty' },
+  ]);
+  // Неизвестный тип уходит в приёмник таксономии.
+  assert.equal(shifts[1].type, 'other');
+  assert.throws(() => marking.parseShifts('совсем не json'), /не JSON/);
+});
+
+test('quote verification accepts only verbatim substrings', () => {
+  const pubs = [{ title: 'В Курске открыли новый шиномонтаж', lead: 'На улице Ленина начали работы', body: null }];
+  assert.equal(marking.findQuoteSource(' начали работы ', pubs), pubs[0]);
+  assert.equal(marking.findQuoteSource('«В Курске»', pubs), pubs[0]);
+  // «ё» и регистр не мешают дословности.
+  const elki = { title: 'елки на площади', lead: null, body: null };
+  assert.equal(marking.findQuoteSource('Ёлки', [elki]), elki);
+  assert.equal(marking.findQuoteSource('пересказ своими словами', pubs), null);
+  assert.equal(marking.findQuoteSource('', pubs), null);
+});
+
+test('marking prompt carries the niche dictionary and strict json rule', () => {
+  const prompt = marking.systemPrompt([{ slug: 'auto_tires', title: 'Шиномонтаж' }]);
+  assert.match(prompt, /auto_tires — Шиномонтаж/);
+  assert.match(prompt, /строго JSON/);
+  assert.match(prompt, /new_permission/);
+});
+
+test('balance parsing recognizes common service shapes', () => {
+  const parseBalance = llmTest.parseBalance;
+  assert.equal(parseBalance({ total_available: 12.5 }), 12.5);
+  assert.equal(parseBalance({ data: { total_credits: 10, total_usage: 4 } }), 6);
+  assert.equal(parseBalance({ total_granted: 20, total_used: 5 }), 15);
+  assert.equal(parseBalance({ balance: '3.5' }), 3.5);
+  assert.equal(parseBalance({ hello: 'world' }), null);
+  assert.equal(parseBalance(null), null);
 });
 
 test('rss parser keeps title, lead and link, drops markup', () => {  const xml = `<?xml version="1.0" encoding="utf-8"?>

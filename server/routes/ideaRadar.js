@@ -5,7 +5,9 @@ const config = require('../config');
 const { refreshAll } = require('../services/idea-radar/refresh');
 const { rebuildStories } = require('../services/idea-radar/stories');
 const { deliverPendingActs } = require('../services/idea-radar/govTexts');
-const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
+const { markPendingStories, PROMPT_VERSION } = require('../services/idea-radar/marking');
+const { listSources, listPublications, publicationsSince, getMarkingMetrics } = require('../services/idea-radar/store');
+const { scheduleInfo } = require('../services/idea-radar/schedule');
 const { getStorageInfo } = require('../services/storageInfo');
 const { lastWeeks, weekStartsAt, weeklyNicheCounts } = require('../services/idea-radar/keywords');
 const { buildNoiseRule } = require('../services/idea-radar/relevance');
@@ -36,7 +38,7 @@ function weekRange(week) {
 }
 
 router.get('/sources', async (_req, res) => {
-  res.json({ sources: await listSources() });
+  res.json({ sources: await listSources(), schedule: scheduleInfo() });
 });
 
 // Свободное место на диске данных: ряды растут с включённым таймером опроса.
@@ -48,7 +50,7 @@ router.get('/disk', (_req, res) => {
 
 router.post('/polls', async (req, res) => {
   const { results, stories } = await refreshAll({ sourceSlug: textParam(req.body && req.body.source) });
-  res.json({ results, stories, sources: await listSources() });
+  res.json({ results, stories, sources: await listSources(), schedule: scheduleInfo() });
 });
 
 // Ручная пересборка сюжетов по всему корпусу (после опроса происходит сама).
@@ -60,6 +62,17 @@ router.post('/stories', async (_req, res) => {
 router.post('/gov-texts', async (req, res) => {
   const limit = intParam(req.body && req.body.limit, config.ideaRadarGovTextsBatch, 1, 200);
   res.json({ delivery: await deliverPendingActs({ limit }) });
+});
+
+// Разметка сдвигов: LLM из llm-picker (ключ с фронта), батч сюжетов за раз.
+router.post('/mark', async (req, res) => {
+  const limit = intParam(req.body && req.body.limit, 5, 1, 20);
+  const marking = await markPendingStories({ llm: req.body && req.body.llm, limit });
+  res.json({ marking, metrics: await getMarkingMetrics({ promptVersion: PROMPT_VERSION }) });
+});
+
+router.get('/metrics', async (_req, res) => {
+  res.json({ metrics: await getMarkingMetrics({ promptVersion: PROMPT_VERSION }) });
 });
 
 router.get('/publications', async (req, res) => {
