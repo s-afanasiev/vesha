@@ -4,6 +4,7 @@ const express = require('express');
 const { pollAll } = require('../services/idea-radar/poller');
 const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
 const { lastWeeks, weekStartsAt, weeklyNicheCounts } = require('../services/idea-radar/keywords');
+const { buildNoiseRule } = require('../services/idea-radar/relevance');
 const { loadNiches, buildNicheMatcher, matchableText } = require('../services/radar/niches');
 
 const router = express.Router();
@@ -49,13 +50,19 @@ router.get('/publications', async (req, res) => {
     ...weekRange(textParam(req.query.week)),
   };
   const matchNiches = buildNicheMatcher(await loadNiches());
+  const noise = buildNoiseRule();
+  // Лента отдаёт сырой meta; правило ждёт рубрики — приводим форму один раз.
+  const noiseVerdictOf = (pub) => noise({ categories: (pub.meta && pub.meta.categories) || [] });
 
   let items;
   let hasMore;
   if (niche) {
+    // Фильтр ниши считает так же, как счётчик: шумовые рубрики мимо (И2).
     const window = await listPublications({ ...filters, limit: NICHE_FILTER_WINDOW, offset: 0 });
-    const matched = window.filter((pub) =>
-      matchNiches(matchableText(pub)).some((verdict) => verdict.slug === niche)
+    const matched = window.filter(
+      (pub) =>
+        noiseVerdictOf(pub).relevance !== 'off_topic' &&
+        matchNiches(matchableText(pub)).some((verdict) => verdict.slug === niche)
     );
     items = matched.slice(offset, offset + limit);
     hasMore = matched.length > offset + limit;
@@ -68,7 +75,14 @@ router.get('/publications', async (req, res) => {
   res.json({
     items: items.map((pub) => {
       const verdicts = matchNiches(matchableText(pub));
-      return { ...pub, niches: verdicts.map((v) => v.slug), nicheHits: verdicts };
+      const noiseVerdict = noiseVerdictOf(pub);
+      return {
+        ...pub,
+        niches: verdicts.map((v) => v.slug),
+        nicheHits: verdicts,
+        relevance: noiseVerdict.relevance,
+        relevanceReason: noiseVerdict.reason,
+      };
     }),
     hasMore,
   });
@@ -77,10 +91,15 @@ router.get('/publications', async (req, res) => {
 router.get('/keywords', async (req, res) => {
   const weeks = lastWeeks(new Date(), intParam(req.query.weeks, 8, 1, 26));
   const niches = await loadNiches();
-  const publications = (await publicationsSince(weekStartsAt(weeks[0]))).map((pub) => ({
-    text: matchableText(pub),
-    publishedAt: pub.publishedAt,
-  }));
+  const noise = buildNoiseRule();
+  const publications = (await publicationsSince(weekStartsAt(weeks[0])))
+    .filter((pub) => noise(pub).relevance !== 'off_topic')
+    .map((pub) => ({
+      text: matchableText(pub),
+      publishedAt: pub.publishedAt,
+      region: pub.region,
+      regionName: pub.regionName,
+    }));
   res.json(
     weeklyNicheCounts({ publications, niches, matchNiches: buildNicheMatcher(niches), weeks })
   );

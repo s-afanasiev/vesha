@@ -16,7 +16,7 @@
       week: byId('feed-week'),
       q: byId('feed-q'),
     });
-    const counts = new CountsView(api, byId('counts-table'), {
+    const counts = new CountsView(api, byId('counts-table'), byId('counts-flow'), {
       onPick: (filter) => feed.show(filter),
       onLoaded: (data) => feed.setVocabulary(data.niches, data.weeks),
     });
@@ -216,12 +216,14 @@
   const WEEKS_SHOWN = 8;
 
   class CountsView {
-    constructor(api, table, { onPick, onLoaded }) {
+    constructor(api, table, flow, { onPick, onLoaded }) {
       this.api = api;
       this.table = table;
+      this.flow = flow;
       this.onPick = onPick;
       this.onLoaded = onLoaded;
       this.filter = {};
+      this.selected = 'all';
     }
 
     async load() {
@@ -229,10 +231,46 @@
         const data = await this.api.keywords(WEEKS_SHOWN);
         this.data = data;
         this.onLoaded(data);
+        this.renderFlow();
         this.render();
       } catch (err) {
         this.table.replaceChildren(el('caption', { class: 'ir-status ir-status--error', text: err.message }));
       }
+    }
+
+    // Поток источника (И1): «все» — одна таблица, конкретный регион — свои ряды.
+    renderFlow() {
+      this.flow.hidden = false;
+      const options = [{ code: 'all', name: 'Все потоки' }, ...this.data.regions];
+      this.flow.replaceChildren(
+        ...options.map(({ code, name }) => {
+          const btn = el('button', {
+            type: 'button',
+            class: 'ir-flow-btn',
+            text: name,
+            'aria-pressed': String(this.selected === code),
+          });
+          btn.addEventListener('click', () => {
+            this.selected = code;
+            this.renderFlow();
+            this.render();
+          });
+          return btn;
+        })
+      );
+    }
+
+    // Числа выбранного потока; «все» — сумма по регионам.
+    countsFor(countsByRegion) {
+      const zero = this.data.weeks.map(() => 0);
+      if (this.selected !== 'all') return countsByRegion[this.selected] || zero;
+      const sum = zero.slice();
+      Object.values(countsByRegion || {}).forEach((arr) =>
+        arr.forEach((n, i) => {
+          sum[i] += n;
+        })
+      );
+      return sum;
     }
 
     highlight(filter) {
@@ -241,7 +279,8 @@
     }
 
     render() {
-      const { weeks, niches, totals } = this.data;
+      const { weeks, regions, totals, niches } = this.data;
+      const zero = weeks.map(() => 0);
       const head = el('thead', {}, [
         el('tr', {}, [
           el('th', { scope: 'col', text: 'Ниша' }),
@@ -250,20 +289,28 @@
         ]),
       ]);
 
-      const rows = niches.map((niche) =>
-        el('tr', { class: niche.parentSlug ? 'ir-row--child' : 'ir-row--parent' }, [
+      const rows = niches.map((niche) => {
+        const counts = this.countsFor(niche.counts);
+        const total = counts.reduce((a, b) => a + b, 0);
+        return el('tr', { class: niche.parentSlug ? 'ir-row--child' : 'ir-row--parent' }, [
           el('th', { scope: 'row', text: niche.title }),
-          ...niche.counts.map((n, i) => el('td', { class: 'ir-num' }, [this.cell(n, niche.slug, weeks[i])])),
-          el('td', { class: 'ir-num' }, [this.cell(niche.total, niche.slug, '')]),
-        ])
-      );
-      const totalRow = el('tr', { class: 'ir-row--total' }, [
-        el('th', { scope: 'row', text: 'Всего публикаций с датой' }),
-        ...totals.map((n) => el('td', { class: 'ir-num', text: String(n) })),
-        el('td', { class: 'ir-num', text: String(totals.reduce((a, b) => a + b, 0)) }),
-      ]);
+          ...counts.map((n, i) => el('td', { class: 'ir-num' }, [this.cell(n, niche.slug, weeks[i])])),
+          el('td', { class: 'ir-num' }, [this.cell(total, niche.slug, '')]),
+        ]);
+      });
 
-      this.table.replaceChildren(head, el('tbody', {}, [...rows, totalRow]));
+      // Знаменатель виден по регионам всегда: в режиме «все» — по строке на поток.
+      const shownRegions = this.selected === 'all' ? regions : regions.filter((r) => r.code === this.selected);
+      const totalRows = shownRegions.map((region) => {
+        const values = totals[region.code] || zero;
+        return el('tr', { class: 'ir-row--total' }, [
+          el('th', { scope: 'row', text: `Всего · ${region.name}` }),
+          ...values.map((n) => el('td', { class: 'ir-num', text: String(n) })),
+          el('td', { class: 'ir-num', text: String(values.reduce((a, b) => a + b, 0)) }),
+        ]);
+      });
+
+      this.table.replaceChildren(head, el('tbody', {}, [...rows, ...totalRows]));
     }
 
     cell(count, niche, week) {
@@ -379,6 +426,13 @@
         }),
         el('span', { class: 'ir-chip ir-chip--muted', text: pub.source.name }),
         ...this.nicheChips(pub),
+        pub.relevance === 'off_topic'
+          ? el('span', {
+              class: 'ir-chip ir-chip--noise',
+              text: 'шум',
+              title: pub.relevanceReason || 'шумовая рубрика источника',
+            })
+          : null,
       ]);
       return el('li', { class: 'ir-item' }, [
         meta,

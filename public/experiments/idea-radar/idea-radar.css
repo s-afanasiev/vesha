@@ -181,6 +181,12 @@ body.page-idea-radar .experiments {
   border-color: var(--border);
 }
 
+.ir-chip--noise {
+  color: var(--ir-warn-text);
+  background: var(--ir-warn-bg);
+  border-color: var(--ir-warn-border);
+}
+
 .ir-outcome {
   display: inline-flex;
   font-size: 0.74rem;
@@ -229,6 +235,39 @@ body.page-idea-radar .experiments {
 }
 
 /* Счётчик */
+
+/* Выбор потока: все / регион / федеральные (И1) */
+.ir-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ir-flow-btn {
+  appearance: none;
+  padding: 0.25rem 0.7rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.ir-flow-btn:hover,
+.ir-flow-btn:focus-visible {
+  color: var(--text-heading);
+  border-color: var(--ir-accent-border);
+  outline: none;
+}
+
+.ir-flow-btn[aria-pressed="true"] {
+  color: var(--btn-primary-text);
+  background: var(--ir-accent);
+  border-color: var(--ir-accent);
+}
 
 .ir-counts th[scope="row"] {
   font-weight: 500;

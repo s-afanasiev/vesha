@@ -1,7 +1,7 @@
 // Чтение корпуса радара идей для API: источники со снимком последнего опроса, лента публикаций.
 const db = require('../../db');
 const config = require('../../config');
-const { INTERRUPTED_CODE } = require('./states');
+const { INTERRUPTED_CODE } = require('../collectors/states');
 
 // Опрос без finished_at дольше дедлайна — процесс умер посреди опроса (перезапуск сервера).
 // Состояние вычисляется при чтении, сторож его не переписывает.
@@ -120,15 +120,24 @@ async function listPublications({ sourceSlug, q, from, to, limit, offset }) {
   return rows.map(toPublication);
 }
 
+// Тексты для счётчика с профилем источника: рубрики и регион потока.
 async function publicationsSince(since) {
   const { rows } = await db.query(
-    `SELECT p.title, p.lead, p.published_at
+    `SELECT p.title, p.lead, p.meta, p.published_at, r.code AS region_code, r.name AS region_name
      FROM idea_radar_publications p
      JOIN idea_radar_sources s ON s.id = p.source_id
+     LEFT JOIN radar_regions r ON r.id = s.region_id
      WHERE p.published_at >= $1 AND s.kind <> 'serendipity'`,
     [since]
   );
-  return rows.map((row) => ({ title: row.title, lead: row.lead, publishedAt: row.published_at }));
+  return rows.map((row) => ({
+    title: row.title,
+    lead: row.lead,
+    categories: (row.meta && row.meta.categories) || [],
+    region: row.region_code || 'unknown',
+    regionName: row.region_name || row.region_code || null,
+    publishedAt: row.published_at,
+  }));
 }
 
 module.exports = {

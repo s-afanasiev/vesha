@@ -1,4 +1,4 @@
-// Адаптер RSS 2.0 / Atom: лента → одна пачка публикаций.
+// Адаптер RSS 2.0 / Atom: лента → одна пачка записей.
 // У СМИ берём заголовок, лид и ссылку; полный текст (content:encoded, yandex:full-text) не храним.
 const { XMLParser } = require('fast-xml-parser');
 const { fetchText, SourceHttpError } = require('../http');

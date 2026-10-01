@@ -2,9 +2,9 @@
 // строкой idea_radar_polls, а не падением всего опроса (П24).
 const db = require('../../db');
 const config = require('../../config');
-const ADAPTERS = require('./adapters');
-const { contentHash } = require('./text');
-const { POLL_OUTCOMES, SKIP_OUTCOME, SKIP_CODES, DEADLINE_CODE } = require('./states');
+const ADAPTERS = require('../collectors/adapters');
+const { contentHash } = require('../collectors/text');
+const { POLL_OUTCOMES, SKIP_OUTCOME, SKIP_CODES, DEADLINE_CODE } = require('../collectors/states');
 const { activeSourceWhere } = require('./store');
 
 const running = new Set();

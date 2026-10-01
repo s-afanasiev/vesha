@@ -111,4 +111,5 @@ module.exports = {
   loadNiches,
   buildNicheMatcher,
   matchableText,
+  normalizeText,
 };

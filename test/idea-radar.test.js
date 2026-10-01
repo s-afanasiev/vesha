@@ -2,8 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildNicheMatcher, matchableText } = require('../server/services/radar/niches');
 const { weekStart, lastWeeks, weeklyNicheCounts } = require('../server/services/idea-radar/keywords');
-const { parseFeed } = require('../server/services/idea-radar/adapters/rss');
-const { plainText, parseMoscowDate, contentHash } = require('../server/services/idea-radar/text');
+const { buildNoiseRule } = require('../server/services/idea-radar/relevance');
+const { parseFeed } = require('../server/services/collectors/adapters/rss');
+const { plainText, parseMoscowDate, contentHash } = require('../server/services/collectors/text');
 
 const NICHES = [
   {
@@ -78,18 +79,55 @@ test('weeks start on Monday in Moscow time', () => {
 test('weekly counts skip undated and out-of-range publications', () => {
   const result = weeklyNicheCounts({
     publications: [
-      { text: 'Шины дорожают', publishedAt: new Date('2026-09-29T08:00:00Z') },
-      { text: 'Про погоду', publishedAt: new Date('2026-09-22T08:00:00Z') },
-      { text: 'Шиномонтаж', publishedAt: null },
-      { text: 'Шины в прошлом году', publishedAt: new Date('2025-09-29T08:00:00Z') },
+      { text: 'Шины дорожают', region: 'ru-46', regionName: 'Курская область', publishedAt: new Date('2026-09-29T08:00:00Z') },
+      { text: 'Про погоду', region: 'ru-46', regionName: 'Курская область', publishedAt: new Date('2026-09-22T08:00:00Z') },
+      { text: 'Шиномонтаж', region: 'ru-46', regionName: 'Курская область', publishedAt: null },
+      { text: 'Шины в прошлом году', region: 'ru-46', regionName: 'Курская область', publishedAt: new Date('2025-09-29T08:00:00Z') },
     ],
     niches: NICHES,
     matchNiches: buildNicheMatcher(NICHES),
     weeks: ['2026-09-21', '2026-09-28'],
   });
-  assert.deepEqual(result.totals, [1, 1]);
-  assert.deepEqual(result.niches.find((n) => n.slug === 'auto_tires').counts, [0, 1]);
+  assert.deepEqual(result.regions, [{ code: 'ru-46', name: 'Курская область' }]);
+  assert.deepEqual(result.totals, { 'ru-46': [1, 1] });
+  assert.deepEqual(result.niches.find((n) => n.slug === 'auto_tires').counts, { 'ru-46': [0, 1] });
   assert.equal(result.niches.find((n) => n.slug === 'auto').total, 1);
+});
+
+test('weekly counts split by the source region, federal flow keeps its own denominator', () => {
+  const result = weeklyNicheCounts({
+    publications: [
+      { text: 'Курские шины дорожают', region: 'ru-46', regionName: 'Курская область', publishedAt: new Date('2026-09-29T08:00:00Z') },
+      { text: 'Федеральный рынок шин', region: 'ru', regionName: 'Россия', publishedAt: new Date('2026-09-30T08:00:00Z') },
+      { text: 'Курский шиномонтаж открылся', region: 'ru-46', regionName: 'Курская область', publishedAt: new Date('2026-09-22T08:00:00Z') },
+    ],
+    niches: NICHES,
+    matchNiches: buildNicheMatcher(NICHES),
+    weeks: ['2026-09-21', '2026-09-28'],
+  });
+  assert.deepEqual(result.regions, [
+    { code: 'ru-46', name: 'Курская область' },
+    { code: 'ru', name: 'Россия' },
+  ]);
+  assert.deepEqual(result.totals, { 'ru-46': [1, 1], ru: [0, 1] });
+  const tires = result.niches.find((n) => n.slug === 'auto_tires');
+  assert.deepEqual(tires.counts, { 'ru-46': [1, 1], ru: [0, 1] });
+  assert.equal(tires.total, 3);
+});
+
+test('rubric noise rule gives a verdict with the reason', () => {
+  const noise = buildNoiseRule();
+  assert.deepEqual(noise({ categories: ['Спорт'] }), { relevance: 'off_topic', reason: 'рубрика «Спорт»' });
+  assert.deepEqual(noise({ categories: ['Общество', 'Происшествия'] }), {
+    relevance: 'off_topic',
+    reason: 'рубрика «Происшествия»',
+  });
+  assert.deepEqual(noise({ categories: ['Экономика', 'Транспорт'] }), { relevance: 'unknown', reason: null });
+  assert.deepEqual(noise({ categories: [] }), { relevance: 'unknown', reason: null });
+  assert.deepEqual(noise({}), { relevance: 'unknown', reason: null });
+  // Стем, а не точное имя рубрики: «Спортивная жизнь» — шум, «Автоспорт» — не спорт.
+  assert.equal(noise({ categories: ['Спортивная жизнь'] }).relevance, 'off_topic');
+  assert.equal(noise({ categories: ['Автоспорт'] }).relevance, 'unknown');
 });
 
 test('rss parser keeps title, lead and link, drops markup', () => {
