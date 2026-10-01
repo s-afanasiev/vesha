@@ -99,16 +99,24 @@ function toPublication(row) {
     fetchedAt: row.fetched_at,
     meta: row.meta,
     source: { slug: row.source_slug, name: row.source_name, kind: row.source_kind },
+    // Сюжет как наблюдаемое — только когда перепечатка действительно склеена.
+    story: row.story_id && row.members > 1 ? { members: row.members, sources: row.story_sources } : null,
   };
 }
 
 // Новые сверху; без даты публикации — в конце.
 async function listPublications({ sourceSlug, q, from, to, limit, offset }) {
   const { rows } = await db.query(
-    `SELECT p.id, p.url, p.title, p.lead, p.published_at, p.fetched_at, p.meta,
-            s.slug AS source_slug, s.name AS source_name, s.kind AS source_kind
+    `SELECT p.id, p.url, p.title, p.lead, p.published_at, p.fetched_at, p.meta, p.story_id,
+            s.slug AS source_slug, s.name AS source_name, s.kind AS source_kind,
+            st.members, st.sources AS story_sources
      FROM idea_radar_publications p
      JOIN idea_radar_sources s ON s.id = p.source_id
+     LEFT JOIN LATERAL (
+       SELECT count(*)::int AS members, count(DISTINCT sp.source_id)::int AS sources
+       FROM idea_radar_publications sp
+       WHERE sp.story_id = p.story_id
+     ) st ON p.story_id IS NOT NULL
      WHERE ($1::text IS NULL OR s.slug = $1)
        AND ($2::text IS NULL OR p.title ILIKE $2 OR p.lead ILIKE $2)
        AND ($3::timestamptz IS NULL OR p.published_at >= $3)

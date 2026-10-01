@@ -1,7 +1,8 @@
 // /api/idea-radar — фаза 1: источники, ручной опрос, лента, примитивный счётчик ниш.
 // Ручки тонкие: ошибки ловит общий обработчик в main.js (Express 5 передаёт ему отклонённые промисы).
 const express = require('express');
-const { pollAll } = require('../services/idea-radar/poller');
+const { refreshAll } = require('../services/idea-radar/refresh');
+const { rebuildStories } = require('../services/idea-radar/stories');
 const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
 const { lastWeeks, weekStartsAt, weeklyNicheCounts } = require('../services/idea-radar/keywords');
 const { buildNoiseRule } = require('../services/idea-radar/relevance');
@@ -36,8 +37,13 @@ router.get('/sources', async (_req, res) => {
 });
 
 router.post('/polls', async (req, res) => {
-  const results = await pollAll({ sourceSlug: textParam(req.body && req.body.source) });
-  res.json({ results, sources: await listSources() });
+  const { results, stories } = await refreshAll({ sourceSlug: textParam(req.body && req.body.source) });
+  res.json({ results, stories, sources: await listSources() });
+});
+
+// Ручная пересборка сюжетов по всему корпусу (после опроса происходит сама).
+router.post('/stories', async (_req, res) => {
+  res.json({ stories: await rebuildStories() });
 });
 
 router.get('/publications', async (req, res) => {

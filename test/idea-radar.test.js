@@ -4,6 +4,8 @@ const { buildNicheMatcher, matchableText } = require('../server/services/radar/n
 const { weekStart, lastWeeks, weeklyNicheCounts } = require('../server/services/idea-radar/keywords');
 const { buildNoiseRule } = require('../server/services/idea-radar/relevance');
 const { parseFeed } = require('../server/services/collectors/adapters/rss');
+const { trigramJaccard } = require('../server/services/collectors/similarity');
+const { buildDuplicateRule, clusterStories } = require('../server/services/idea-radar/stories');
 const { plainText, parseMoscowDate, contentHash } = require('../server/services/collectors/text');
 
 const NICHES = [
@@ -130,8 +132,57 @@ test('rubric noise rule gives a verdict with the reason', () => {
   assert.equal(noise({ categories: ['Автоспорт'] }).relevance, 'unknown');
 });
 
-test('rss parser keeps title, lead and link, drops markup', () => {
-  const xml = `<?xml version="1.0" encoding="utf-8"?>
+test('trigram similarity separates a reprint from a different event', () => {
+  const reprint = trigramJaccard(
+    'В Курской области проходит акция Минприроды по сбору старых автомобильных шин',
+    'В Курской области начался сбор использованных автомобильных шин'
+  );
+  assert.ok(reprint >= 0.3, `ожидали ≥ 0.3, получили ${reprint.toFixed(2)}`);
+  assert.ok(
+    trigramJaccard('Ремонт автомобильных дорог завершён', 'Шиномонтаж открылся на Ленина') < 0.3
+  );
+  assert.equal(trigramJaccard('Ёлки, парк!', 'елки парк'), 1);
+  assert.equal(trigramJaccard('', 'что-то'), 0);
+});
+
+test('duplicate rule gives a verdict with the reason at the declared threshold', () => {
+  const rule = buildDuplicateRule({ threshold: 0.3 });
+  assert.deepEqual(rule({ similarity: 0.42 }), { duplicate: true, reason: 'заголовки схожи на 0.42' });
+  assert.deepEqual(rule({ similarity: 0.14 }), { duplicate: false, reason: null });
+});
+
+test('story clustering keeps a reprint in one story and different events apart', () => {
+  const clusters = clusterStories({
+    rule: buildDuplicateRule({}),
+    publications: [
+      // настоящие заголовки перепечатки из живых данных (сходство 0.39)
+      { id: 'a', title: 'В Курской области проходит акция Минприроды по сбору старых автомобильных шин', publishedAt: new Date('2026-09-28T10:00:00Z'), sourceId: 'gtrk' },
+      { id: 'b', title: 'В Курской области начался сбор использованных автомобильных шин', publishedAt: new Date('2026-09-28T12:00:00Z'), sourceId: 'izvestia' },
+      { id: 'c', title: 'В Курске 28 сентября проведут акцию про приемке шин на переработку', publishedAt: new Date('2026-09-28T13:00:00Z'), sourceId: '46tv' },
+      { id: 'd', title: 'В центре Курска ярко горел легковой автомобиль', publishedAt: new Date('2026-09-28T14:00:00Z'), sourceId: 'gtrk' },
+    ],
+  });
+  assert.equal(clusters.length, 3);
+  const story = clusters.find((c) => c.pubIds.length === 2);
+  assert.ok(story, 'перепечатка должна склеиться');
+  assert.deepEqual(story.pubIds, ['a', 'b']);
+  assert.equal(story.seedTitle.includes('Минприроды'), true); // первый издатель
+  assert.equal(story.sources, 2);
+});
+
+test('story clustering skips undated publications', () => {
+  const clusters = clusterStories({
+    rule: buildDuplicateRule({}),
+    publications: [
+      { id: 'a', title: 'Шины дорожают', publishedAt: null, sourceId: 'x' },
+      { id: 'b', title: 'Шины дорожают', publishedAt: new Date('2026-09-28T10:00:00Z'), sourceId: 'y' },
+    ],
+  });
+  assert.equal(clusters.length, 1);
+  assert.deepEqual(clusters[0].pubIds, ['b']);
+});
+
+test('rss parser keeps title, lead and link, drops markup', () => {  const xml = `<?xml version="1.0" encoding="utf-8"?>
     <rss version="2.0"><channel><title>Лента</title>
       <item>
         <title>Курск &amp; область: «новое»</title>

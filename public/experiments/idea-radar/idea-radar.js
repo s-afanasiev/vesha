@@ -426,6 +426,13 @@
         }),
         el('span', { class: 'ir-chip ir-chip--muted', text: pub.source.name }),
         ...this.nicheChips(pub),
+        pub.story
+          ? el('span', {
+              class: 'ir-chip ir-chip--muted',
+              text: `сюжет · ${pub.story.members}`,
+              title: `В сюжете ${pub.story.members} публикаций из ${pub.story.sources} источников — один сигнал`,
+            })
+          : null,
         pub.relevance === 'off_topic'
           ? el('span', {
               class: 'ir-chip ir-chip--noise',
