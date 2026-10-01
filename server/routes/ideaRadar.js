@@ -1,6 +1,7 @@
 // /api/idea-radar — фаза 1: источники, ручной опрос, лента, примитивный счётчик ниш.
 // Ручки тонкие: ошибки ловит общий обработчик в main.js (Express 5 передаёт ему отклонённые промисы).
 const express = require('express');
+const config = require('../config');
 const { refreshAll } = require('../services/idea-radar/refresh');
 const { rebuildStories } = require('../services/idea-radar/stories');
 const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
@@ -38,8 +39,10 @@ router.get('/sources', async (_req, res) => {
 });
 
 // Свободное место на диске данных: ряды растут с включённым таймером опроса.
+// На сервере путь к растущему тому задаётся DISK_INFO_PATH (fs.statfs работает
+// и на Windows, и на Linux — проверено в alpine-контейнере).
 router.get('/disk', (_req, res) => {
-  res.json({ disk: getStorageInfo(process.cwd()) });
+  res.json({ disk: getStorageInfo(config.diskInfoPath) });
 });
 
 router.post('/polls', async (req, res) => {
