@@ -36,6 +36,26 @@ body.page-idea-radar .experiments {
   border-radius: 9999px;
 }
 
+.ir-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ir-badge--muted {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border);
+  letter-spacing: 0.02em;
+}
+
+.ir-badge--warn {
+  color: var(--ir-warn-text);
+  background: var(--ir-warn-bg);
+  border-color: var(--ir-warn-border);
+}
+
 .ir-visually-hidden {
   position: absolute;
   width: 1px;

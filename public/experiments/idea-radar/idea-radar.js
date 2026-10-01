@@ -29,6 +29,23 @@
     });
     feed.onFilterChange = (filter) => counts.highlight(filter);
     [sources, counts, feed].forEach((part) => part.load());
+    loadDiskIndicator(api, byId('disk-badge'));
+  }
+
+  // Место на диске в шапке: ряды растут с включённым таймером; предупреждение, когда мало.
+  async function loadDiskIndicator(api, badge) {
+    try {
+      const { disk } = await api.disk();
+      if (disk.freeBytes === null || disk.totalBytes === null) return;
+      const gb = (bytes) =>
+        `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(bytes / 1024 ** 3)} ГБ`;
+      badge.textContent = `диск: ${gb(disk.freeBytes)} свободно`;
+      badge.title = `Всего ${gb(disk.totalBytes)}${disk.root ? ` · ${disk.root}` : ''}`;
+      badge.classList.toggle('ir-badge--warn', disk.freeBytes / disk.totalBytes < 0.1);
+      badge.hidden = false;
+    } catch (err) {
+      // индикатор не критичен: страница работает и без него
+    }
   }
 
   // ---------- Клиент API ----------
@@ -70,6 +87,10 @@
 
     keywords(weeks) {
       return this.request(`/keywords?weeks=${weeks}`);
+    }
+
+    disk() {
+      return this.request('/disk');
     }
   }
 

@@ -4,6 +4,7 @@ const express = require('express');
 const { refreshAll } = require('../services/idea-radar/refresh');
 const { rebuildStories } = require('../services/idea-radar/stories');
 const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
+const { getStorageInfo } = require('../services/storageInfo');
 const { lastWeeks, weekStartsAt, weeklyNicheCounts } = require('../services/idea-radar/keywords');
 const { buildNoiseRule } = require('../services/idea-radar/relevance');
 const { loadNiches, buildNicheMatcher, matchableText } = require('../services/radar/niches');
@@ -34,6 +35,11 @@ function weekRange(week) {
 
 router.get('/sources', async (_req, res) => {
   res.json({ sources: await listSources() });
+});
+
+// Свободное место на диске данных: ряды растут с включённым таймером опроса.
+router.get('/disk', (_req, res) => {
+  res.json({ disk: getStorageInfo(process.cwd()) });
 });
 
 router.post('/polls', async (req, res) => {
