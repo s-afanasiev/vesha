@@ -217,13 +217,14 @@ idea_radar_publications  id, source_id, external_id, url, title, lead, body?,
                          published_at?, fetched_at, first_poll_id, content_hash, lang,
                          meta JSONB, relevance (unknown | relevant | off_topic), story_id?
                          UNIQUE (source_id, external_id)
-idea_radar_stories       id, title, created_at                       -- кластер перепечаток
-idea_radar_subjects      id, name, niche_id?, status (active | merged), merged_into?,
+idea_radar_stories       id, title, created_at                       -- кластер перепечаток (009)
+idea_radar_subjects      id, name UNIQUE, niche_id?, status (active | merged), merged_into?,
                          first_seen_at                               -- канон предмета
-idea_radar_shifts        id, story_id, type, direction (duty | opportunity | threat),
-                         niche_id, region_id, subject_id, subject_raw, effective_date?,
+idea_radar_shifts        id, story_id, type, region_id, subject_id, subject_raw, effective_date?,
                          summary, quote, quote_verified, taxonomy_version, prompt_version,
-                         model, created_at
+                         model, created_at                           -- направления здесь нет (И3)
+idea_radar_shift_addressees  shift_id, niche_id, direction (duty | opportunity | threat),
+                             PRIMARY KEY (shift_id, niche_id)        -- адресаты: M:N (И3)
 ```
 
 - `body` заполняется только у `gov`: официальные документы госорганов не объекты авторского права (ГК РФ, ст. 1259, п. 6). У СМИ — заголовок, лид, ссылка.
@@ -231,6 +232,7 @@ idea_radar_shifts        id, story_id, type, direction (duty | opportunity | thr
 - Нет `published_at` — публикация не участвует в трендах. `fetched_at` вместо неё не подставляется.
 - `content_hash` (нормализованные title+lead) пишется с фазы 1, читается фазой 2 — склейка перепечаток в сюжеты. Условие возврата: поле пересчитывается из title+lead на месте; если к началу фазы 3 оно всё ещё никем не читается — перестать писать.
 - `relevance` вычисляется при чтении, в колонку не пишется: правило рубричного шума (И2, `server/services/idea-radar/relevance.js`) ставит `off_topic` по `meta.categories` — производное не храним; `relevant` появится с LLM-разметкой фазы 2. Условие возврата: если к фазе 3 правило и разметка не начали писать в колонку — убрать её отдельной миграцией.
+- Направление сдвига — свойство связи «сдвиг × адресат-ниша», не колонка сдвига (И3): маркировка — `threat` производителю и `opportunity` для услуги внедрения. Одна пара «сдвиг × ниша» — один вердикт; двойной вердикт одной нише — это два разных сдвига. Ниши сдвига — M:N через ту же связь. `idea_radar_weekly` материализуется вместе с разметкой: оси известны, но строить представление над пустыми сдвигами рано (П34).
 - Счётчики — материализованное представление `idea_radar_weekly` (неделя × предмет/тип × ниша × регион × вид источника → сдвигов, сюжетов, источников); обновляется после ежедневного опроса.
 
 ### Биржа `birzha_*` (поздняя фаза)
@@ -266,7 +268,7 @@ birzha_referrals      id, referrer_user_id, invited_user_id, created_at
 | 1 | `006_idea_radar_feeds.sql` | `idea_radar_sources` (+ 6 источников), `idea_radar_polls`, `idea_radar_publications` |
 | 1 | `008_radar_niche_excludes.sql` | `radar_niches.excludes` + первые исключения у «Авто» |
 | 2 | `009_idea_radar_stories.sql` | `idea_radar_stories`, `story_id` на публикациях (склейка перепечаток, И10) |
-| 2 | `0NN_idea_radar_shifts.sql` | `idea_radar_subjects`, `idea_radar_shifts`, `idea_radar_weekly` |
+| 2 | `010_idea_radar_shifts.sql` | `idea_radar_subjects`, `idea_radar_shifts`, `idea_radar_shift_addressees` (И3); `idea_radar_weekly` — вместе с разметкой |
 | 3 | `0NN_radar_ideas.sql` | `radar_profiles`, `radar_profile_niches`, `radar_idea_runs`, `radar_ideas`, `radar_idea_evidence`, `radar_idea_reactions` |
 | 4 | `0NN_radar_embeddings.sql` | `CREATE EXTENSION vector`, `radar_embeddings`; смена образа Postgres |
 | 6 | `0NN_birzha.sql` | `birzha_*` |
@@ -354,7 +356,7 @@ birzha_referrals      id, referrer_user_id, invited_user_id, created_at
 |---|---|---|---|---|
 | И1 | Ось региона в счётчике фазы 1: знаменатель делится на «регион» и «федеральные» — Колёса.ру топит местные ряды, а ячейка счётчика в этой доке обещает регион | счётчик, API | сейчас | **принято 02.10.2026** |
 | И2 | Рубричный шумовой фильтр: правило по `meta.categories` (спорт, происшествия, культура → `off_topic`, мимо счётчика). Данные уже собираются адаптером RSS — это же первые значения `relevance` | публикации, счётчик | сейчас | **принято 02.10.2026** |
-| И3 | Схема сдвигов до накопления данных: направление (`duty\|opportunity\|threat`) — свойство связи «сдвиг × адресат», а не колонка сдвига; ниши — M:N, сдвиг почти всегда мультинишевый | миграция сдвигов | до фазы 2 | предложено |
+| И3 | Схема сдвигов до накопления данных: направление (`duty\|opportunity\|threat`) — свойство связи «сдвиг × адресат», а не колонка сдвига; ниши — M:N, сдвиг почти всегда мультинишевый | миграция сдвигов | сделано 02.10.2026 (`010_idea_radar_shifts.sql`) | **принято** |
 | И4 | Блокер фазы 2: адаптер `pravo` не имеет текста акта (`body` пустой) — разметка сдвига по заголовкам «О внесении изменений…» бесполезна. Нужен шаг доставки текста: официальные документы хранить можно | адаптер `pravo` | фаза 2 | предложено |
 | И5 | Роль источника (`local_signal` \| `lead_indicator`): Колёса.ру — федеральный лид-индикатор, который «приедет» в регион, а не локальный сигнал. От роли, а не от `kind`, зависят счёт и стадия | реестр источников | фаза 2 | предложено |
 | И6 | «Независимые источники» считать по видам мира (gov + news + jobs), а не по числу лент: региональные СМИ перепечатывают друг друга за сутки. В сюжете — первый издатель | счётчики, сюжеты | фаза 2 | предложено |
