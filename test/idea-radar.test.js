@@ -1,23 +1,67 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildNicheMatcher } = require('../server/services/radar/niches');
+const { buildNicheMatcher, matchableText } = require('../server/services/radar/niches');
 const { weekStart, lastWeeks, weeklyNicheCounts } = require('../server/services/idea-radar/keywords');
 const { parseFeed } = require('../server/services/idea-radar/adapters/rss');
 const { plainText, parseMoscowDate, contentHash } = require('../server/services/idea-radar/text');
 
 const NICHES = [
-  { slug: 'auto', title: 'Авто', aliases: ['автомоб'], parentSlug: null },
+  {
+    slug: 'auto',
+    title: 'Авто',
+    aliases: ['автомоб'],
+    excludes: ['дтп', 'штраф за парковк'],
+    parentSlug: null,
+  },
   { slug: 'auto_tires', title: 'Шиномонтаж', aliases: ['шиномонтаж', 'шин'], parentSlug: 'auto' },
   { slug: 'auto_parts', title: 'Запчасти', aliases: ['параллельн импорт'], parentSlug: 'auto' },
 ];
 
-test('niche matcher finds word starts and credits the parent', () => {
+test('niche matcher returns verdicts with the reason and credits the parent via the child', () => {
   const match = buildNicheMatcher(NICHES);
-  assert.deepEqual(match('Зимние ШИНЫ подорожали'), ['auto', 'auto_tires']);
-  assert.deepEqual(match('Открылся шиномонтаж на Ленина'), ['auto', 'auto_tires']);
+  assert.deepEqual(match('Зимние ШИНЫ подорожали'), [
+    { slug: 'auto', hits: [{ alias: 'шин', matchedText: 'шины', viaSlug: 'auto_tires' }] },
+    { slug: 'auto_tires', hits: [{ alias: 'шин', matchedText: 'шины' }] },
+  ]);
+  assert.deepEqual(match('Параллельного импорта станет больше'), [
+    {
+      slug: 'auto',
+      hits: [{ alias: 'параллельн импорт', matchedText: 'параллельного импорта', viaSlug: 'auto_parts' }],
+    },
+    { slug: 'auto_parts', hits: [{ alias: 'параллельн импорт', matchedText: 'параллельного импорта' }] },
+  ]);
+  // Собственный синоним и срабатывание ребёнка складываются в один вердикт.
+  assert.deepEqual(match('Рынок автомобилей с пробегом'), [
+    { slug: 'auto', hits: [{ alias: 'автомоб', matchedText: 'автомобилей' }] },
+  ]);
   assert.deepEqual(match('Новая машина мэра'), []);
-  assert.deepEqual(match('Параллельного импорта станет больше'), ['auto', 'auto_parts']);
-  assert.deepEqual(match('Рынок автомобилей с пробегом'), ['auto']);
+});
+
+test('a synonym at the end of the title counts too', () => {
+  const match = buildNicheMatcher(NICHES);
+  assert.deepEqual(match('В Курске открылся шиномонтаж'), [
+    { slug: 'auto', hits: [{ alias: 'шиномонтаж', matchedText: 'шиномонтаж', viaSlug: 'auto_tires' }] },
+    { slug: 'auto_tires', hits: [{ alias: 'шиномонтаж', matchedText: 'шиномонтаж' }] },
+  ]);
+});
+
+test('niche excludes veto the match, ancestors included', () => {
+  const match = buildNicheMatcher(NICHES);
+  // Синоним сработал, но исключение сняло нишу: ДТП — не про ремонт и обслуживание.
+  assert.deepEqual(match('ДТП в Курске: столкнулись автомобили'), []);
+  // Вето предка снимает и детей.
+  assert.deepEqual(match('После ДТП поток в шиномонтаж вырос'), []);
+  // Исключение — фраза, а не отдельное слово: штраф без парковки нишу не снимает.
+  assert.deepEqual(match('Штраф за тонировку автомобиля'), [
+    { slug: 'auto', hits: [{ alias: 'автомоб', matchedText: 'автомобиля' }] },
+  ]);
+  assert.deepEqual(match('Штраф за парковку на тротуаре у автомобилей'), []);
+});
+
+test('matchableText joins title and lead — one rule for the feed and the counter', () => {
+  assert.equal(matchableText({ title: 'Шины дорожают', lead: null }), 'Шины дорожают');
+  assert.equal(matchableText({ title: 'Т', lead: 'Л' }), 'Т Л');
+  assert.equal(matchableText({ title: '', lead: 'Лид' }), 'Лид');
 });
 
 test('weeks start on Monday in Moscow time', () => {
@@ -34,10 +78,10 @@ test('weeks start on Monday in Moscow time', () => {
 test('weekly counts skip undated and out-of-range publications', () => {
   const result = weeklyNicheCounts({
     publications: [
-      { title: 'Шины дорожают', lead: '', publishedAt: new Date('2026-09-29T08:00:00Z') },
-      { title: 'Про погоду', lead: 'без авто', publishedAt: new Date('2026-09-22T08:00:00Z') },
-      { title: 'Шиномонтаж', lead: null, publishedAt: null },
-      { title: 'Шины в прошлом году', lead: '', publishedAt: new Date('2025-09-29T08:00:00Z') },
+      { text: 'Шины дорожают', publishedAt: new Date('2026-09-29T08:00:00Z') },
+      { text: 'Про погоду', publishedAt: new Date('2026-09-22T08:00:00Z') },
+      { text: 'Шиномонтаж', publishedAt: null },
+      { text: 'Шины в прошлом году', publishedAt: new Date('2025-09-29T08:00:00Z') },
     ],
     niches: NICHES,
     matchNiches: buildNicheMatcher(NICHES),

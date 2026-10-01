@@ -4,7 +4,7 @@ const express = require('express');
 const { pollAll } = require('../services/idea-radar/poller');
 const { listSources, listPublications, publicationsSince } = require('../services/idea-radar/store');
 const { lastWeeks, weekStartsAt, weeklyNicheCounts } = require('../services/idea-radar/keywords');
-const { loadNiches, buildNicheMatcher } = require('../services/radar/niches');
+const { loadNiches, buildNicheMatcher, matchableText } = require('../services/radar/niches');
 
 const router = express.Router();
 
@@ -28,10 +28,6 @@ function weekRange(week) {
   const from = weekStartsAt(week);
   if (!Number.isFinite(from.getTime())) return {};
   return { from, to: new Date(from.getTime() + WEEK_MS) };
-}
-
-function searchableText(pub) {
-  return `${pub.title} ${pub.lead || ''}`;
 }
 
 router.get('/sources', async (_req, res) => {
@@ -58,7 +54,9 @@ router.get('/publications', async (req, res) => {
   let hasMore;
   if (niche) {
     const window = await listPublications({ ...filters, limit: NICHE_FILTER_WINDOW, offset: 0 });
-    const matched = window.filter((pub) => matchNiches(searchableText(pub)).includes(niche));
+    const matched = window.filter((pub) =>
+      matchNiches(matchableText(pub)).some((verdict) => verdict.slug === niche)
+    );
     items = matched.slice(offset, offset + limit);
     hasMore = matched.length > offset + limit;
   } else {
@@ -68,7 +66,10 @@ router.get('/publications', async (req, res) => {
   }
 
   res.json({
-    items: items.map((pub) => ({ ...pub, niches: matchNiches(searchableText(pub)) })),
+    items: items.map((pub) => {
+      const verdicts = matchNiches(matchableText(pub));
+      return { ...pub, niches: verdicts.map((v) => v.slug), nicheHits: verdicts };
+    }),
     hasMore,
   });
 });
@@ -76,7 +77,10 @@ router.get('/publications', async (req, res) => {
 router.get('/keywords', async (req, res) => {
   const weeks = lastWeeks(new Date(), intParam(req.query.weeks, 8, 1, 26));
   const niches = await loadNiches();
-  const publications = await publicationsSince(weekStartsAt(weeks[0]));
+  const publications = (await publicationsSince(weekStartsAt(weeks[0]))).map((pub) => ({
+    text: matchableText(pub),
+    publishedAt: pub.publishedAt,
+  }));
   res.json(
     weeklyNicheCounts({ publications, niches, matchNiches: buildNicheMatcher(niches), weeks })
   );

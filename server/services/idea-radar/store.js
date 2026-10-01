@@ -1,10 +1,17 @@
 // Чтение корпуса радара идей для API: источники со снимком последнего опроса, лента публикаций.
 const db = require('../../db');
 const config = require('../../config');
+const { INTERRUPTED_CODE } = require('./states');
 
 // Опрос без finished_at дольше дедлайна — процесс умер посреди опроса (перезапуск сервера).
 // Состояние вычисляется при чтении, сторож его не переписывает.
 const INTERRUPTED_GRACE_MS = 30 * 1000;
+
+// Активен источник — внутри периода активности; правило одно на всех читателей
+// idea_radar_sources (poller.js берёт отсюда же).
+function activeSourceWhere(alias = '') {
+  return `${alias}active_from <= now() AND (${alias}active_to IS NULL OR ${alias}active_to >= now())`;
+}
 
 function pollSnapshot(row) {
   const snapshot = {
@@ -19,7 +26,7 @@ function pollSnapshot(row) {
   const age = Date.now() - new Date(row.started_at).getTime();
   if (!row.finished_at && age > config.ideaRadarPollDeadlineMs + INTERRUPTED_GRACE_MS) {
     snapshot.outcome = 'failed';
-    snapshot.errorCode = 'interrupted';
+    snapshot.errorCode = INTERRUPTED_CODE;
     snapshot.error = 'Опрос прерван: сервер перезапустился посреди опроса';
   }
   return snapshot;
@@ -60,7 +67,7 @@ async function listSources() {
        FROM idea_radar_polls p
        WHERE p.source_id = s.id AND p.started_at > now() - interval '3 days'
      ) h ON true
-     WHERE s.active_to IS NULL
+     WHERE ${activeSourceWhere('s.')}
      ORDER BY s.sort_order`,
     [(config.ideaRadarPollDeadlineMs + INTERRUPTED_GRACE_MS) / 1000]
   );
@@ -128,4 +135,5 @@ module.exports = {
   listSources,
   listPublications,
   publicationsSince,
+  activeSourceWhere,
 };

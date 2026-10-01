@@ -4,6 +4,8 @@ const db = require('../../db');
 const config = require('../../config');
 const ADAPTERS = require('./adapters');
 const { contentHash } = require('./text');
+const { POLL_OUTCOMES, SKIP_OUTCOME, SKIP_CODES, DEADLINE_CODE } = require('./states');
+const { activeSourceWhere } = require('./store');
 
 const running = new Set();
 
@@ -11,7 +13,7 @@ async function activeSources(sourceSlug) {
   const { rows } = await db.query(
     `SELECT id, slug, name, adapter, settings
      FROM idea_radar_sources
-     WHERE active_to IS NULL AND ($1::text IS NULL OR slug = $1)
+     WHERE ${activeSourceWhere()} AND ($1::text IS NULL OR slug = $1)
      ORDER BY sort_order`,
     [sourceSlug || null]
   );
@@ -53,8 +55,8 @@ async function saveItems(sourceId, pollId, items) {
   return fresh;
 }
 
-function skipped(source, reason, retryInSec) {
-  return { sourceId: source.id, slug: source.slug, outcome: 'skipped', reason, retryInSec };
+function skipped(source, code, reason, retryInSec) {
+  return { sourceId: source.id, slug: source.slug, outcome: SKIP_OUTCOME, code, reason, retryInSec };
 }
 
 async function runPoll(source, adapter, signal) {
@@ -72,7 +74,7 @@ async function runPoll(source, adapter, signal) {
 
   let itemsSeen = 0;
   let itemsNew = 0;
-  let outcome = 'ok';
+  let outcome = POLL_OUTCOMES.OK;
   let errorCode = null;
   let error = null;
   try {
@@ -83,8 +85,8 @@ async function runPoll(source, adapter, signal) {
       if (fresh === 0) break; // дальше только уже известное
     }
   } catch (err) {
-    outcome = itemsSeen > 0 ? 'partial' : 'failed';
-    errorCode = deadline.aborted ? 'deadline' : err.code || 'error';
+    outcome = itemsSeen > 0 ? POLL_OUTCOMES.PARTIAL : POLL_OUTCOMES.FAILED;
+    errorCode = deadline.aborted ? DEADLINE_CODE : err.code || 'error';
     error = deadline.aborted
       ? `Опрос не уложился в ${config.ideaRadarPollDeadlineMs / 1000} с`
       : err.message;
@@ -101,15 +103,15 @@ async function runPoll(source, adapter, signal) {
 
 async function pollSource(source, { signal } = {}) {
   const adapter = ADAPTERS[source.adapter];
-  if (!adapter) return skipped(source, `адаптер «${source.adapter}» не подключён`);
-  if (running.has(source.id)) return skipped(source, 'опрос уже идёт');
+  if (!adapter) return skipped(source, SKIP_CODES.UNKNOWN_ADAPTER, `адаптер «${source.adapter}» не подключён`);
+  if (running.has(source.id)) return skipped(source, SKIP_CODES.ALREADY_RUNNING, 'опрос уже идёт');
 
   running.add(source.id);
   try {
     const since = await secondsSinceLastPoll(source.id);
     const minInterval = config.ideaRadarMinPollIntervalSec;
     if (since !== null && since < minInterval) {
-      return skipped(source, 'слишком рано', minInterval - since);
+      return skipped(source, SKIP_CODES.MIN_INTERVAL, 'слишком рано', minInterval - since);
     }
     return await runPoll(source, adapter, signal);
   } finally {

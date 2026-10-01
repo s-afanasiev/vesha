@@ -378,13 +378,31 @@
           text: pub.publishedAt ? formatDateTime(pub.publishedAt) : 'без даты',
         }),
         el('span', { class: 'ir-chip ir-chip--muted', text: pub.source.name }),
-        ...pub.niches.map((slug) => el('span', { class: 'ir-chip', text: this.nicheTitles[slug] || slug })),
+        ...this.nicheChips(pub),
       ]);
       return el('li', { class: 'ir-item' }, [
         meta,
         el('a', { class: 'ir-item__title', href: pub.url, target: '_blank', rel: 'noopener', text: pub.title }),
         pub.lead ? el('p', { class: 'ir-item__lead', text: pub.lead }) : null,
       ]);
+    }
+
+    // Вердикт матча в подсказке: какой синоним сработал и что совпало — отладка словаря.
+    nicheChips(pub) {
+      const verdicts = pub.nicheHits || pub.niches.map((slug) => ({ slug, hits: [] }));
+      return verdicts.map(({ slug, hits }) =>
+        el('span', {
+          class: 'ir-chip',
+          text: this.nicheTitles[slug] || slug,
+          title:
+            hits
+              .map((h) =>
+                `${h.viaSlug ? `через «${this.nicheTitles[h.viaSlug] || h.viaSlug}»: ` : ''}` +
+                `${h.alias} → ${h.matchedText}`
+              )
+              .join('; ') || null,
+        })
+      );
     }
   }
 

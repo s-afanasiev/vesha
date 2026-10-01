@@ -1,5 +1,6 @@
 // Примитивный счётчик фазы 1: сколько публикаций в неделю упоминают синонимы ниш.
-// Чистое действие (П15): вход — публикации и словарь, выход — таблица; БД и HTTP не знает.
+// Чистое действие (П15): вход — тексты публикаций (matchableText) и словарь,
+// выход — таблица; БД и HTTP не знает.
 // Неделя — с понедельника по московскому времени; публикации без даты не считаются.
 const MOSCOW_OFFSET_MS = 3 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -33,7 +34,7 @@ function weeklyNicheCounts({ publications, niches, matchNiches, weeks }) {
     const i = column.get(weekStart(new Date(pub.publishedAt)));
     if (i === undefined) continue;
     totals[i] += 1;
-    for (const slug of matchNiches(`${pub.title} ${pub.lead || ''}`)) {
+    for (const { slug } of matchNiches(pub.text)) {
       counts.get(slug)[i] += 1;
     }
   }
