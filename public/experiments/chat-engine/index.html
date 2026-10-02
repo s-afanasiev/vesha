@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Чат-движок — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/llm-picker.css" />
+  <link rel="stylesheet" href="./chat-engine.css" />
+</head>
+<body class="page-experiments">
+  <main class="experiments">
+    <div class="experiments__nav">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+        <div data-vesha-auth-widget></div>
+      </div>
+    </div>
+
+    <header class="experiments__header">
+      <h1>Чат-движок</h1>
+      <p>
+        Скелет полуавтомата: посетитель пишет в виджет на «сайте заказчика», ассистент
+        предлагает ответ, менеджер отправляет или правит.
+        <a href="./widget.html">Открыть страницу пользователя →</a>
+      </p>
+      <div data-vesha-llm-picker></div>
+    </header>
+
+    <div class="ce-toolbar">
+      <button id="ce-persona-btn" class="vesha-btn vesha-btn--outline vesha-btn--sm">Персона ассистента</button>
+      <span class="ce-toolbar__spacer"></span>
+      <a class="vesha-btn vesha-btn--primary" href="./widget.html">Страница на стороне пользователя →</a>
+    </div>
+
+    <div class="ce-layout">
+      <section class="ce-board" id="ce-board" aria-label="Воронка диалогов"></section>
+
+      <aside class="ce-chat" id="ce-chat" hidden>
+        <div class="ce-chat__head">
+          <div class="ce-chat__who">
+            <input id="ce-chat-name" class="ce-chat__name" title="Имя посетителя" />
+            <input id="ce-chat-notes" class="ce-chat__notes" placeholder="Заметки — контекст для ассистента" />
+          </div>
+          <select id="ce-chat-stage" class="ce-chat__stage" title="Этап воронки"></select>
+          <button id="ce-chat-close" class="ce-chat__close" title="Закрыть">×</button>
+        </div>
+        <div class="ce-chat__messages" id="ce-chat-messages"></div>
+        <div class="ce-chat__composer">
+          <div class="ce-chat__composer-row">
+            <button id="ce-suggest" class="vesha-btn vesha-btn--outline vesha-btn--sm">Предложить ответ</button>
+            <span id="ce-chat-note" class="ce-chat__note"></span>
+          </div>
+          <div class="ce-chat__composer-row">
+            <textarea id="ce-input" rows="2" placeholder="Ответ как менеджер…"></textarea>
+            <button id="ce-send" class="vesha-btn vesha-btn--primary vesha-btn--sm">Ответить</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="ce-modal" id="ce-persona-modal" hidden>
+      <div class="ce-modal__box">
+        <h3>Персона ассистента</h3>
+        <p class="ce-hint">Тон, правила и запреты. Подмешивается в промпт при «Предложить ответ».</p>
+        <textarea id="ce-persona-text" rows="12"></textarea>
+        <div class="ce-modal__actions">
+          <button id="ce-persona-save" class="vesha-btn vesha-btn--primary vesha-btn--sm">Сохранить</button>
+          <button id="ce-persona-cancel" class="vesha-btn vesha-btn--sm">Отмена</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/theme.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/llm-picker.js"></script>
+  <script src="./dashboard.js"></script>
+</body>
+</html>

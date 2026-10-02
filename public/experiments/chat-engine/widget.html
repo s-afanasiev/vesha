@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Демо-сайт заказчика — чат-движок</title>
+  <link rel="stylesheet" href="./chat-engine.css" />
+</head>
+<body class="cs-body">
+  <a class="cs-back" href="/experiments/chat-engine/">← Вернуться к дашборду менеджера</a>
+
+  <div class="cs-site">
+    <div class="cs-hero">
+      <h1>ООО «Ромашка»</h1>
+      <p>
+        Это имитация сайта заказчика. Справа внизу — тот самый виджет: посетитель пишет
+        обращение, диалог появляется на дашборде менеджера, ассистент предлагает ответ.
+      </p>
+    </div>
+    <h2>Наши услуги</h2>
+    <p>
+      Здесь могло быть что угодно: оценка ущерба, страхование, ремонт, доставка.
+      Всё, что видит менеджер в <a href="index.html">чат-движке</a>, началось
+      с сообщения в виджет на этой странице.
+    </p>
+  </div>
+
+  <div class="cw-widget">
+    <div class="cw-widget__head">
+      <strong>Чат с компанией</strong>
+      <span>обычно отвечаем в течение часа</span>
+    </div>
+    <div class="cw-name-row">
+      <label for="cw-name">Ваше имя:</label>
+      <input id="cw-name" placeholder="Как к вам обращаться" />
+    </div>
+    <div class="cw-widget__messages" id="cw-messages"></div>
+    <form class="cw-widget__form" id="cw-form">
+      <input id="cw-input" placeholder="Напишите сообщение…" autocomplete="off" />
+      <button type="submit">Отправить</button>
+    </form>
+  </div>
+
+  <script src="./widget.js"></script>
+</body>
+</html>
