@@ -63,6 +63,22 @@
       "href": "/experiments/super-notes/",
       "status": "wip",
       "tech": ["js", "postgres", "pgvector"]
+    },
+    {
+      "id": "chat-engine",
+      "title": "Чат-движок",
+      "description": "Виджет на сайте → диалог → LLM предлагает ответ, менеджер согласовывает",
+      "href": "/experiments/chat-engine/",
+      "status": "wip",
+      "tech": ["js", "postgres", "llm"]
+    },
+    {
+      "id": "ocenka-site",
+      "title": "Сайт оценочной компании",
+      "description": "Демо: как мог бы выглядеть сайт «Страхование и оценка» (Курск)",
+      "href": "/experiments/ocenka-site/",
+      "status": "wip",
+      "tech": ["html", "css"]
     }
   ]
 }
