@@ -79,6 +79,14 @@
       "href": "/experiments/ocenka-site/",
       "status": "wip",
       "tech": ["html", "css"]
+    },
+    {
+      "id": "ocenka-site-v2",
+      "title": "Сайт оценочной компании v2",
+      "description": "Тёмная премиум-версия: стекло, bento, 3D-карусель услуг с модалкой",
+      "href": "/experiments/ocenka-site-v2/",
+      "status": "wip",
+      "tech": ["html", "css", "carousel"]
     }
   ]
 }
