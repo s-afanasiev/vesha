@@ -22,12 +22,18 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
+// DB_MODE: native — подключаться к установленному Postgres (порт по умолчанию 5432),
+// docker — поднят контейнер из docker-compose.yml (порт 5434).
+// Явные DATABASE_URL или PGPORT всегда сильнее режима (П6: числа — в декларации).
+const dbMode = envStr('DB_MODE') === 'docker' ? 'docker' : 'native';
+const defaultDbPort = dbMode === 'docker' ? 5434 : 5432;
+
 const databaseUrl = process.env.DATABASE_URL || '';
 const dbConfig = databaseUrl
   ? { connectionString: databaseUrl }
   : {
       host: process.env.PGHOST || 'localhost',
-      port: intEnv('PGPORT', 5432),
+      port: intEnv('PGPORT', defaultDbPort),
       user: process.env.PGUSER || 'postgres',
       password: process.env.PGPASSWORD || 'postgres',
       database: process.env.PGDATABASE || 'vesha',
@@ -41,6 +47,7 @@ const config = {
   isProduction: process.env.NODE_ENV === 'production',
   port: intEnv('PORT', 3000),
   trustProxy: boolEnv('TRUST_PROXY', false),
+  dbMode,
   databaseUrl: databaseUrl || `postgres://${dbConfig.user}:${dbConfig.password}@${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`,
   dbConfig,
   sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
