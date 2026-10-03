@@ -25,6 +25,13 @@
   overflow-x: hidden;
 }
 
+/* переполнение карусели (глубинные карточки) не должно панорамировать страницу:
+   clip запрещает любое горизонтальное смещение, включая программное */
+html {
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
 .ov-body a {
   color: inherit;
 }
@@ -745,7 +752,10 @@
 
 .ov-modal {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0; /* inset: 0 не понимают старые мобильные Safari */
   z-index: 60;
   display: flex;
   align-items: center;
@@ -931,14 +941,16 @@
     --ov-card-h: 300px;
   }
 
+  /* карточка сжимается под узкий экран, центр остаётся по середине */
   .ov-card {
-    width: 250px;
-    margin: calc(var(--ov-card-h) / -2) 0 0 -125px;
+    width: min(250px, 72vw);
+    margin: calc(var(--ov-card-h) / -2) 0 0 calc(min(250px, 72vw) / -2);
   }
 
   .ov-modal__window {
     width: 96vw;
-    height: 96dvh;
+    height: 96vh;   /* запас для браузеров без dvh */
+    height: 96dvh;  /* новые браузеры учитывают адресную строку */
   }
 
   .ov-modal__arrow--prev {
@@ -947,5 +959,42 @@
 
   .ov-modal__arrow--next {
     right: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ov-header__inner {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .ov-logo__mark {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+    border-radius: 9px;
+  }
+
+  .ov-logo__text {
+    font-size: 14px;
+  }
+
+  .ov-btn--sm {
+    padding: 7px 11px;
+    font-size: 11.5px;
+  }
+
+  .ov-carousel__arrow {
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+  }
+
+  .ov-hero__inner {
+    padding-top: 34px;
+  }
+
+  .ov-section {
+    padding: 36px 0;
   }
 }
