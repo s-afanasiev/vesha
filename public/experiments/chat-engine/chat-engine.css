@@ -736,3 +736,184 @@
     height: 300px;
   }
 }
+
+/* ---------- материальная тема «приборной панели» ----------
+   Вдохновено интерфейсами начала 90-х (см. разбор в чате): фаска 1px —
+   свет сверху-слева, тень снизу-справа; утопленный «колодец» для чтения,
+   выпуклые кнопки с честным нажатием; синий — цвет доверия и концентрации.
+   Тема касается только дашбора (классы ce- и page-experiments); виджет
+   заказчика (классы cs и cw) остаётся современным. */
+
+:root {
+  --ce-chassis: #cfd4db;   /* корпус прибора */
+  --ce-face: #e8ebef;      /* лицевая панель */
+  --ce-face-hi: #f2f4f7;
+  --ce-well: #dce0e6;      /* утопленный колодец */
+  --ce-hi: #ffffff;        /* свет фаски */
+  --ce-lo: #99a1ad;        /* тень фаски */
+  --ce-blue: #2f5d8f;      /* доверие/концентрация */
+  --ce-blue-hi: #5d87b1;
+  --ce-blue-lo: #234a73;
+}
+
+/* --- выпуклые кнопки --- */
+.page-experiments .vesha-btn,
+.ce-btn-mini {
+  border-radius: 3px;
+  background: var(--ce-face);
+  border: 1px solid;
+  border-color: var(--ce-hi) var(--ce-lo) var(--ce-lo) var(--ce-hi);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.08),
+    0 1px 0 rgba(0, 0, 0, 0.18);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.page-experiments .vesha-btn:hover,
+.ce-btn-mini:hover {
+  background: var(--ce-face-hi);
+}
+
+.page-experiments #ce-send,
+.page-experiments .vesha-btn--primary {
+  background: var(--ce-blue);
+  border-color: var(--ce-blue-hi) var(--ce-blue-lo) var(--ce-blue-lo) var(--ce-blue-hi);
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.page-experiments #ce-send:hover,
+.page-experiments .vesha-btn--primary:hover {
+  background: #35679c;
+}
+
+/* честное нажатие: фаска инвертируется, кнопка утапливается */
+.page-experiments .vesha-btn:active,
+.ce-btn-mini:active,
+.page-experiments #ce-suggest:active,
+.page-experiments #ce-send:active {
+  background: #d8dce2;
+  border-color: var(--ce-lo) var(--ce-hi) var(--ce-hi) var(--ce-lo);
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.25);
+  transform: translateY(1px);
+}
+
+.page-experiments #ce-send:active,
+.page-experiments .vesha-btn--primary:active {
+  background: var(--ce-blue-lo);
+}
+
+/* --- корпус: рабочая зона как лицевая панель прибора --- */
+.ce-layout {
+  background: var(--ce-chassis);
+  border: 1px solid;
+  border-color: var(--ce-lo) var(--ce-hi) var(--ce-hi) var(--ce-lo);
+  box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.12);
+  padding: 14px;
+  border-radius: 4px;
+}
+
+/* --- колонки: лицевые модули с цветовой маркировкой --- */
+.ce-col {
+  background: var(--ce-face);
+  border-radius: 6px;
+  border: 1px solid var(--col-color, var(--ce-lo));
+  border-left-width: 4px;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.ce-col__head {
+  background: var(--ce-chassis);
+  border-bottom: 1px solid var(--ce-lo);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  padding: 9px 12px 7px;
+}
+
+/* --- карточки: выпуклые пластинки, выделение как в файловых менеджерах --- */
+.ce-card {
+  background: var(--ce-face);
+  border: 1px solid;
+  border-color: var(--ce-hi) var(--ce-lo) var(--ce-lo) var(--ce-hi);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.8), 0 1px 0 rgba(0, 0, 0, 0.12);
+  border-radius: 3px;
+}
+
+.ce-card:hover {
+  background: var(--ce-face-hi);
+  border-color: var(--ce-hi) var(--ce-lo2, #7d8592) var(--ce-lo2, #7d8592) var(--ce-hi);
+}
+
+.ce-card--selected {
+  background: #dfe7f1;
+  border: 2px solid var(--ce-blue);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* --- панель менеджера: приборная панель с колодцем переписки --- */
+.ce-chat {
+  background: var(--ce-face);
+  border: 1px solid;
+  border-color: var(--ce-hi) var(--ce-lo) var(--ce-lo) var(--ce-hi);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.7), 0 1px 0 rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+.ce-chat__head {
+  background: var(--ce-chassis);
+  border-bottom: 1px solid var(--ce-lo);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* утопленные поля ввода: темно сверху-слева, свет снизу-справа */
+.ce-chat__name,
+.ce-chat__notes,
+.ce-chat__stage,
+.ce-chat__composer textarea,
+.ce-draft__edit textarea {
+  border-radius: 3px;
+  background: #f0f2f5;
+  border: 1px solid;
+  border-color: var(--ce-lo2, #7d8592) var(--ce-hi) var(--ce-hi) var(--ce-lo2, #7d8592);
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+.ce-chat__messages {
+  background: var(--ce-well);
+  border: 1px solid;
+  border-color: var(--ce-lo2, #7d8592) var(--ce-hi) var(--ce-hi) var(--ce-lo2, #7d8592);
+  box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.16);
+  border-radius: 3px;
+}
+
+/* --- пузыри: бумажные slip-ы вместо парящих облаков --- */
+.ce-bubble {
+  border-radius: 4px;
+}
+
+.ce-bubble--visitor {
+  background: #f7f8fa;
+  border: 1px solid var(--ce-lo);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.ce-bubble--manager {
+  background: var(--ce-blue);
+  border: 1px solid;
+  border-color: var(--ce-blue-hi) var(--ce-blue-lo) var(--ce-blue-lo) var(--ce-blue-hi);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.ce-chat__composer {
+  border-top: 1px solid var(--ce-lo);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  padding-top: 10px;
+}
+
+.ce-modal__box {
+  border-radius: 4px;
+  background: var(--ce-face);
+  border: 1px solid;
+  border-color: var(--ce-hi) var(--ce-lo) var(--ce-lo) var(--ce-hi);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.25);
+}
