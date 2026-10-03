@@ -9,10 +9,12 @@
   --ov-border: rgba(173, 197, 255, 0.14);
   --ov-text: #eaf0fb;
   --ov-muted: #a9b7d0;
-  --ov-faint: #7182a0;
+  --ov-faint: #8296b8;
   --ov-accent: #ffb27d;
   --ov-accent-2: #ff8a5c;
   --ov-accent-ink: #2a1608;
+  --ov-trust: #6fa8ff;  /* доверие: ссылки, теги, выделение, фокус */
+  --ov-teal: #5cc8c0;   /* успех/галочки */
   --ov-radius: 18px;
   --ov-font: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 }
@@ -141,9 +143,9 @@ html {
 
 .ov-pill--soft {
   margin-bottom: 14px;
-  color: var(--ov-accent);
-  border-color: rgba(255, 178, 125, 0.3);
-  background: rgba(255, 178, 125, 0.08);
+  color: var(--ov-trust);
+  border-color: rgba(111, 168, 255, 0.3);
+  background: rgba(111, 168, 255, 0.08);
 }
 
 .ov-tag {
@@ -153,9 +155,9 @@ html {
   font: 700 11px var(--ov-font);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ov-accent);
-  background: rgba(255, 178, 125, 0.1);
-  border: 1px solid rgba(255, 178, 125, 0.25);
+  color: var(--ov-trust);
+  background: rgba(111, 168, 255, 0.1);
+  border: 1px solid rgba(111, 168, 255, 0.25);
 }
 
 /* ---------- шапка ---------- */
@@ -269,7 +271,7 @@ html {
 }
 
 .ov-grad {
-  background: linear-gradient(100deg, var(--ov-accent) 20%, var(--ov-accent-2));
+  background: linear-gradient(100deg, var(--ov-trust) 20%, var(--ov-teal));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -308,14 +310,14 @@ html {
 
 .ov-hero__rating strong {
   font: 800 46px/1 var(--ov-font);
-  background: linear-gradient(135deg, var(--ov-accent), var(--ov-accent-2));
+  background: linear-gradient(135deg, var(--ov-trust), var(--ov-teal));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 .ov-stars {
-  color: var(--ov-accent);
+  color: var(--ov-teal);
   font-size: 14px;
   letter-spacing: 2px;
 }
@@ -431,12 +433,12 @@ html {
 }
 
 .ov-card:hover {
-  border-color: rgba(255, 178, 125, 0.45);
+  border-color: rgba(111, 168, 255, 0.45);
 }
 
 .ov-card--active {
-  border-color: rgba(255, 178, 125, 0.55);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 178, 125, 0.25), 0 0 60px rgba(255, 138, 92, 0.12);
+  border-color: rgba(111, 168, 255, 0.55);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(111, 168, 255, 0.25), 0 0 60px rgba(111, 168, 255, 0.14);
 }
 
 .ov-card__icon {
@@ -447,8 +449,8 @@ html {
   height: 74px;
   border-radius: 20px;
   font-size: 36px;
-  background: linear-gradient(135deg, rgba(255, 178, 125, 0.16), rgba(255, 138, 92, 0.1));
-  border: 1px solid rgba(255, 178, 125, 0.22);
+  background: linear-gradient(135deg, rgba(111, 168, 255, 0.16), rgba(92, 200, 192, 0.1));
+  border: 1px solid rgba(111, 168, 255, 0.22);
   margin-bottom: auto;
 }
 
@@ -460,9 +462,9 @@ html {
   font: 700 10.5px var(--ov-font);
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--ov-accent);
-  background: rgba(255, 178, 125, 0.1);
-  border: 1px solid rgba(255, 178, 125, 0.25);
+  color: var(--ov-trust);
+  background: rgba(111, 168, 255, 0.1);
+  border: 1px solid rgba(111, 168, 255, 0.25);
 }
 
 .ov-card h3 {
@@ -505,7 +507,7 @@ html {
 
 .ov-carousel__arrow:hover {
   background: var(--ov-surface-2);
-  border-color: rgba(255, 178, 125, 0.4);
+  border-color: rgba(111, 168, 255, 0.4);
 }
 
 .ov-carousel__arrow--prev {
@@ -573,7 +575,7 @@ html {
 
 .ov-article:hover {
   transform: translateY(-3px);
-  border-color: rgba(255, 178, 125, 0.4);
+  border-color: rgba(111, 168, 255, 0.4);
 }
 
 .ov-article h3 {
@@ -591,7 +593,7 @@ html {
 
 .ov-more {
   font: 700 13px var(--ov-font);
-  color: var(--ov-accent);
+  color: var(--ov-trust);
 }
 
 /* ---------- офисы ---------- */
@@ -670,13 +672,13 @@ html {
 
 .ov-form input:focus {
   outline: none;
-  border-color: rgba(255, 178, 125, 0.55);
+  border-color: rgba(111, 168, 255, 0.55);
 }
 
 .ov-form__note {
   margin: 14px 0 0;
   font-size: 14px;
-  color: #7ed98f;
+  color: var(--ov-teal);
 }
 
 /* ---------- футер ---------- */
@@ -713,7 +715,7 @@ html {
 }
 
 .ov-footer a:hover {
-  color: var(--ov-accent);
+  color: var(--ov-trust);
 }
 
 .ov-footer__demo {
@@ -809,7 +811,7 @@ html {
   justify-content: center;
   font-size: 74px;
   background:
-    radial-gradient(ellipse 70% 90% at 50% 110%, rgba(255, 138, 92, 0.28), transparent),
+    radial-gradient(ellipse 70% 90% at 50% 110%, rgba(111, 168, 255, 0.26), transparent),
     linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
