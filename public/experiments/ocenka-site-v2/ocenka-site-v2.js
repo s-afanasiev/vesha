@@ -142,9 +142,10 @@
   prevBtn.addEventListener('click', () => step(-1));
   nextBtn.addEventListener('click', () => step(1));
 
-  // Колесо листает карусель только когда курсор в полосе по центру (ov-strip):
+  // Колесо листает карусель только когда курсор в полосе-«отблеске» (ov-strip):
   // в ней preventDefault, вне полосы обработчик молчит — страница скроллится как обычно.
   let wheelAt = 0;
+  let wheelIdle = null;
   function cursorInStrip(e) {
     const r = stripEl.getBoundingClientRect();
     return e.clientY >= r.top && e.clientY <= r.bottom;
@@ -156,19 +157,13 @@
     if (now - wheelAt < WHEEL_COOLDOWN_MS) return;
     wheelAt = now;
     const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    if (Math.abs(delta) >= 12) step(delta > 0 ? 1 : -1);
+    if (Math.abs(delta) < 12) return;
+    // человек рулит: автопрокрутка стоит, пока пауза между вращениями колеса
+    pause('strip');
+    step(delta > 0 ? 1 : -1);
+    if (wheelIdle) clearTimeout(wheelIdle);
+    wheelIdle = setTimeout(() => resume('strip'), AUTOPLAY_MS);
   }, { passive: false });
-
-  // Подсветка полосы и пауза автопрокрутки, когда мышка в полосе (человек рулит).
-  carouselEl.addEventListener('mousemove', (e) => {
-    const on = cursorInStrip(e);
-    stripEl.classList.toggle('ov-strip--on', on);
-    if (on) pause('strip'); else resume('strip');
-  });
-  carouselEl.addEventListener('mouseleave', () => {
-    stripEl.classList.remove('ov-strip--on');
-    resume('strip');
-  });
 
   // стрелки клавиатуры, когда фокус на ленте
   carouselEl.addEventListener('keydown', (e) => {

@@ -376,8 +376,9 @@
   --ov-card-h: 330px;
 }
 
-/* Полоса управления: когда курсор в ней — колесо листает карусель и полоса
-   подсвечивается; вне полосы колесо прокручивает страницу. Клики не блокирует. */
+/* Полоса-«отблеск»: зона, в которой колесо мыши листает карусель (вне её
+   колесо прокручивает страницу). Всегда чуть заметна как элемент стиля,
+   клики не перехватывает. */
 .ov-carousel__strip {
   position: absolute;
   top: 50%;
@@ -385,20 +386,15 @@
   transform: translate(-50%, -50%);
   width: calc(100vw - 24px);
   height: calc(var(--ov-card-h) / 3);
-  border-radius: 14px;
-  border: 1.5px dashed rgba(255, 178, 125, 0.55);
+  border-radius: 999px;
   background: linear-gradient(90deg,
-    rgba(255, 178, 125, 0.02),
-    rgba(255, 178, 125, 0.14),
-    rgba(255, 178, 125, 0.02));
-  opacity: 0;
+    transparent 4%,
+    rgba(255, 255, 255, 0.05) 30%,
+    rgba(255, 178, 125, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 70%,
+    transparent 96%);
   pointer-events: none;
-  transition: opacity 0.25s ease;
   z-index: 15;
-}
-
-.ov-carousel__strip--on {
-  opacity: 1;
 }
 
 .ov-carousel__stage {
