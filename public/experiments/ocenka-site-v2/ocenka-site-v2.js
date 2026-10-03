@@ -58,10 +58,12 @@
   ];
 
   const AUTOPLAY_MS = 4500;
+  const WHEEL_COOLDOWN_MS = 380;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const carouselEl = document.getElementById('ov-carousel');
   const stageEl = document.getElementById('ov-stage');
+  const stripEl = document.getElementById('ov-strip');
   const prevBtn = document.getElementById('ov-prev');
   const nextBtn = document.getElementById('ov-next');
   const modalEl = document.getElementById('ov-modal');
@@ -140,8 +142,33 @@
   prevBtn.addEventListener('click', () => step(-1));
   nextBtn.addEventListener('click', () => step(1));
 
-  // колесо мыши не перехватываем: оно всегда прокручивает страницу.
-  // Лента крутится автопрокруткой, кнопками ‹ › и стрелками клавиатуры.
+  // Колесо листает карусель только когда курсор в полосе по центру (ov-strip):
+  // в ней preventDefault, вне полосы обработчик молчит — страница скроллится как обычно.
+  let wheelAt = 0;
+  function cursorInStrip(e) {
+    const r = stripEl.getBoundingClientRect();
+    return e.clientY >= r.top && e.clientY <= r.bottom;
+  }
+  carouselEl.addEventListener('wheel', (e) => {
+    if (reducedMotion || !cursorInStrip(e)) return;
+    e.preventDefault();
+    const now = Date.now();
+    if (now - wheelAt < WHEEL_COOLDOWN_MS) return;
+    wheelAt = now;
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(delta) >= 12) step(delta > 0 ? 1 : -1);
+  }, { passive: false });
+
+  // Подсветка полосы и пауза автопрокрутки, когда мышка в полосе (человек рулит).
+  carouselEl.addEventListener('mousemove', (e) => {
+    const on = cursorInStrip(e);
+    stripEl.classList.toggle('ov-strip--on', on);
+    if (on) pause('strip'); else resume('strip');
+  });
+  carouselEl.addEventListener('mouseleave', () => {
+    stripEl.classList.remove('ov-strip--on');
+    resume('strip');
+  });
 
   // стрелки клавиатуры, когда фокус на ленте
   carouselEl.addEventListener('keydown', (e) => {
@@ -150,20 +177,34 @@
   });
 
   // ---- автопрокрутка с паузами ----------------------------------------------
+  // Только рекурсивный setTimeout: один шаг — и по таймеру запланировали следующий.
+  // Никаких setInterval: пауза — это clearTimeout, возобновление — новая постановка.
 
   let timer = null;
   function canAutoPlay() {
     return !reducedMotion && pausedBy.size === 0;
   }
-  function syncTimer() {
-    if (timer) { clearInterval(timer); timer = null; }
-    if (canAutoPlay()) timer = setInterval(() => step(1), AUTOPLAY_MS);
+  function schedule() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!canAutoPlay()) return;
+    timer = setTimeout(() => {
+      timer = null;
+      step(1);
+      schedule();
+    }, AUTOPLAY_MS);
   }
-  function pause(reason) { pausedBy.add(reason); syncTimer(); }
-  function resume(reason) { pausedBy.delete(reason); syncTimer(); }
+  // ре-планируем только при реальном изменении состояния, а не на каждый mousemove
+  function pause(reason) {
+    if (pausedBy.has(reason)) return;
+    pausedBy.add(reason);
+    schedule();
+  }
+  function resume(reason) {
+    if (!pausedBy.has(reason)) return;
+    pausedBy.delete(reason);
+    schedule();
+  }
 
-  carouselEl.addEventListener('mouseenter', () => pause('hover'));
-  carouselEl.addEventListener('mouseleave', () => resume('hover'));
   document.addEventListener('visibilitychange', () =>
     document.hidden ? pause('hidden') : resume('hidden')
   );
@@ -235,5 +276,5 @@
 
   buildCards();
   render();
-  syncTimer();
+  schedule();
 })();

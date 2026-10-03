@@ -373,6 +373,32 @@
   border-radius: 24px;
   outline: none;
   touch-action: pan-y;
+  --ov-card-h: 330px;
+}
+
+/* Полоса управления: когда курсор в ней — колесо листает карусель и полоса
+   подсвечивается; вне полосы колесо прокручивает страницу. Клики не блокирует. */
+.ov-carousel__strip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100vw - 24px);
+  height: calc(var(--ov-card-h) / 3);
+  border-radius: 14px;
+  border: 1.5px dashed rgba(255, 178, 125, 0.55);
+  background: linear-gradient(90deg,
+    rgba(255, 178, 125, 0.02),
+    rgba(255, 178, 125, 0.14),
+    rgba(255, 178, 125, 0.02));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 15;
+}
+
+.ov-carousel__strip--on {
+  opacity: 1;
 }
 
 .ov-carousel__stage {
@@ -386,8 +412,8 @@
   left: 50%;
   top: 50%;
   width: 290px;
-  height: 330px;
-  margin: -165px 0 0 -145px;
+  height: var(--ov-card-h);
+  margin: calc(var(--ov-card-h) / -2) 0 0 -145px;
   border-radius: var(--ov-radius);
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
   border: 1px solid var(--ov-border);
@@ -906,12 +932,12 @@
 
   .ov-carousel {
     height: 360px;
+    --ov-card-h: 300px;
   }
 
   .ov-card {
     width: 250px;
-    height: 300px;
-    margin: -150px 0 0 -125px;
+    margin: calc(var(--ov-card-h) / -2) 0 0 -125px;
   }
 
   .ov-modal__window {

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./ocenka-site-v2.css" />
+  <link rel="stylesheet" href="./ocenka-site-v2.css?v=3" />
 </head>
 <body class="ov-body">
   <div class="ov-bg" aria-hidden="true">
@@ -80,10 +80,11 @@
 
       <div class="ov-carousel" id="ov-carousel" tabindex="0" aria-label="Карусель услуг">
         <div class="ov-carousel__stage" id="ov-stage"></div>
+        <div class="ov-carousel__strip" id="ov-strip" aria-hidden="true"></div>
         <button class="ov-carousel__arrow ov-carousel__arrow--prev" id="ov-prev" aria-label="Назад">‹</button>
         <button class="ov-carousel__arrow ov-carousel__arrow--next" id="ov-next" aria-label="Вперёд">›</button>
       </div>
-      <p class="ov-carousel__hint">листается сама · кнопки ‹ › · клик по карточке — подробности</p>
+      <p class="ov-carousel__hint">листается сама · кнопки ‹ › · клик по карточке · колесо мыши — в полосе по центру</p>
     </div>
   </section>
 
@@ -183,6 +184,6 @@
     <button class="ov-modal__arrow ov-modal__arrow--next" id="ov-modal-next" aria-label="Следующая услуга">›</button>
   </div>
 
-  <script src="./ocenka-site-v2.js"></script>
+  <script src="./ocenka-site-v2.js?v=3"></script>
 </body>
 </html>
