@@ -47,23 +47,23 @@
 
       <aside class="ce-chat" id="ce-chat" hidden>
         <div class="ce-chat__head">
-          <div class="ce-chat__who">
-            <input id="ce-chat-name" class="ce-chat__name" title="Имя посетителя" />
-            <input id="ce-chat-notes" class="ce-chat__notes" placeholder="Заметки — контекст для ассистента" />
-          </div>
+          <input id="ce-chat-name" class="ce-chat__name" title="Имя посетителя" />
+          <span class="ce-chat__head-label">Этап:</span>
           <select id="ce-chat-stage" class="ce-chat__stage" title="Этап воронки"></select>
           <button id="ce-chat-close" class="ce-chat__close" title="Закрыть">×</button>
         </div>
-        <div class="ce-chat__messages" id="ce-chat-messages"></div>
-        <div class="ce-chat__composer">
-          <div class="ce-chat__composer-row">
+        <div class="ce-chat__body">
+          <div class="ce-chat__messages" id="ce-chat-messages"></div>
+          <div class="ce-chat__side">
+            <label class="ce-side__label" for="ce-chat-notes">Заметки — контекст для ассистента</label>
+            <textarea id="ce-chat-notes" class="ce-chat__notes" rows="4"></textarea>
             <button id="ce-suggest" class="vesha-btn vesha-btn--outline vesha-btn--sm">Предложить ответ</button>
             <span id="ce-chat-note" class="ce-chat__note"></span>
           </div>
-          <div class="ce-chat__composer-row">
-            <textarea id="ce-input" rows="2" placeholder="Ответ как менеджер…"></textarea>
-            <button id="ce-send" class="vesha-btn vesha-btn--primary vesha-btn--sm">Ответить</button>
-          </div>
+        </div>
+        <div class="ce-chat__composer">
+          <textarea id="ce-input" rows="2" placeholder="Ответ как менеджер…"></textarea>
+          <button id="ce-send" class="vesha-btn vesha-btn--primary vesha-btn--sm">Ответить</button>
         </div>
       </aside>
     </div>

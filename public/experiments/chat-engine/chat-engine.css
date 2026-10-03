@@ -20,17 +20,17 @@
 }
 
 .ce-layout {
-  /* фулл-блид из контейнера .experiments (960px): доска на всю ширину окна,
-     боковые поля 20px — как паддинги контейнера */
+  /* фулл-блид из контейнера .experiments (960px): доска и панель менеджера
+     на всю ширину окна, боковые поля 20px — как паддинги контейнера */
   display: flex;
+  flex-direction: column;
   gap: 14px;
-  align-items: flex-start;
   width: calc(100vw - 40px);
   margin-left: calc(50% - 50vw + 20px);
 }
 
-/* Доска как в референсе: колонки фиксированной ширины, горизонтальный скролл
-   доски, вертикальный — внутри каждой колонки. */
+/* Доска: колонки фиксированной ширины в одну линию, горизонтальный скролл
+   доски, вертикальный — внутри каждой колонки. Высота компактная. */
 .ce-board {
   flex: 1;
   min-width: 0;
@@ -38,8 +38,7 @@
   gap: 12px;
   overflow-x: auto;
   align-items: stretch;
-  height: calc(100vh - 260px);
-  min-height: 440px;
+  height: 360px;
   padding-bottom: 6px;
 }
 
@@ -188,35 +187,23 @@
   color: var(--danger-text);
 }
 
-/* ---------- чат ---------- */
+/* ---------- чат: растянутая панель менеджера под доской ---------- */
 
 .ce-chat {
-  width: 400px;
-  flex-shrink: 0;
+  width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  max-height: 78vh;
-  position: sticky;
-  top: 12px;
 }
 
 .ce-chat__head {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   align-items: center;
-  padding: 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-}
-
-.ce-chat__who {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .ce-chat__name,
@@ -226,22 +213,25 @@
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   color: var(--text);
   min-width: 0;
 }
 
 .ce-chat__name {
   font-weight: 600;
+  width: 220px;
 }
 
-.ce-chat__notes {
-  font-size: 12px;
+.ce-chat__head-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-left: auto;
 }
 
 .ce-chat__stage {
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -258,18 +248,28 @@
   padding: 2px 6px;
 }
 
+.ce-chat__body {
+  display: flex;
+  gap: 14px;
+  padding: 12px;
+  min-height: 0;
+}
+
 .ce-chat__messages {
   flex: 1;
+  min-width: 0;
+  height: 320px;
   overflow-y: auto;
-  padding: 12px 10px;
+  padding: 4px 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 220px;
+  background: var(--surface-inset);
+  border-radius: 10px;
 }
 
 .ce-bubble {
-  max-width: 85%;
+  max-width: 560px;
   padding: 7px 10px;
   border-radius: 12px;
   font-size: 13px;
@@ -287,7 +287,7 @@
 
 .ce-bubble--visitor {
   align-self: flex-start;
-  background: var(--surface-inset);
+  background: var(--surface);
   color: var(--text);
   border-bottom-left-radius: 4px;
 }
@@ -346,7 +346,7 @@
   padding: 3px 9px;
   border-radius: 6px;
   border: 1px solid var(--border-strong);
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
 }
@@ -355,18 +355,36 @@
   background: var(--surface-hover);
 }
 
-.ce-chat__composer {
-  border-top: 1px solid var(--border);
-  padding: 10px;
+.ce-chat__side {
+  flex: 0 0 300px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.ce-chat__composer-row {
+.ce-side__label {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.ce-chat__side .ce-chat__notes {
+  flex: 1;
+  min-height: 120px;
+  resize: vertical;
+  font-size: 12.5px;
+}
+
+.ce-chat__side .ce-chat__note {
+  font-size: 12px;
+  color: var(--danger-text);
+  min-height: 1em;
+}
+
+.ce-chat__composer {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 0 12px 12px;
 }
 
 .ce-chat__composer textarea {
