@@ -29,23 +29,21 @@
   margin-left: calc(50% - 50vw + 20px);
 }
 
-/* Доска: колонки фиксированной ширины в одну линию, горизонтальный скролл
-   доски, вертикальный — внутри каждой колонки. Высота компактная. */
+/* Доска — адаптивные режимы (media-запросы в конце файла):
+   ≤640: 3 ряда × 2 · 641–1199: 3 в ряд + ряд из трёх · 1200–1399: 6 в линию ·
+   ≥1400: дорожки-столбик + чат справа */
 .ce-board {
   flex: 1;
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  overflow-x: auto;
-  align-items: stretch;
-  height: 360px;
-  padding-bottom: 6px;
 }
 
 .ce-col {
-  flex: 0 0 280px;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   background: var(--surface-2);
   border: 1px solid var(--col-color, var(--border));
@@ -83,6 +81,7 @@
 .ce-col__cards {
   flex: 1;
   overflow-y: auto;
+  max-height: 240px;
   padding: 2px 8px 10px;
 }
 
@@ -640,4 +639,100 @@
   border: 1px solid #d7dee8;
   border-radius: 6px;
   padding: 4px 8px;
+}
+
+/* ---------- режимы доски (docs/chat-engine-architecture.md) ---------- */
+
+/* 641–1199: три в ряд + ещё ряд из трёх */
+@media (min-width: 641px) {
+  .ce-board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ce-col__cards {
+    max-height: 260px;
+  }
+}
+
+/* 1200–1399: шесть колонок в одну линию */
+@media (min-width: 1200px) and (max-width: 1399.98px) {
+  .ce-board {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    height: 420px;
+  }
+
+  .ce-col__cards {
+    max-height: none;
+  }
+}
+
+/* ≥1400: дорожки-столбик (карточки этапа едут горизонтально) + чат справа */
+@media (min-width: 1400px) {
+  .ce-layout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .ce-board {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ce-col {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .ce-col__head {
+    flex: 0 0 168px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-right: 1px solid var(--border);
+  }
+
+  .ce-col__title {
+    white-space: normal;
+  }
+
+  .ce-col__cards {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    padding: 8px;
+  }
+
+  .ce-card {
+    flex: 0 0 240px;
+    margin-bottom: 0;
+  }
+
+  .ce-col__empty {
+    padding: 0;
+    align-self: center;
+  }
+
+  .ce-chat {
+    flex: 0 0 430px;
+    position: sticky;
+    top: 12px;
+  }
+
+  .ce-chat__body {
+    flex-direction: column;
+  }
+
+  .ce-chat__messages {
+    height: 300px;
+  }
 }
