@@ -12,21 +12,7 @@
   color: inherit;
 }
 
-.os-back {
-  position: fixed;
-  top: 74px;
-  left: 14px;
-  z-index: 40;
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #c9d4e2;
-  box-shadow: 0 4px 14px rgba(20, 35, 60, 0.12);
-  font: 600 12px/1.2 Arial, Helvetica, sans-serif;
-  color: #2f5d8f;
-  text-decoration: none;
-}
-
+/* ---------- шапка ---------- */
 /* ---------- шапка ---------- */
 
 .os-header {

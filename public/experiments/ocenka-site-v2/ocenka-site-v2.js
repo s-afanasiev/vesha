@@ -1,6 +1,7 @@
-/* Карусель-карусель услуг: 3D-coverflow на CSS по docs/ui-carousel-modal.md
-   (без WebGL и requestAnimationFrame: смена индекса + CSS-переходы;
-   автопрокрутка ~4.5 с с паузами; reduced-motion — плоская лента).
+/* Карусель услуг: 3D-coverflow на CSS по docs/ui-carousel-modal.md
+   (без WebGL и requestAnimationFrame: смена индекса + CSS-переходы).
+   Отличие от дока: колесо мыши НЕ перехватываем — оно прокручивает страницу;
+   лента крутится сама (автопрокрутка с паузами), стрелками и кликом.
    Плюс модалка с фиксированной геометрией и синхронным листанием. */
 (function () {
   'use strict';
@@ -57,7 +58,6 @@
   ];
 
   const AUTOPLAY_MS = 4500;
-  const WHEEL_COOLDOWN_MS = 380;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const carouselEl = document.getElementById('ov-carousel');
@@ -140,18 +140,8 @@
   prevBtn.addEventListener('click', () => step(-1));
   nextBtn.addEventListener('click', () => step(1));
 
-  // колесо мыши / горизонтальный трекпад: одно деление = одна карточка
-  let wheelAt = 0;
-  carouselEl.addEventListener('wheel', (e) => {
-    if (reducedMotion) return;
-    e.preventDefault();
-    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    if (Math.abs(delta) < 12) return;
-    const now = Date.now();
-    if (now - wheelAt < WHEEL_COOLDOWN_MS) return;
-    wheelAt = now;
-    step(delta > 0 ? 1 : -1);
-  }, { passive: false });
+  // колесо мыши не перехватываем: оно всегда прокручивает страницу.
+  // Лента крутится автопрокруткой, кнопками ‹ › и стрелками клавиатуры.
 
   // стрелки клавиатуры, когда фокус на ленте
   carouselEl.addEventListener('keydown', (e) => {

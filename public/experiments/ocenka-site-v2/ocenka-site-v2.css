@@ -153,25 +153,6 @@
 
 /* ---------- шапка ---------- */
 
-.ov-back {
-  position: fixed;
-  top: 76px;
-  left: 14px;
-  z-index: 40;
-  padding: 8px 15px;
-  border-radius: 999px;
-  border: 1px solid var(--ov-border);
-  background: rgba(17, 24, 43, 0.75);
-  backdrop-filter: blur(12px);
-  font: 600 12px var(--ov-font);
-  color: var(--ov-muted);
-  text-decoration: none;
-}
-
-.ov-back:hover {
-  color: var(--ov-text);
-}
-
 .ov-header {
   position: sticky;
   top: 0;
