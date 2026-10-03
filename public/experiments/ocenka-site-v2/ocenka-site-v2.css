@@ -1,17 +1,18 @@
-/* Демо-сайт v2 «Страхование и оценка»: тёмная премиум-тема, стекло, bento.
-   Без фреймворков и сборки; шрифт Manrope деградирует в системный стек. */
+/* Демо-сайт v2 «Страхование и оценка»: «вечерняя» тема (сумеречно-синий +
+   персиково-коралловый акцент), стекло, bento. Без фреймворков и сборки;
+   шрифт Manrope деградирует в системный стек. */
 
 :root {
-  --ov-bg: #0a0e16;
-  --ov-surface: rgba(255, 255, 255, 0.045);
-  --ov-surface-2: rgba(255, 255, 255, 0.08);
-  --ov-border: rgba(255, 255, 255, 0.1);
-  --ov-text: #e9eef6;
-  --ov-muted: #97a3b8;
-  --ov-faint: #67748c;
-  --ov-accent: #f5b544;
-  --ov-accent-2: #f0793f;
-  --ov-accent-ink: #1a1206;
+  --ov-bg: #141c2f;
+  --ov-surface: rgba(255, 255, 255, 0.05);
+  --ov-surface-2: rgba(255, 255, 255, 0.09);
+  --ov-border: rgba(173, 197, 255, 0.14);
+  --ov-text: #eaf0fb;
+  --ov-muted: #a9b7d0;
+  --ov-faint: #7182a0;
+  --ov-accent: #ffb27d;
+  --ov-accent-2: #ff8a5c;
+  --ov-accent-ink: #2a1608;
   --ov-radius: 18px;
   --ov-font: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 }
@@ -51,13 +52,13 @@
 .ov-bg__blob--amber {
   top: -220px;
   left: -140px;
-  background: radial-gradient(circle, rgba(245, 165, 52, 0.42), transparent 65%);
+  background: radial-gradient(circle, rgba(255, 150, 100, 0.42), transparent 65%);
 }
 
 .ov-bg__blob--blue {
   bottom: -260px;
   right: -180px;
-  background: radial-gradient(circle, rgba(59, 108, 246, 0.35), transparent 65%);
+  background: radial-gradient(circle, rgba(96, 133, 255, 0.35), transparent 65%);
 }
 
 .ov-bg__grid {
@@ -101,12 +102,12 @@
 .ov-btn--accent {
   background: linear-gradient(135deg, var(--ov-accent), var(--ov-accent-2));
   color: var(--ov-accent-ink);
-  box-shadow: 0 8px 26px rgba(240, 140, 60, 0.28);
+  box-shadow: 0 8px 26px rgba(255, 138, 92, 0.28);
 }
 
 .ov-btn--accent:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 32px rgba(240, 140, 60, 0.4);
+  box-shadow: 0 12px 32px rgba(255, 138, 92, 0.4);
 }
 
 .ov-btn--ghost {
@@ -134,8 +135,8 @@
 .ov-pill--soft {
   margin-bottom: 14px;
   color: var(--ov-accent);
-  border-color: rgba(245, 181, 68, 0.3);
-  background: rgba(245, 181, 68, 0.08);
+  border-color: rgba(255, 178, 125, 0.3);
+  background: rgba(255, 178, 125, 0.08);
 }
 
 .ov-tag {
@@ -146,8 +147,8 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ov-accent);
-  background: rgba(245, 181, 68, 0.1);
-  border: 1px solid rgba(245, 181, 68, 0.25);
+  background: rgba(255, 178, 125, 0.1);
+  border: 1px solid rgba(255, 178, 125, 0.25);
 }
 
 /* ---------- шапка ---------- */
@@ -160,7 +161,7 @@
   padding: 8px 15px;
   border-radius: 999px;
   border: 1px solid var(--ov-border);
-  background: rgba(10, 14, 22, 0.75);
+  background: rgba(17, 24, 43, 0.75);
   backdrop-filter: blur(12px);
   font: 600 12px var(--ov-font);
   color: var(--ov-muted);
@@ -175,7 +176,7 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(10, 14, 22, 0.72);
+  background: rgba(17, 24, 43, 0.72);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
@@ -420,12 +421,12 @@
 }
 
 .ov-card:hover {
-  border-color: rgba(245, 181, 68, 0.45);
+  border-color: rgba(255, 178, 125, 0.45);
 }
 
 .ov-card--active {
-  border-color: rgba(245, 181, 68, 0.55);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(245, 181, 68, 0.25), 0 0 60px rgba(240, 140, 60, 0.12);
+  border-color: rgba(255, 178, 125, 0.55);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 178, 125, 0.25), 0 0 60px rgba(255, 138, 92, 0.12);
 }
 
 .ov-card__icon {
@@ -436,8 +437,8 @@
   height: 74px;
   border-radius: 20px;
   font-size: 36px;
-  background: linear-gradient(135deg, rgba(245, 181, 68, 0.16), rgba(240, 121, 63, 0.1));
-  border: 1px solid rgba(245, 181, 68, 0.22);
+  background: linear-gradient(135deg, rgba(255, 178, 125, 0.16), rgba(255, 138, 92, 0.1));
+  border: 1px solid rgba(255, 178, 125, 0.22);
   margin-bottom: auto;
 }
 
@@ -450,8 +451,8 @@
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--ov-accent);
-  background: rgba(245, 181, 68, 0.1);
-  border: 1px solid rgba(245, 181, 68, 0.25);
+  background: rgba(255, 178, 125, 0.1);
+  border: 1px solid rgba(255, 178, 125, 0.25);
 }
 
 .ov-card h3 {
@@ -483,7 +484,7 @@
   height: 46px;
   border-radius: 50%;
   border: 1px solid var(--ov-border);
-  background: rgba(10, 14, 22, 0.8);
+  background: rgba(17, 24, 43, 0.8);
   backdrop-filter: blur(10px);
   color: var(--ov-text);
   font-size: 24px;
@@ -494,7 +495,7 @@
 
 .ov-carousel__arrow:hover {
   background: var(--ov-surface-2);
-  border-color: rgba(245, 181, 68, 0.4);
+  border-color: rgba(255, 178, 125, 0.4);
 }
 
 .ov-carousel__arrow--prev {
@@ -562,7 +563,7 @@
 
 .ov-article:hover {
   transform: translateY(-3px);
-  border-color: rgba(245, 181, 68, 0.4);
+  border-color: rgba(255, 178, 125, 0.4);
 }
 
 .ov-article h3 {
@@ -622,8 +623,8 @@
   overflow: hidden;
   padding: 34px;
   border-radius: 26px;
-  background: linear-gradient(135deg, rgba(245, 181, 68, 0.12), rgba(240, 121, 63, 0.06) 55%, rgba(59, 108, 246, 0.08));
-  border: 1px solid rgba(245, 181, 68, 0.25);
+  background: linear-gradient(135deg, rgba(255, 178, 125, 0.12), rgba(255, 138, 92, 0.06) 55%, rgba(96, 133, 255, 0.08));
+  border: 1px solid rgba(255, 178, 125, 0.25);
 }
 
 .ov-cta h2 {
@@ -648,7 +649,7 @@
   padding: 13px 15px;
   border-radius: 13px;
   border: 1px solid var(--ov-border);
-  background: rgba(10, 14, 22, 0.55);
+  background: rgba(17, 24, 43, 0.55);
   color: var(--ov-text);
   min-width: 0;
 }
@@ -659,7 +660,7 @@
 
 .ov-form input:focus {
   outline: none;
-  border-color: rgba(245, 181, 68, 0.55);
+  border-color: rgba(255, 178, 125, 0.55);
 }
 
 .ov-form__note {
@@ -730,7 +731,7 @@
   color: var(--ov-accent-ink);
   font: 800 14px var(--ov-font);
   text-decoration: none;
-  box-shadow: 0 14px 34px rgba(240, 140, 60, 0.4);
+  box-shadow: 0 14px 34px rgba(255, 138, 92, 0.4);
 }
 
 .ov-chat:hover {
@@ -755,7 +756,7 @@
 .ov-modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(4, 7, 12, 0.72);
+  background: rgba(8, 13, 26, 0.72);
   backdrop-filter: blur(9px);
 }
 
@@ -764,9 +765,9 @@
   width: min(720px, 94vw);
   height: min(80vh, 780px);
   border-radius: 24px;
-  background: #10151f;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+  background: #182238;
+  border: 1px solid rgba(173, 197, 255, 0.16);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -781,7 +782,7 @@
   height: 38px;
   border-radius: 50%;
   border: 1px solid var(--ov-border);
-  background: rgba(10, 14, 22, 0.7);
+  background: rgba(17, 24, 43, 0.7);
   color: var(--ov-text);
   font-size: 20px;
   cursor: pointer;
@@ -795,7 +796,7 @@
   justify-content: center;
   font-size: 74px;
   background:
-    radial-gradient(ellipse 70% 90% at 50% 110%, rgba(240, 121, 63, 0.28), transparent),
+    radial-gradient(ellipse 70% 90% at 50% 110%, rgba(255, 138, 92, 0.28), transparent),
     linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -861,7 +862,7 @@
   height: 46px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(10, 14, 22, 0.85);
+  background: rgba(17, 24, 43, 0.85);
   color: var(--ov-text);
   font-size: 24px;
   cursor: pointer;
@@ -869,7 +870,7 @@
 }
 
 .ov-modal__arrow:hover {
-  border-color: rgba(245, 181, 68, 0.5);
+  border-color: rgba(255, 178, 125, 0.5);
 }
 
 /* стрелки вне окна (по доке карусели): окно 720px → отступ от центра */
@@ -897,7 +898,7 @@
     right: 0;
     flex-direction: column;
     gap: 0;
-    background: rgba(10, 14, 22, 0.97);
+    background: rgba(17, 24, 43, 0.97);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding: 6px 18px 14px;
   }
