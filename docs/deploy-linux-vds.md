@@ -68,3 +68,57 @@ npm start              # node main.js; PORT по умолчанию 3000
 `LLM_GUEST_REQUESTS_PER_HOUR`) — при нехватке памяти снизьте `LLM_MAX_CONCURRENT`
 до 1–2. Счётчики guard живут в памяти процесса — при одном инстансе этого
 достаточно (docs/experiments.md, раздел llm-picker).
+
+## 6. Nginx + HTTPS
+
+```nginx
+# /etc/nginx/sites-available/vesha.conf
+# В server_name — punycode: веша.рф = xn--80adj0f.xn--p1ai
+server {
+    listen 80;
+    server_name xn--80adj0f.xn--p1ai;
+
+    client_max_body_size 2g;   # загрузки файлов (podborka/summarize)
+
+    # аккуратный адрес для показа заказчику (без следов /experiments/)
+    location /ocenka/ {
+        proxy_pass http://127.0.0.1:3000/experiments/ocenka-site-v2/;
+        include /etc/nginx/proxy_params_vesha.conf;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        include /etc/nginx/proxy_params_vesha.conf;
+    }
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+}
+```
+
+Общий прокси-фрагмент `/etc/nginx/proxy_params_vesha.conf`:
+
+```nginx
+proxy_http_version 1.1;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+# LLM-вызовы идут до 3 минут (LLM_TIMEOUT_MS) — дефолтные 60s их режут:
+proxy_read_timeout 300s;
+proxy_send_timeout 300s;
+proxy_buffering off;   # SSE и стриминг не копим в буфере
+```
+
+Включение и HTTPS:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/vesha.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d xn--80adj0f.xn--p1ai   # сам добавит 443 и редирект
+```
+
+В `.env` Vesha за nginx: `TRUST_PROXY=true` (иначе лимиты LLM будут видеть
+адрес nginx вместо IP посетителя) и перезапустить Node.
+
