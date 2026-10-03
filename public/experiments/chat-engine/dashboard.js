@@ -67,42 +67,55 @@
     renderBoard();
   }
 
+  function relTime(iso) {
+    if (!iso) return '';
+    const ms = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return 'только что';
+    if (min < 60) return `${min} мин.`;
+    const hours = Math.floor(min / 60);
+    if (hours < 24) return `${hours} ч.`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} дн.`;
+    return `${Math.floor(days / 30)} мес.`;
+  }
+
   function renderBoard() {
     const selected = selectedId;
     boardEl.innerHTML = stages
       .map((stage) => {
+        const tint = stage.color || 'var(--border)';
         const cards = dialogues.filter((d) => d.stage === stage.id);
         const cardsHtml = cards
           .map((d) => {
-            const badges = [];
+            const statuses = [];
             if (Number(d.open_drafts) > 0) {
-              badges.push(`<span class="ce-badge ce-badge--draft">черновик ×${d.open_drafts}</span>`);
+              statuses.push(`<span class="ce-status ce-status--draft">черновик готов ×${d.open_drafts}</span>`);
             }
             if (d.last_role === 'visitor') {
-              badges.push('<span class="ce-badge ce-badge--waiting">ждёт ответа</span>');
+              statuses.push('<span class="ce-status ce-status--waiting">ждёт ответа</span>');
+            }
+            if (!statuses.length) {
+              statuses.push('<span class="ce-status">ответ отправлен</span>');
             }
             return `
               <div class="ce-card ${d.id === selected ? 'ce-card--selected' : ''}" data-id="${d.id}">
-                <div class="ce-card__name">${esc(d.visitor_name)}</div>
-                <div class="ce-card__snippet">${esc(d.last_text || '—')}</div>
-                <div class="ce-card__meta">
-                  <span>${esc(fmtTime(d.last_incoming_at || d.created_at))}</span>
-                  ${badges.join('')}
+                <div class="ce-card__top">
+                  <span class="ce-card__name">${esc(d.visitor_name)}</span>
+                  <span class="ce-card__time">🕐 ${esc(relTime(d.last_incoming_at || d.created_at))}</span>
                 </div>
+                <div class="ce-card__snippet">${esc(d.last_text || '—')}</div>
+                <div class="ce-card__status">${statuses.join('')}</div>
               </div>`;
           })
           .join('');
-        const tint = stage.color || '';
-        const colStyle = tint
-          ? ` style="border-color:${tint};background:${tint}14"`
-          : '';
-        const titleStyle = tint ? ` style="color:${tint}"` : '';
         return `
-          <div class="ce-col"${colStyle}>
-            <div class="ce-col__title"${titleStyle}>${esc(stage.title)}
+          <div class="ce-col" style="--col-color:${tint}">
+            <div class="ce-col__head">
+              <span class="ce-col__title">${esc(stage.title)}</span>
               <span class="ce-col__count">${cards.length}</span>
             </div>
-            ${cardsHtml || ''}
+            <div class="ce-col__cards">${cardsHtml || '<div class="ce-col__empty">пусто</div>'}</div>
           </div>`;
       })
       .join('');
