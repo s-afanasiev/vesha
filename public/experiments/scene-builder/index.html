@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="3D-конструктор ландшафта: собери диораму из плиток — дороги, деревья, скамейки, магазинчик." />
+  <title>3D-конструктор сцены · демо</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./scene-builder.css?v=1" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+  <script>
+    window.__errLog = [];
+    window.addEventListener('error', (e) => window.__errLog.push(String(e.message) + ' @ ' + e.lineno));
+    window.addEventListener('unhandledrejection', (e) => window.__errLog.push('rejection: ' + String(e.reason)));
+  </script>
+</head>
+<body class="sb-body">
+  <aside class="sb-panel">
+    <a class="sb-back" href="/experiments/">← Эксперименты</a>
+    <h1>Конструктор <em>сцены</em></h1>
+
+    <div class="sb-tools" id="sb-tools" role="toolbar" aria-label="Элементы">
+      <button class="sb-tool is-active" data-tool="tree"><span>🌳</span>Дерево</button>
+      <button class="sb-tool" data-tool="road-h"><span>➖</span>Дорога ↔</button>
+      <button class="sb-tool" data-tool="road-v"><span>➕</span>Дорога ↕</button>
+      <button class="sb-tool" data-tool="turn"><span>↩️</span>Поворот</button>
+      <button class="sb-tool" data-tool="bench"><span>🪑</span>Скамейка</button>
+      <button class="sb-tool" data-tool="shop"><span>🏪</span>Магазинчик</button>
+      <button class="sb-tool" data-tool="sun"><span>☀️</span>Солнышко</button>
+      <button class="sb-tool sb-tool--erase" data-tool="erase"><span>🧽</span>Ластик</button>
+    </div>
+
+    <div class="sb-view">
+      <button id="sb-view-persp" class="is-active">Перспектива</button>
+      <button id="sb-view-top">Сверху</button>
+    </div>
+
+    <p class="sb-hint">
+      Клик — поставить · ПКМ — стереть клетку ·
+      тянуть мышью — вращать камеру · колесо — зум.
+      Поворот дороги сам смотрит на соседей.
+    </p>
+
+    <div class="sb-stats"><b id="sb-count">0</b> объектов на поле</div>
+    <button class="sb-clear" id="sb-clear">🧹 Очистить всё</button>
+  </aside>
+
+  <main class="sb-stage" id="sb-stage">
+    <canvas class="sb-canvas" id="sb-canvas"></canvas>
+  </main>
+
+  <script type="module" src="./scene-builder.js?v=1"></script>
+</body>
+</html>

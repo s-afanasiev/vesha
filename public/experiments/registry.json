@@ -6,7 +6,9 @@
       "description": "Canvas / matrix experiment",
       "href": "/experiments/roc/",
       "status": "wip",
-      "tech": ["canvas"]
+      "tech": [
+        "canvas"
+      ]
     },
     {
       "id": "podborka",
@@ -14,7 +16,11 @@
       "description": "Загрузи фото вещи — найдём где купить (WB, Ozon, Яндекс)",
       "href": "/experiments/podborka/",
       "status": "wip",
-      "tech": ["js", "vision", "postgres"]
+      "tech": [
+        "js",
+        "vision",
+        "postgres"
+      ]
     },
     {
       "id": "summarize",
@@ -22,7 +28,11 @@
       "description": "Краткое содержание из ролика или записи",
       "href": "/experiments/summarize/",
       "status": "wip",
-      "tech": ["js", "yt-dlp", "ffmpeg"]
+      "tech": [
+        "js",
+        "yt-dlp",
+        "ffmpeg"
+      ]
     },
     {
       "id": "extract-audio",
@@ -30,7 +40,10 @@
       "description": "Достаём звук из видео или переводим MP3 в WAV",
       "href": "/experiments/extract-audio/",
       "status": "wip",
-      "tech": ["js", "ffmpeg"]
+      "tech": [
+        "js",
+        "ffmpeg"
+      ]
     },
     {
       "id": "notes-export",
@@ -38,7 +51,11 @@
       "description": "Разметка LLM и конвертация Markdown/HTML",
       "href": "/experiments/notes-export/",
       "status": "wip",
-      "tech": ["js", "llm", "marked"]
+      "tech": [
+        "js",
+        "llm",
+        "marked"
+      ]
     },
     {
       "id": "pain-radar",
@@ -46,7 +63,11 @@
       "description": "Негативные отзывы с карт → боли пользователей и статистика",
       "href": "/experiments/pain-radar/",
       "status": "wip",
-      "tech": ["js", "parsing", "llm"]
+      "tech": [
+        "js",
+        "parsing",
+        "llm"
+      ]
     },
     {
       "id": "idea-radar",
@@ -54,7 +75,11 @@
       "description": "Новости, госакты и вакансии региона → сдвиги и идеи",
       "href": "/experiments/idea-radar/",
       "status": "wip",
-      "tech": ["js", "rss", "postgres"]
+      "tech": [
+        "js",
+        "rss",
+        "postgres"
+      ]
     },
     {
       "id": "super-notes",
@@ -62,7 +87,11 @@
       "description": "Заметки, полезные ссылки, иерархические подборки и семантический поиск",
       "href": "/experiments/super-notes/",
       "status": "wip",
-      "tech": ["js", "postgres", "pgvector"]
+      "tech": [
+        "js",
+        "postgres",
+        "pgvector"
+      ]
     },
     {
       "id": "chat-engine",
@@ -70,7 +99,11 @@
       "description": "Виджет на сайте → диалог → LLM предлагает ответ, менеджер согласовывает",
       "href": "/experiments/chat-engine/",
       "status": "wip",
-      "tech": ["js", "postgres", "llm"]
+      "tech": [
+        "js",
+        "postgres",
+        "llm"
+      ]
     },
     {
       "id": "ocenka-site",
@@ -78,7 +111,10 @@
       "description": "Демо: как мог бы выглядеть сайт «Страхование и оценка» (Курск)",
       "href": "/experiments/ocenka-site/",
       "status": "wip",
-      "tech": ["html", "css"]
+      "tech": [
+        "html",
+        "css"
+      ]
     },
     {
       "id": "ocenka-site-v2",
@@ -86,7 +122,11 @@
       "description": "Тёмная премиум-версия: стекло, bento, 3D-карусель услуг с модалкой",
       "href": "/experiments/ocenka-site-v2/",
       "status": "wip",
-      "tech": ["html", "css", "carousel"]
+      "tech": [
+        "html",
+        "css",
+        "carousel"
+      ]
     },
     {
       "id": "ui-space",
@@ -94,7 +134,11 @@
       "description": "Дизайн-тема Б: 3D-глубина витрины автосервиса — CSS-3D + Zdog, без WebGL",
       "href": "/experiments/ui-space/",
       "status": "wip",
-      "tech": ["html", "css", "zdog"]
+      "tech": [
+        "html",
+        "css",
+        "zdog"
+      ]
     },
     {
       "id": "ui-brutal",
@@ -102,7 +146,34 @@
       "description": "Дизайн-тема В: «милый брутализм» — рамки, стикеры, продавливающиеся кнопки",
       "href": "/experiments/ui-brutal/",
       "status": "wip",
-      "tech": ["html", "css"]
+      "tech": [
+        "html",
+        "css"
+      ]
+    },
+    {
+      "id": "ui-drive",
+      "title": "Витрина: 3D-дорога",
+      "description": "three.js: машинка ездит по дорогам между разделами сайта, объёмная вывеска",
+      "href": "/experiments/ui-drive/",
+      "status": "wip",
+      "tech": [
+        "js",
+        "three",
+        "webgl"
+      ]
+    },
+    {
+      "id": "scene-builder",
+      "title": "Конструктор сцены",
+      "description": "3D-песочница: строй ландшафт из плиток — дороги с авто-поворотами, деревья, скамейки, магазинчик",
+      "href": "/experiments/scene-builder/",
+      "status": "wip",
+      "tech": [
+        "js",
+        "three",
+        "webgl"
+      ]
     }
   ]
 }

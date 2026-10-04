@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Демо-макет витрины автосервиса на three.js: машинка ездит по дорогам между разделами, объёмная вывеска." />
+  <title>Гараж 46 · 3D-дорога — демо-макет (three.js)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./ui-drive.css?v=1" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+  <script>
+    // ловушка ошибок модуля сцены — видно в консоли и в window.__errLog
+    window.__errLog = [];
+    window.addEventListener('error', (e) => window.__errLog.push(String(e.message) + ' @ ' + String(e.filename || '').split('/').pop() + ':' + e.lineno));
+    window.addEventListener('unhandledrejection', (e) => window.__errLog.push('rejection: ' + String(e.reason)));
+  </script>
+</head>
+<body class="ud-body">
+  <header class="ud-header">
+    <div class="ud-header__inner">
+      <a class="ud-logo" href="#">
+        <span class="ud-logo__mark">Г46</span>
+        <span class="ud-logo__text">Гараж&nbsp;<em>46</em></span>
+      </a>
+      <span class="ud-header__note">кликните по разделу — машинка доедет · солнышко можно таскать мышью</span>
+      <div class="ud-header__end">
+        <a class="ud-phone" href="tel:+74712000046">8 471 200-00-46</a>
+        <a class="ud-link" href="/experiments/ui-space/">← тема Б</a>
+        <a class="ud-link" href="/experiments/">плитки</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- сцена-диорама: поле, дороги, вывеска, машинка. one screen -->
+  <section class="ud-stage" id="ud-stage" aria-label="Интерактивная схема автосервиса">
+    <canvas class="ud-canvas" id="ud-canvas"></canvas>
+    <button class="ud-weather" id="ud-rain" aria-pressed="false">☔ Дождь</button>
+
+    <!-- три раздела-полосы; на десктопе позиционируются проекцией из 3D,
+         на узких экранах — стеком под сценой -->
+    <article class="ud-panel" id="ud-panel-0" data-section="0">
+      <header class="ud-panel__head">
+        <span class="ud-panel__num">01</span>
+        <h2>Услуги</h2>
+        <span class="ud-panel__here" hidden>машинка здесь</span>
+      </header>
+      <ul class="ud-services">
+        <li><span>Диагностика</span><b>0₽</b></li>
+        <li><span>Масло и ТО</span><b>от 1500₽</b></li>
+        <li><span>Тормоза</span><b>от 2500₽</b></li>
+        <li><span>Шиномонтаж</span><b>от 1800₽</b></li>
+      </ul>
+    </article>
+
+    <article class="ud-panel" id="ud-panel-1" data-section="1">
+      <header class="ud-panel__head">
+        <span class="ud-panel__num">02</span>
+        <h2>Заявка</h2>
+        <span class="ud-panel__here" hidden>машинка здесь</span>
+      </header>
+      <p class="ud-panel__text">Перезвоним за 10 минут.</p>
+      <form class="ud-form" id="ud-form">
+        <input required name="name" placeholder="Ваше имя" aria-label="Ваше имя" autocomplete="name" />
+        <input required name="phone" placeholder="Телефон" aria-label="Телефон" autocomplete="tel" />
+        <button class="ud-btn" type="submit">Отправить</button>
+      </form>
+      <p class="ud-form__note" id="ud-note" hidden>✓ Принято (демо-макет: данные никуда не уходят).</p>
+    </article>
+
+    <article class="ud-panel" id="ud-panel-2" data-section="2">
+      <header class="ud-panel__head">
+        <span class="ud-panel__num">03</span>
+        <h2>Контакты</h2>
+        <span class="ud-panel__here" hidden>машинка здесь</span>
+      </header>
+      <ul class="ud-contacts">
+        <li>📍 ул. Энгельса, 115 <small>пн–сб 9:00–20:00</small></li>
+        <li>📍 пр. Кулакова, 5 <small>мультибренд</small></li>
+        <li>📞 <a href="tel:+74712000046">8 471 200-00-46</a></li>
+      </ul>
+    </article>
+  </section>
+
+  <footer class="ud-footer">
+    <p>
+      Демонстрационный макет для переговоров, не является официальным сайтом.
+      Сцена: three.js r182 (вендорен, ~185 KB gzip двумя файлами), пауза рендера
+      вне экрана и в скрытой вкладке. Солнышко перетаскивается мышью —
+      направленный свет следует за ним; дождь — 1800 капель одним draw call,
+      без реальных теней.
+    </p>
+    <p><a href="/experiments/">← Все эксперименты</a> · <a href="/experiments/ui-space/">Тема Б «Пространство»</a> · <a href="/experiments/ui-brutal/">Тема В «Брутализм»</a></p>
+  </footer>
+
+  <script type="module" src="./ui-drive.js?v=1"></script>
+</body>
+</html>

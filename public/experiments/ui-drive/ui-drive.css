@@ -1,0 +1,382 @@
+/* Витрина «3D-дорога» (three.js): светлая база темы Б, сцена-диорама на весь
+   первый экран, три раздела-панели поверх сцены. Без фреймворков и сборки:
+   three подключён importmap'ом из vendor/. */
+
+:root {
+  --ud-bg: #f3f5fa;
+  --ud-surface: #ffffff;
+  --ud-border: #dbe2ef;
+  --ud-text: #18202e;
+  --ud-muted: #4f5b6e;
+  --ud-faint: #5f6c80;
+  --ud-trust: #2e62e8;
+  --ud-cta: #ff6b3d;
+  --ud-cta-ink: #2b1408;
+  --ud-radius: 16px;
+  --ud-font: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+html {
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+.ud-body {
+  margin: 0;
+  background: var(--ud-bg);
+  color: var(--ud-text);
+  font: 500 16px/1.6 var(--ud-font);
+}
+
+.ud-body a {
+  color: inherit;
+}
+
+/* ---------- шапка ---------- */
+
+.ud-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(243, 245, 250, 0.85);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--ud-border);
+}
+
+.ud-header__inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 11px 18px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.ud-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.ud-logo__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--ud-text);
+  color: #fff;
+  font: 800 12px var(--ud-font);
+}
+
+.ud-logo__text {
+  font: 800 16px var(--ud-font);
+}
+
+.ud-logo__text em {
+  color: var(--ud-trust);
+  font-style: normal;
+}
+
+.ud-header__note {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--ud-faint);
+}
+
+.ud-header__end {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ud-phone {
+  font: 800 14px var(--ud-font);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ud-link {
+  font: 700 12.5px var(--ud-font);
+  color: var(--ud-trust);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ---------- сцена ---------- */
+
+.ud-stage {
+  position: relative;
+  height: min(calc(100svh - 60px), 880px);
+  min-height: 560px;
+  overflow: hidden;
+}
+
+.ud-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+}
+
+/* ---------- панели разделов ---------- */
+
+.ud-panel {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--ud-border);
+  box-shadow: 0 14px 34px rgba(24, 32, 46, 0.12);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ud-panel:hover {
+  border-color: rgba(46, 98, 232, 0.45);
+}
+
+.ud-panel.is-active {
+  border: 2px solid var(--ud-trust);
+  box-shadow: 0 18px 44px rgba(46, 98, 232, 0.22);
+}
+
+.ud-panel__head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.ud-panel__head h2 {
+  margin: 0;
+  font: 800 16px var(--ud-font);
+  letter-spacing: -0.01em;
+}
+
+.ud-panel__num {
+  font: 800 11px var(--ud-font);
+  color: var(--ud-trust);
+  border: 1px solid rgba(46, 98, 232, 0.3);
+  background: rgba(46, 98, 232, 0.07);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.ud-panel__here {
+  margin-left: auto;
+  font: 700 10.5px var(--ud-font);
+  color: var(--ud-cta-ink);
+  background: var(--ud-cta);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.ud-panel__text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ud-muted);
+}
+
+/* услуги */
+
+.ud-services {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ud-services li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--ud-border);
+  font-size: 12.5px;
+}
+
+.ud-services li:last-child {
+  border-bottom: none;
+}
+
+.ud-services b {
+  font-weight: 800;
+  color: var(--ud-trust);
+  white-space: nowrap;
+}
+
+/* форма */
+
+.ud-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.ud-form input {
+  font: 500 12.5px var(--ud-font);
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--ud-border);
+  background: var(--ud-surface);
+  color: var(--ud-text);
+  min-width: 0;
+}
+
+.ud-form input::placeholder {
+  color: var(--ud-faint);
+}
+
+.ud-form input:focus {
+  outline: none;
+  border-color: var(--ud-trust);
+  box-shadow: 0 0 0 3px rgba(46, 98, 232, 0.15);
+}
+
+.ud-btn {
+  grid-column: 1 / -1;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: none;
+  background: var(--ud-cta);
+  color: var(--ud-cta-ink);
+  font: 700 12.5px var(--ud-font);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ud-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(255, 107, 61, 0.35);
+}
+
+.ud-form__note {
+  margin: 0;
+  font-size: 11.5px;
+  color: #0fa394;
+}
+
+/* контакты */
+
+.ud-contacts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+.ud-contacts small {
+  color: var(--ud-faint);
+  margin-left: 6px;
+}
+
+.ud-contacts a {
+  color: var(--ud-trust);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+/* ---------- футер ---------- */
+
+.ud-footer {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 18px;
+  font-size: 12px;
+  color: var(--ud-faint);
+}
+
+.ud-footer p {
+  margin: 0 0 6px;
+}
+
+.ud-footer a {
+  color: var(--ud-trust);
+  text-decoration: none;
+}
+
+/* ---------- погода: солнце таскается, дождь по переключателю ---------- */
+
+.ud-weather {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 10;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--ud-border);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  font: 700 13px var(--ud-font);
+  color: var(--ud-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.ud-weather:hover {
+  border-color: var(--ud-trust);
+}
+
+.ud-weather.is-on {
+  border: 2px solid var(--ud-trust);
+  background: rgba(46, 98, 232, 0.12);
+  color: var(--ud-trust);
+  padding: 7px 14px;
+}
+
+/* ---------- компактный режим: панели стеком под сценой ---------- */
+
+@media (max-width: 760px) {
+  .ud-stage {
+    height: auto;
+    min-height: 0;
+    padding-bottom: 4px;
+  }
+
+  .ud-canvas {
+    position: static;
+    width: 100%;
+    height: min(56svh, 280px);
+  }
+
+  .ud-panel {
+    position: static;
+    margin: 12px 14px 0;
+    cursor: pointer;
+  }
+
+  .ud-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ud-header__note {
+    display: none;
+  }
+
+  .ud-phone {
+    display: none;
+  }
+}
+
+/* ---------- reduced-motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ud-panel,
+  .ud-btn {
+    transition: none;
+  }
+}

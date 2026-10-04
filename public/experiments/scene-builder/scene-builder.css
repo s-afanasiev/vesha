@@ -1,0 +1,207 @@
+/* 3D-конструктор сцены: слева панель элементов, справа 3D-полотно-сетка.
+   Светлая тема, диорама на подиуме. Без фреймворков и сборки: three
+   подключён importmap'ом из vendor/. */
+
+:root {
+  --sb-bg: #f3f5fa;
+  --sb-panel: #ffffff;
+  --sb-border: #dbe2ef;
+  --sb-text: #18202e;
+  --sb-muted: #4f5b6e;
+  --sb-faint: #5f6c80;
+  --sb-trust: #2e62e8;
+  --sb-cta: #ff6b3d;
+  --sb-font: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+html, body {
+  height: 100%;
+}
+
+.sb-body {
+  margin: 0;
+  display: flex;
+  background: var(--sb-bg);
+  color: var(--sb-text);
+  font: 500 14px/1.5 var(--sb-font);
+  overflow: hidden;
+}
+
+.sb-body a {
+  color: inherit;
+}
+
+/* ---------- левая панель ---------- */
+
+.sb-panel {
+  width: 224px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--sb-panel);
+  border-right: 1px solid var(--sb-border);
+  overflow-y: auto;
+}
+
+.sb-back {
+  font: 700 12px var(--sb-font);
+  color: var(--sb-trust);
+  text-decoration: none;
+}
+
+.sb-panel h1 {
+  margin: 0;
+  font: 800 19px var(--sb-font);
+  letter-spacing: -0.01em;
+}
+
+.sb-panel h1 em {
+  color: var(--sb-trust);
+  font-style: normal;
+}
+
+/* инструменты */
+
+.sb-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.sb-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 4px 7px;
+  border-radius: 12px;
+  border: 1px solid var(--sb-border);
+  background: var(--sb-bg);
+  font: 700 11px var(--sb-font);
+  color: var(--sb-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sb-tool span {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.sb-tool:hover {
+  border-color: var(--sb-trust);
+}
+
+.sb-tool.is-active {
+  border: 2px solid var(--sb-trust);
+  background: rgba(46, 98, 232, 0.07);
+  color: var(--sb-text);
+  padding: 8px 3px 6px;
+}
+
+.sb-tool--erase.is-active {
+  border-color: #d23b3b;
+  background: rgba(210, 59, 59, 0.08);
+}
+
+/* вид */
+
+.sb-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.sb-view button {
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--sb-border);
+  background: var(--sb-bg);
+  font: 700 12px var(--sb-font);
+  color: var(--sb-muted);
+  cursor: pointer;
+}
+
+.sb-view button:hover {
+  border-color: var(--sb-trust);
+}
+
+.sb-view button.is-active {
+  border: 2px solid var(--sb-trust);
+  color: var(--sb-text);
+  padding: 7px 5px;
+}
+
+/* низ панели */
+
+.sb-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--sb-faint);
+}
+
+.sb-stats {
+  margin-top: auto;
+  padding-top: 10px;
+  font-size: 12.5px;
+  color: var(--sb-muted);
+}
+
+.sb-stats b {
+  font: 800 16px var(--sb-font);
+  color: var(--sb-trust);
+}
+
+.sb-clear {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--sb-border);
+  background: var(--sb-bg);
+  font: 700 12.5px var(--sb-font);
+  color: #b03030;
+  cursor: pointer;
+}
+
+.sb-clear:hover {
+  border-color: #d23b3b;
+  background: rgba(210, 59, 59, 0.07);
+}
+
+/* ---------- сцена ---------- */
+
+.sb-stage {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.sb-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* ---------- узкие экраны ---------- */
+
+@media (max-width: 720px) {
+  .sb-body {
+    flex-direction: column;
+  }
+
+  .sb-panel {
+    width: 100%;
+    max-height: 44vh;
+    border-right: none;
+    border-bottom: 1px solid var(--sb-border);
+  }
+
+  .sb-stage {
+    flex: 1;
+    min-height: 0;
+  }
+}
