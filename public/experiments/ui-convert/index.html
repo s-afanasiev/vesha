@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Тестовая страница паттернов конверсии каркаса: квиз→ассистент→воронка, калькулятор прикидки, sticky CTA-бар, bottom sheet. Светлая стеклянная материя (тема А)." />
+  <title>Паттерны: Конверсия · Гараж 46 (демо-макет)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./ui-convert.css?v=1" />
+</head>
+<body class="cv-body">
+  <!-- фоновые блобы светлой стеклянной материи -->
+  <div class="cv-bg" aria-hidden="true">
+    <i class="cv-bg__blob cv-bg__blob--blue"></i>
+    <i class="cv-bg__blob cv-bg__blob--warm"></i>
+  </div>
+
+  <header class="cv-top">
+    <div class="cv-top__inner">
+      <div class="cv-top__brand">
+        <span class="cv-top__mark">Г46</span>
+        <div>
+          <strong>Паттерны: Конверсия</strong>
+          <span class="cv-top__hint">заявка → воронка · тестовая страница по docs/ui-patterns.md §1</span>
+        </div>
+      </div>
+      <div class="cv-top__end">
+        <a class="cv-phone" href="tel:+74712000046">8 471 200-00-46</a>
+        <a class="cv-back" href="/experiments/">← Эксперименты</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="cv-main">
+    <section class="cv-hero">
+      <h1>Заявка, которую <em>не бросают</em> на полпути</h1>
+      <p>
+        Витрина паттернов конверсии из каталога каркаса: квиз-подбор, калькулятор
+        прикидки, sticky CTA-бар и bottom sheet. Всё честно — никаких выдуманных
+        отправок: это демо-макет, данные вымышленные.
+      </p>
+    </section>
+
+    <!-- ============ 1. Квиз-подбор → ассистент ============ -->
+    <section class="cv-section" id="quiz" aria-labelledby="quiz-h">
+      <header class="cv-section__head">
+        <span class="cv-tag">паттерн 1</span>
+        <h2 id="quiz-h">Квиз-подбор → ассистент</h2>
+        <p>
+          4 вопроса вместо пустой формы. Ответы становятся первым сообщением
+          виджета-ассистента — карточка падает в воронку с контекстом.
+          Отправка только по явному клику.
+        </p>
+      </header>
+
+      <form class="cv-quiz" id="cv-quiz" novalidate>
+        <div class="cv-quiz__progress">
+          <div class="cv-quiz__bar" aria-hidden="true"><i id="cv-quiz-bar"></i></div>
+          <span class="cv-quiz__step" id="cv-quiz-step" aria-live="polite">Шаг 1 из 5</span>
+        </div>
+
+        <div class="cv-quiz__steps">
+          <fieldset class="cv-qstep is-active" data-step="1">
+            <legend>Что нужно сделать с машиной?</legend>
+            <div class="cv-opts">
+              <label class="cv-opt"><input type="radio" name="job" value="Плановое ТО" /><span>Плановое ТО</span></label>
+              <label class="cv-opt"><input type="radio" name="job" value="Диагностика" /><span>Диагностика — понять, что не так</span></label>
+              <label class="cv-opt"><input type="radio" name="job" value="Ремонт" /><span>Ремонт — знаю, что сломалось</span></label>
+              <label class="cv-opt"><input type="radio" name="job" value="Кузов" /><span>Кузов / покраска</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="cv-qstep" data-step="2" hidden>
+            <legend>Насколько срочно?</legend>
+            <div class="cv-opts">
+              <label class="cv-opt"><input type="radio" name="when" value="Сегодня" /><span>Сегодня — машина не едет</span></label>
+              <label class="cv-opt"><input type="radio" name="when" value="На этой неделе" /><span>На этой неделе</span></label>
+              <label class="cv-opt"><input type="radio" name="when" value="Планирую заранее" /><span>Планирую заранее</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="cv-qstep" data-step="3" hidden>
+            <legend>Какая машина? (необязательно)</legend>
+            <input class="cv-input" type="text" name="car" id="cv-car" placeholder="Например: Kia Rio, 2018" autocomplete="off" />
+          </fieldset>
+
+          <fieldset class="cv-qstep" data-step="4" hidden>
+            <legend>Что уже пробовали?</legend>
+            <div class="cv-opts">
+              <label class="cv-opt"><input type="radio" name="tried" value="Ещё ничего" /><span>Ещё ничего — только заметил</span></label>
+              <label class="cv-opt"><input type="radio" name="tried" value="Читал форумы, искал в интернете" /><span>Читал форумы, искал в интернете</span></label>
+              <label class="cv-opt"><input type="radio" name="tried" value="Был в другом сервисе — не помогло" /><span>Был в другом сервисе — не помогло</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="cv-qstep" data-step="5" hidden>
+            <legend>Куда отправить ответ?</legend>
+            <div class="cv-summary" id="cv-summary" aria-live="polite"></div>
+            <div class="cv-fields">
+              <input class="cv-input" type="text" name="name" id="cv-name" placeholder="Имя" autocomplete="name" />
+              <input class="cv-input" type="tel" name="phone" id="cv-phone" placeholder="+7 ___ ___-__-__" autocomplete="tel" />
+            </div>
+            <p class="cv-quiz__note" id="cv-quiz-error" role="alert" hidden>Напишите имя и телефон — иначе некому перезвонить.</p>
+            <div class="cv-actions">
+              <button type="submit" class="cv-btn cv-btn--cta" id="cv-quiz-send">Отправить заявку</button>
+              <button type="button" class="cv-btn cv-btn--ghost" id="cv-quiz-chat">Обсудить с ассистентом</button>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="cv-quiz__nav">
+          <button type="button" class="cv-btn cv-btn--ghost cv-btn--sm" id="cv-quiz-back" hidden>← Назад</button>
+          <button type="button" class="cv-btn cv-btn--ghost cv-btn--sm" id="cv-quiz-next" hidden>Далее →</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============ 2. Калькулятор прикидки ============ -->
+    <section class="cv-section" id="calc" aria-labelledby="calc-h">
+      <header class="cv-section__head">
+        <span class="cv-tag">паттерн 2</span>
+        <h2 id="calc-h">Калькулятор прикидки</h2>
+        <p>
+          Только честная вилка и подпись «уточним после осмотра» — никакой
+          «точной цены». Расчёт можно передать в квиз одним кликом.
+        </p>
+      </header>
+
+      <div class="cv-calc">
+        <div class="cv-calc__row">
+          <label for="cv-hours">Объём работ, нормо-часы: <output id="cv-hours-out">2</output></label>
+          <input type="range" id="cv-hours" min="0.5" max="8" step="0.5" value="2" />
+        </div>
+        <div class="cv-calc__opts" role="group" aria-label="Опции">
+          <label class="cv-check"><input type="checkbox" id="cv-opt-parts" /><span>Запчасти с нашего склада <em>(без наценки за поиск)</em></span></label>
+          <label class="cv-check"><input type="checkbox" id="cv-opt-tow" /><span>Нужен эвакуатор <em>(+2 500 ₽)</em></span></label>
+        </div>
+        <div class="cv-calc__out">
+          <span class="cv-calc__price" id="cv-calc-price" aria-live="polite">≈ 3 200 – 4 400 ₽</span>
+          <span class="cv-calc__fine">Точную стоимость назовём после осмотра. Диагностика — 0 ₽.</span>
+        </div>
+        <div class="cv-actions">
+          <button type="button" class="cv-btn cv-btn--cta" id="cv-calc-toquiz">Передать расчёт в квиз</button>
+          <button type="button" class="cv-btn cv-btn--ghost" id="cv-calc-chat">Обсудить в чате</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3. Bottom sheet ============ -->
+    <section class="cv-section" id="sheet" aria-labelledby="sheet-h">
+      <header class="cv-section__head">
+        <span class="cv-tag">паттерн 3</span>
+        <h2 id="sheet-h">Bottom sheet на мобиле</h2>
+        <p>
+          Одна и та же карточка услуги: на десктопе — модалка 720px / 80vh,
+          на экранах ≤ 640px — лист, выезжающий снизу. Закрытие: Esc, подложка,
+          кнопка.
+        </p>
+      </header>
+
+      <article class="cv-service">
+        <h3>Замена тормозных колодок</h3>
+        <p class="cv-service__meta">передние · с проверкой дисков · 1,5–2 часа</p>
+        <button type="button" class="cv-btn cv-btn--ghost" id="cv-open-sheet">Подробнее и записаться</button>
+      </article>
+    </section>
+
+    <!-- ============ 4. Sticky CTA-бар ============ -->
+    <section class="cv-section" id="sticky" aria-labelledby="sticky-h">
+      <header class="cv-section__head">
+        <span class="cv-tag">паттерн 4</span>
+        <h2 id="sticky-h">Sticky CTA-бар</h2>
+        <p>
+          На экранах ≤ 640px снизу всегда «Позвонить · Заявка · Чат»; прячется,
+          когда блок заявки на экране или открыт чат. На десктопе — тумблер
+          для демонстрации.
+        </p>
+      </header>
+
+      <section class="cv-lead" id="zayavka" aria-label="Форма заявки">
+        <h3>Простая форма — минимум полей</h3>
+        <form id="cv-lead-form" novalidate>
+          <input class="cv-input" type="text" name="lead-name" id="cv-lead-name" placeholder="Имя" autocomplete="name" />
+          <input class="cv-input" type="tel" name="lead-phone" id="cv-lead-phone" placeholder="Телефон" autocomplete="tel" />
+          <button type="submit" class="cv-btn cv-btn--cta">Перезвоните мне</button>
+        </form>
+        <p class="cv-quiz__note" id="cv-lead-error" role="alert" hidden>Нужны имя и телефон.</p>
+      </section>
+
+      <label class="cv-check cv-sticky-toggle">
+        <input type="checkbox" id="cv-sticky-demo" />
+        <span>Показать sticky-бар (эмуляция мобильного на десктопе)</span>
+      </label>
+    </section>
+
+    <footer class="cv-footer">
+      <p>
+        Демо-макет паттернов каркаса (<code>docs/ui-patterns.md</code>, §1).
+        Компания «Гараж 46» вымышленная, все данные — иллюстрация.
+      </p>
+      <p><a href="/experiments/">← Все эксперименты</a> · <a href="/experiments/ui-trust/">Дальше: Доверие →</a></p>
+    </footer>
+  </main>
+
+  <!-- ============ модалка услуги / bottom sheet ============ -->
+  <dialog class="cv-dialog" id="cv-dialog" aria-labelledby="cv-dialog-h">
+    <form method="dialog" class="cv-dialog__close-wrap"><button class="cv-dialog__close" aria-label="Закрыть">✕</button></form>
+    <h3 id="cv-dialog-h">Замена тормозных колодок</h3>
+    <p>
+      Меняем парой, смотрим износ дисков, чистим и смазываем направляющие.
+      Работа занимает 1,5–2 часа — можно подождать в зоне с кофе и Wi-Fi.
+    </p>
+    <table class="cv-spec">
+      <tbody>
+        <tr><th>Время</th><td>1,5–2 часа</td></tr>
+        <tr><th>Гарантия на работу</th><td>6 месяцев</td></tr>
+        <tr><th>Запчасти</th><td>с нашего склада, три ценовых варианта</td></tr>
+        <tr><th>Прикидка цены</th><td>≈ 2 800 – 3 800 ₽ работа + колодки</td></tr>
+      </tbody>
+    </table>
+    <p class="cv-dialog__fine">Точную стоимость назовём после осмотра.</p>
+    <div class="cv-actions">
+      <button type="button" class="cv-btn cv-btn--cta" id="cv-dialog-cta">Записаться</button>
+      <button type="button" class="cv-btn cv-btn--ghost" id="cv-dialog-chat">Спросить ассистента</button>
+    </div>
+  </dialog>
+
+  <!-- ============ мок-виджет ассистента ============ -->
+  <aside class="cv-widget" id="cv-widget" hidden aria-label="Демо-виджет ассистента">
+    <header class="cv-widget__head">
+      <span class="cv-widget__dot" aria-hidden="true"></span>
+      <div>
+        <strong>Ассистент «Гаража 46»</strong>
+        <span>демо: отвечаем за ~5 минут</span>
+      </div>
+      <button class="cv-widget__close" id="cv-widget-close" aria-label="Закрыть чат">✕</button>
+    </header>
+    <div class="cv-widget__log" id="cv-widget-log" aria-live="polite"></div>
+    <footer class="cv-widget__foot">
+      <span>демо-макет: реальных отправок нет</span>
+    </footer>
+  </aside>
+
+  <!-- ============ sticky CTA-бар ============ -->
+  <nav class="cv-sticky" id="cv-sticky" aria-label="Быстрые действия" hidden>
+    <a class="cv-sticky__btn" href="tel:+74712000046">📞 Позвонить</a>
+    <a class="cv-sticky__btn cv-sticky__btn--cta" href="#zayavka">Заявка</a>
+    <button class="cv-sticky__btn" type="button" id="cv-sticky-chat">💬 Чат</button>
+  </nav>
+
+  <!-- ============ тосты ============ -->
+  <div class="cv-toasts" id="cv-toasts" role="status" aria-live="polite"></div>
+
+  <script src="./ui-convert.js?v=1"></script>
+</body>
+</html>

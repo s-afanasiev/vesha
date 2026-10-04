@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Тестовая страница паттернов кабинета: канбан-мок с WIP-шкалами, drag&drop с кнопочным фолбэком, sparklines у KPI, честные тосты и empty states. Материальная «приборная панель»." />
+  <title>Паттерны: Кабинет · воронка (демо-мок)</title>
+  <link rel="stylesheet" href="./ui-cab.css?v=1" />
+</head>
+<body class="cb-body">
+
+  <header class="cb-top">
+    <div class="cb-top__inner">
+      <div class="cb-top__brand">
+        <span class="cb-top__mark">Г46</span>
+        <div>
+          <strong>Паттерны: Кабинет</strong>
+          <span class="cb-top__hint">воронка · тестовая страница по docs/ui-patterns.md §4</span>
+        </div>
+      </div>
+      <div class="cb-top__end">
+        <span class="cb-badge">демо-данные</span>
+        <a class="cb-back" href="/experiments/">← Эксперименты</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="cb-main">
+    <!-- KPI со sparklines: числа — агрегат «за 14 дней», данные демо -->
+    <section class="cb-kpis" aria-label="Показатели за 14 дней">
+      <article class="cb-kpi">
+        <span class="cb-kpi__label">Заявок за 14 дней</span>
+        <div class="cb-kpi__row">
+          <strong class="cb-kpi__num">38</strong>
+          <svg class="cb-spark" id="cb-spark-leads" viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label="Динамика заявок за 14 дней"></svg>
+        </div>
+      </article>
+      <article class="cb-kpi">
+        <span class="cb-kpi__label">Конверсия в «Успех»</span>
+        <div class="cb-kpi__row">
+          <strong class="cb-kpi__num">42%</strong>
+          <svg class="cb-spark" id="cb-spark-conv" viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label="Динамика конверсии"></svg>
+        </div>
+      </article>
+      <article class="cb-kpi">
+        <span class="cb-kpi__label">Средний ответ, мин</span>
+        <div class="cb-kpi__row">
+          <strong class="cb-kpi__num">6</strong>
+          <svg class="cb-spark" id="cb-spark-reply" viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label="Динамика скорости ответа"></svg>
+        </div>
+      </article>
+      <article class="cb-kpi cb-kpi--warn">
+        <span class="cb-kpi__label">В работе сейчас</span>
+        <div class="cb-kpi__row">
+          <strong class="cb-kpi__num" id="cb-kpi-wip">4</strong>
+          <span class="cb-kpi__note" id="cb-kpi-wip-note">выше лимита — сигнал, не блокировка</span>
+        </div>
+      </article>
+    </section>
+
+    <div class="cb-toolbar">
+      <span class="cb-toolbar__hint">Перетащите карточку в другую колонку или используйте кнопки ←/→ — оба пути идут через одну «дверь» переноса.</span>
+      <label class="cb-toolbar__fail">
+        <input type="checkbox" id="cb-fail-toggle" />
+        <span>симулировать сбой сети</span>
+      </label>
+    </div>
+
+    <!-- доска: колонки и карточки рендерит JS из демо-данных -->
+    <section class="cb-board" id="cb-board" aria-label="Канбан-воронка"></section>
+
+    <section class="cb-logbox" aria-label="Журнал этапов">
+      <h2>Журнал этапов</h2>
+      <ol class="cb-log" id="cb-log"></ol>
+    </section>
+
+    <footer class="cb-footer">
+      <p>
+        Демо-мок воронки из каталога паттернов (<code>docs/ui-patterns.md</code>, §4).
+        Карточки, цифры и журнал — вымышленные; переносы живут только на странице.
+      </p>
+      <p>
+        <a href="/experiments/ui-trust/">← Доверие</a> ·
+        <a href="/experiments/ui-convert/">← Конверсия</a> ·
+        <a href="/experiments/">Все эксперименты</a>
+      </p>
+    </footer>
+  </main>
+
+  <div class="cb-toasts" id="cb-toasts" role="status" aria-live="polite"></div>
+
+  <script src="./ui-cab.js?v=1"></script>
+</body>
+</html>

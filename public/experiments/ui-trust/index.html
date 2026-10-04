@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Тестовая страница паттернов доверия каркаса: marquee, живая пилюля режима, count-up, слайдер до/после, segmented control, spotlight, таймлайн, стена отзывов, полка документов." />
+  <title>Паттерны: Доверие · Гараж 46 (демо-макет)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./ui-trust.css?v=1" />
+</head>
+<body class="td-body">
+
+  <header class="td-top">
+    <div class="td-top__inner">
+      <div class="td-top__brand">
+        <span class="td-top__mark">Г46</span>
+        <div>
+          <strong>Паттерны: Доверие</strong>
+          <span class="td-top__hint">снятие сомнений · тестовая страница по docs/ui-patterns.md §2–3</span>
+        </div>
+      </div>
+      <div class="td-top__end">
+        <a class="td-back" href="/experiments/">← Эксперименты</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- marquee-полоса доверия: пауза на hover/focus, reduced-motion → статичная строка -->
+  <div class="td-marquee" aria-label="Гараж 46 — кратко о главном">
+    <div class="td-marquee__track">
+      <span>✔ Диагностика 0 ₽ ✔ Смета до начала работ ✔ Свой склад запчастей ✔ Гарантия на работу 6 месяцев ✔ Работаем с 2011 года</span>
+      <span aria-hidden="true">✔ Диагностика 0 ₽ ✔ Смета до начала работ ✔ Свой склад запчастей ✔ Гарантия на работу 6 месяцев ✔ Работаем с 2011 года</span>
+    </div>
+  </div>
+
+  <main class="td-main">
+    <section class="td-hero">
+      <div class="td-hero__text">
+        <h1>Сервис, которому верят <em>до первой поездки</em></h1>
+        <p>
+          Витрина паттернов доверия: живой статус работы, слайдер «до/после»,
+          честные цифры и документы. Всё, что снимает сомнение «а можно ли верить».
+        </p>
+      </div>
+
+      <!-- живая пилюля режима: считается от графика точки, время — по часам посетителя -->
+      <div class="td-pillbox">
+        <p class="td-pill" id="td-pill" role="status" aria-live="polite">
+          <span class="td-pill__dot" aria-hidden="true"></span>
+          <span id="td-pill-text">Уточняем режим…</span>
+        </p>
+        <span class="td-pillbox__fine">время — по часам вашего устройства · обновляется раз в минуту</span>
+      </div>
+    </section>
+
+    <!-- count-up цифры: значения в DOM сразу, анимация только как усиление -->
+    <section class="td-stats" aria-label="Цифры">
+      <div class="td-stat"><strong data-count="14">14</strong><span>лет на этом месте</span></div>
+      <div class="td-stat"><strong data-count="9800" data-format="space">9 800</strong><span>машин обслужено</span></div>
+      <div class="td-stat"><strong data-count="6">6</strong><span>месяцев гарантии на работу</span></div>
+      <div class="td-stat"><strong>0 ₽</strong><span>диагностика перед любой работой</span></div>
+    </section>
+
+    <!-- слайдер до/после: одна ручка над двумя выровненными SVG-сценами -->
+    <section class="td-section" id="before-after" aria-labelledby="ba-h">
+      <header class="td-section__head">
+        <span class="td-tag">паттерн</span>
+        <h2 id="ba-h">Слайдер «до / после»</h2>
+        <p>
+          Тормозной диск до и после нашей работы. Ручку можно тянуть мышью
+          или двигать стрелками — она честный <code>input[type=range]</code>.
+          Иллюстрация нарисована в SVG, без фотографий.
+        </p>
+      </header>
+
+      <div class="td-ba" id="td-ba">
+        <div class="td-ba__stage" id="td-ba-stage">
+          <svg class="td-ba__layer" viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+            <rect width="640" height="360" fill="#2b2f36"/>
+            <rect y="270" width="640" height="90" fill="#22262c"/>
+            <g filter="url(#td-grime)">
+              <circle cx="320" cy="180" r="118" fill="#3a3f47"/>
+              <circle cx="320" cy="180" r="118" fill="none" stroke="#4a3f35" stroke-width="10" opacity="0.8"/>
+              <circle cx="320" cy="180" r="86" fill="#30343b"/>
+              <circle cx="320" cy="180" r="30" fill="#4a4038"/>
+              <g fill="#4a4038" opacity="0.85">
+                <circle cx="238" cy="150" r="9"/><circle cx="402" cy="164" r="7"/>
+                <circle cx="300" cy="266" r="10"/><circle cx="366" cy="98" r="8"/>
+              </g>
+            </g>
+            <ellipse cx="272" cy="120" rx="46" ry="22" fill="#584a3a" opacity="0.5"/>
+            <text x="34" y="52" fill="#9aa2ae" font-size="22" font-weight="700" letter-spacing="4">ДО</text>
+            <defs>
+              <filter id="td-grime">
+                <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="3" result="n"/>
+                <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.32  0 0 0 0 0.24  0 0 0 0 0.14  0 0 0 0.55 0" result="grime"/>
+                <feComposite in="grime" in2="SourceGraphic" operator="in" result="patches"/>
+                <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="patches"/></feMerge>
+              </filter>
+            </defs>
+          </svg>
+          <svg class="td-ba__layer td-ba__layer--after" id="td-ba-after" viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+            <rect width="640" height="360" fill="#2b2f36"/>
+            <rect y="270" width="640" height="90" fill="#22262c"/>
+            <circle cx="320" cy="180" r="118" fill="#c9cfd8"/>
+            <circle cx="320" cy="180" r="118" fill="none" stroke="#eef1f6" stroke-width="8"/>
+            <circle cx="320" cy="180" r="86" fill="#aeb6c2"/>
+            <circle cx="320" cy="180" r="30" fill="#5c6570"/>
+            <g fill="#7a828e">
+              <circle cx="238" cy="150" r="9"/><circle cx="402" cy="164" r="7"/>
+              <circle cx="300" cy="266" r="10"/><circle cx="366" cy="98" r="8"/>
+            </g>
+            <ellipse cx="272" cy="120" rx="52" ry="24" fill="#ffffff" opacity="0.35"/>
+            <text x="34" y="52" fill="#dfe5ee" font-size="22" font-weight="700" letter-spacing="4">ПОСЛЕ</text>
+          </svg>
+          <span class="td-ba__handle" id="td-ba-handle" aria-hidden="true"><i></i></span>
+          <input class="td-ba__range" type="range" min="0" max="100" value="50" id="td-ba-range"
+                 aria-label="Сравнить до и после: положение ручки в процентах" />
+        </div>
+      </div>
+    </section>
+
+    <!-- услуги: segmented control (CSS-only) + spotlight-карточки -->
+    <section class="td-section" id="services" aria-labelledby="sv-h">
+      <header class="td-section__head">
+        <span class="td-tag">паттерны</span>
+        <h2 id="sv-h">Сегмент-контрол + spotlight</h2>
+        <p>
+          Фильтр категорий собран на радио и <code>:has()</code> — ни строчки JS.
+          Свечение за курсором на карточках — тонкий декор, только для мыши
+          и без reduced-motion.
+        </p>
+      </header>
+
+      <div class="td-showcase">
+        <fieldset class="td-seg" id="td-seg">
+          <legend class="td-visually-hidden">Категории услуг</legend>
+          <label><input type="radio" name="cat" id="cat-all" checked /><span>Все</span></label>
+          <label><input type="radio" name="cat" id="cat-to" /><span>ТО</span></label>
+          <label><input type="radio" name="cat" id="cat-repair" /><span>Ремонт</span></label>
+          <label><input type="radio" name="cat" id="cat-body" /><span>Кузов</span></label>
+        </fieldset>
+
+        <div class="td-grid" id="td-grid">
+          <article class="td-card" data-cat="to"><h3>Замена масла и фильтров</h3><p>30 минут, масло на выбор — три ценовых уровня.</p><span class="td-card__price">от 2 400 ₽ работа</span></article>
+          <article class="td-card" data-cat="to"><h3>Сезонная смена шин</h3><p>Шиномонтаж + мойка колёс, хранение — по желанию.</p><span class="td-card__price">от 2 000 ₽</span></article>
+          <article class="td-card" data-cat="repair"><h3>Замена тормозных колодок</h3><p>Парой, с проверкой дисков и смазкой направляющих.</p><span class="td-card__price">от 2 800 ₽</span></article>
+          <article class="td-card" data-cat="repair"><h3>Диагностика подвески</h3><p>На вибростенде и на ходу. Список находок — на бумаге.</p><span class="td-card__price">0 ₽ перед работой</span></article>
+          <article class="td-card" data-cat="body"><h3>Покраска элемента</h3><p>Подбор цвета по коду, полировка перехода в цвет.</p><span class="td-card__price">от 6 500 ₽</span></article>
+          <article class="td-card" data-cat="body"><h3>Удаление вмятин без покраски</h3><p>Когда краска цела, а вмятину видно — выправим.</p><span class="td-card__price">от 3 500 ₽</span></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- таймлайн: появление шагов по скроллу — enhancement, без поддержки просто видно -->
+    <section class="td-section" id="timeline" aria-labelledby="tl-h">
+      <header class="td-section__head">
+        <span class="td-tag">паттерн</span>
+        <h2 id="tl-h">Как мы работаем</h2>
+        <p>Четыре шага между «заявкой» и «уехал». Появление по скроллу — там,
+           где платформа умеет scroll-driven анимации; без неё всё просто видно.</p>
+      </header>
+      <ol class="td-steps">
+        <li class="td-step"><i>1</i><div><h3>Заявка или звонок</h3><p>Описываете своими словами — этого достаточно.</p></div></li>
+        <li class="td-step"><i>2</i><div><h3>Диагностика за 0 ₽</h3><p>Смотрим машину вместе с вами, показываем что нашли.</p></div></li>
+        <li class="td-step"><i>3</i><div><h3>Смета до начала работ</h3><p>Цена фиксируется. Меняем план только с вашего согласия.</p></div></li>
+        <li class="td-step"><i>4</i><div><h3>Ремонт и гарантия</h3><p>6 месяцев на работу. Напоминаем о ТО сами.</p></div></li>
+      </ol>
+    </section>
+
+    <!-- стена отзывов: CSS columns, якоря на источники -->
+    <section class="td-section" id="reviews" aria-labelledby="rv-h">
+      <header class="td-section__head">
+        <span class="td-tag">паттерн</span>
+        <h2 id="rv-h">Стена отзывов</h2>
+        <p>Лёгкая masonry-раскладка на <code>columns</code>, у каждого отзыва —
+           ссылка на источник. <strong>Макет: отзывы иллюстративные.</strong></p>
+      </header>
+      <div class="td-reviews">
+        <figure class="td-review">
+          <span class="td-review__stars" aria-label="Оценка 5 из 5">★★★★★</span>
+          <blockquote>Приехали с «глохнет на холодную». Нашли за час, показали датчик, отдали в тот же день. Никто ничего не навязывал.</blockquote>
+          <figcaption>Олег, Kia Cee’d · <a href="#reviews">Яндекс Карты →</a></figcaption>
+        </figure>
+        <figure class="td-review">
+          <span class="td-review__stars" aria-label="Оценка 5 из 5">★★★★★</span>
+          <blockquote>Смета совпала с итогом до рубля. Единственный сервис, где мне показали старые детали после замены.</blockquote>
+          <figcaption>Марина, VW Polo · <a href="#reviews">2ГИС →</a></figcaption>
+        </figure>
+        <figure class="td-review">
+          <span class="td-review__stars" aria-label="Оценка 4 из 5">★★★★☆</span>
+          <blockquote>Ждал колодки под заказ день дольше, чем обещали, — но честно предупредили заранее и держали в курсе.</blockquote>
+          <figcaption>Дмитрий, Skoda Octavia · <a href="#reviews">Яндекс Карты →</a></figcaption>
+        </figure>
+        <figure class="td-review">
+          <span class="td-review__stars" aria-label="Оценка 5 из 5">★★★★★</span>
+          <blockquote>Обслуживаюсь третий год. Напоминают про ТО, никаких «внезапно нашли ещё 20 проблем».</blockquote>
+          <figcaption>Анна, Hyundai Solaris · <a href="#reviews">2ГИС →</a></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- полка документов: клик → lightbox на <dialog> -->
+    <section class="td-section" id="docs" aria-labelledby="dc-h">
+      <header class="td-section__head">
+        <span class="td-tag">паттерн</span>
+        <h2 id="dc-h">Полка документов</h2>
+        <p>Клик по документу — крупная версия в <code>&lt;dialog&gt;</code>:
+           фокус-ловушка и Esc из коробки. Макет: бланки нарисованы.</p>
+      </header>
+      <div class="td-docs">
+        <button class="td-doc" type="button" data-title="Сертификат по двигателю">
+          <svg viewBox="0 0 120 160" role="img" aria-label="Сертификат по двигателю — макет"><rect x="2" y="2" width="116" height="156" rx="8" fill="#fff" stroke="#c9d2e0" stroke-width="2"/><rect x="2" y="2" width="116" height="26" rx="8" fill="#1d4ed8"/><text x="60" y="19" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">СЕРТИФИКАТ</text><circle cx="60" cy="66" r="18" fill="none" stroke="#1d4ed8" stroke-width="3"/><path d="M52 66l6 6 12-14" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linecap="round"/><rect x="24" y="98" width="72" height="5" rx="2.5" fill="#dbe2ec"/><rect x="24" y="110" width="56" height="5" rx="2.5" fill="#dbe2ec"/><rect x="24" y="128" width="40" height="7" rx="3" fill="#b9c5d6"/></svg>
+          <span>Сертификат по двигателю</span>
+        </button>
+        <button class="td-doc" type="button" data-title="Договор и гарантийный талон">
+          <svg viewBox="0 0 120 160" role="img" aria-label="Договор и гарантийный талон — макет"><rect x="2" y="2" width="116" height="156" rx="8" fill="#fff" stroke="#c9d2e0" stroke-width="2"/><rect x="2" y="2" width="116" height="26" rx="8" fill="#15803d"/><text x="60" y="19" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">ДОГОВОР</text><rect x="20" y="44" width="80" height="5" rx="2.5" fill="#dbe2ec"/><rect x="20" y="56" width="64" height="5" rx="2.5" fill="#dbe2ec"/><rect x="20" y="68" width="72" height="5" rx="2.5" fill="#dbe2ec"/><rect x="20" y="80" width="48" height="5" rx="2.5" fill="#dbe2ec"/><circle cx="82" cy="126" r="16" fill="none" stroke="#15803d" stroke-width="3"/><path d="M75 126l5 5 10-11" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round"/><rect x="20" y="118" width="34" height="7" rx="3" fill="#b9c5d6"/></svg>
+          <span>Договор и гарантийный талон</span>
+        </button>
+        <button class="td-doc" type="button" data-title="Дипломы механиков">
+          <svg viewBox="0 0 120 160" role="img" aria-label="Дипломы механиков — макет"><rect x="2" y="2" width="116" height="156" rx="8" fill="#fff" stroke="#c9d2e0" stroke-width="2"/><rect x="2" y="2" width="116" height="26" rx="8" fill="#b45309"/><text x="60" y="19" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">ДИПЛОМ</text><path d="M60 44l8 12 14 2-10 10 2 14-14-7-14 7 2-14-10-10 14-2z" fill="#b45309" opacity="0.85"/><rect x="24" y="98" width="72" height="5" rx="2.5" fill="#dbe2ec"/><rect x="24" y="110" width="56" height="5" rx="2.5" fill="#dbe2ec"/><rect x="24" y="128" width="40" height="7" rx="3" fill="#b9c5d6"/></svg>
+          <span>Дипломы механиков</span>
+        </button>
+      </div>
+    </section>
+
+    <footer class="td-footer">
+      <p>
+        Демо-макет паттернов каркаса (<code>docs/ui-patterns.md</code>, §2–3).
+        Компания «Гараж 46» вымышленная; цифры, отзывы и документы — иллюстрация.
+      </p>
+      <p>
+        <a href="/experiments/ui-convert/">← Конверсия</a> ·
+        <a href="/experiments/">Все эксперименты</a> ·
+        <a href="/experiments/ui-cab/">Дальше: Кабинет →</a>
+      </p>
+    </footer>
+  </main>
+
+  <dialog class="td-lightbox" id="td-lightbox" aria-labelledby="td-lightbox-h">
+    <form method="dialog" class="td-lightbox__close-wrap"><button class="td-lightbox__close" aria-label="Закрыть">✕</button></form>
+    <h3 id="td-lightbox-h">Документ</h3>
+    <div class="td-lightbox__doc" id="td-lightbox-doc"></div>
+  </dialog>
+
+  <script src="./ui-trust.js?v=1"></script>
+</body>
+</html>

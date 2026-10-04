@@ -1,0 +1,277 @@
+/* Паттерны: Доверие + витрина — спокойная светлая материя, паттерны в главной
+   роли. Токены по ui-color-cheatsheet.md: CTA-тёплого нет (не нужен),
+   доверительный синий — ссылки/фокус/теги, серые ≥ 4.5:1, reduced-motion
+   выключает marquee, count-up и scroll-driven появление. */
+
+:root {
+  --td-bg: #f6f5f0;
+  --td-surface: #ffffff;
+  --td-border: rgba(31, 41, 55, 0.14);
+  --td-text: #1c2733;
+  --td-muted: #4e5d6c;
+  --td-trust: #1d4ed8;
+  --td-ok: #15803d;
+  --td-warn: #b45309;
+  --td-radius: 16px;
+  --td-shadow: 0 16px 40px -24px rgba(28, 39, 51, 0.35);
+  --td-font: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+html { overflow-x: hidden; overflow-x: clip; }
+
+.td-body {
+  margin: 0;
+  background: var(--td-bg);
+  color: var(--td-text);
+  font: 16px/1.6 var(--td-font);
+}
+
+.td-visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+
+/* ---------- шапка ---------- */
+
+.td-top { border-bottom: 1px solid var(--td-border); background: var(--td-surface); }
+.td-top__inner {
+  max-width: 1080px; margin: 0 auto; padding: 10px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.td-top__brand { display: flex; align-items: center; gap: 10px; }
+.td-top__brand div { display: flex; flex-direction: column; line-height: 1.25; }
+.td-top__mark {
+  display: grid; place-items: center; width: 36px; height: 36px;
+  border-radius: 10px; font-weight: 800; font-size: 13px;
+  color: #fff; background: var(--td-trust);
+}
+.td-top__hint { font-size: 12px; color: var(--td-muted); }
+.td-back {
+  font-size: 14px; color: var(--td-trust); text-decoration: none;
+  border: 1px solid var(--td-border); border-radius: 999px; padding: 6px 12px;
+}
+.td-back:hover { border-color: var(--td-trust); }
+
+/* ---------- marquee ---------- */
+
+.td-marquee {
+  overflow: hidden; border-bottom: 1px solid var(--td-border);
+  background: var(--td-trust); color: #fff;
+}
+.td-marquee__track {
+  display: flex; width: max-content; white-space: nowrap;
+  animation: td-marquee 36s linear infinite;
+}
+.td-marquee__track span { padding: 9px 24px; font-weight: 700; font-size: 14px; letter-spacing: 0.02em; }
+.td-marquee:hover .td-marquee__track,
+.td-marquee:focus-within .td-marquee__track { animation-play-state: paused; }
+@keyframes td-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ---------- раскладка ---------- */
+
+.td-main { max-width: 1080px; margin: 0 auto; padding: 26px 20px 60px; }
+.td-section { margin: 44px 0; }
+.td-section__head { max-width: 680px; margin: 0 0 18px; }
+.td-tag {
+  display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--td-trust);
+  border: 1px solid rgba(29, 78, 216, 0.35); border-radius: 999px; padding: 2px 10px;
+  background: rgba(29, 78, 216, 0.08); margin-bottom: 8px;
+}
+.td-section__head h2 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+.td-section__head p { margin: 0; color: var(--td-muted); }
+.td-section__head code { background: rgba(31, 41, 55, 0.08); border-radius: 6px; padding: 1px 6px; }
+
+/* ---------- hero + живая пилюля ---------- */
+
+.td-hero {
+  display: grid; gap: 20px; align-items: center; padding: 26px 0 8px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 760px) { .td-hero { grid-template-columns: 1.4fr 1fr; } }
+.td-hero h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.02em; }
+.td-hero em { font-style: normal; color: var(--td-trust); }
+.td-hero p { color: var(--td-muted); margin: 0; font-size: 17px; }
+
+.td-pillbox { display: flex; flex-direction: column; gap: 6px; }
+.td-pill {
+  display: flex; align-items: center; gap: 10px; margin: 0;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: 999px; padding: 12px 18px; font-weight: 700;
+  box-shadow: var(--td-shadow);
+}
+.td-pill__dot { width: 11px; height: 11px; border-radius: 50%; background: var(--td-ok); flex: none; }
+.td-pill--open .td-pill__dot { box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.18); }
+.td-pill--warn .td-pill__dot { background: var(--td-warn); box-shadow: 0 0 0 4px rgba(180, 83, 9, 0.18); }
+.td-pill--closed .td-pill__dot { background: var(--td-muted); box-shadow: none; }
+.td-pillbox__fine { font-size: 12px; color: var(--td-muted); padding-left: 6px; }
+
+/* ---------- count-up цифры ---------- */
+
+.td-stats {
+  display: grid; gap: 14px; grid-template-columns: repeat(2, 1fr); margin-top: 30px;
+}
+@media (min-width: 760px) { .td-stats { grid-template-columns: repeat(4, 1fr); } }
+.td-stat {
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--td-radius); padding: 18px 20px; box-shadow: var(--td-shadow);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.td-stat strong { font-size: 30px; letter-spacing: -0.02em; color: var(--td-trust); }
+.td-stat span { font-size: 14px; color: var(--td-muted); }
+
+/* ---------- до/после ---------- */
+
+.td-ba__stage {
+  position: relative; max-width: 760px; aspect-ratio: 640 / 360;
+  border-radius: var(--td-radius); overflow: hidden;
+  border: 1px solid var(--td-border); box-shadow: var(--td-shadow);
+  touch-action: none; user-select: none;
+}
+.td-ba__layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.td-ba__layer--after { clip-path: inset(0 calc(100% - var(--ba-pos, 50%)) 0 0); }
+.td-ba__handle {
+  position: absolute; top: 0; bottom: 0; left: var(--ba-pos, 50%); width: 2px;
+  background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.td-ba__handle i {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 40px; height: 40px; border-radius: 50%; background: #fff;
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.5);
+  display: grid; place-items: center;
+}
+.td-ba__handle i::before { content: '⇄'; font-size: 18px; color: var(--td-text); }
+.td-ba__range {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: ew-resize; -webkit-appearance: none; appearance: none;
+}
+.td-ba__range:focus-visible { opacity: 1; background: transparent; outline: none; }
+.td-ba__stage:has(.td-ba__range:focus-visible) .td-ba__handle { outline: 2px solid var(--td-trust); outline-offset: 2px; }
+
+/* ---------- сегмент-контрол + карточки ---------- */
+
+.td-showcase { display: flex; flex-direction: column; gap: 18px; }
+.td-seg {
+  display: flex; gap: 8px; border: 0; margin: 0; padding: 0; flex-wrap: wrap;
+}
+.td-seg label { cursor: pointer; position: relative; }
+.td-seg input { position: absolute; opacity: 0; pointer-events: none; }
+.td-seg span {
+  display: inline-block; padding: 9px 18px; border-radius: 999px;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  font-weight: 700; font-size: 14px; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.td-seg label:hover span { border-color: var(--td-trust); }
+.td-seg label:has(input:checked) span {
+  background: var(--td-trust); border-color: var(--td-trust); color: #fff;
+}
+.td-seg label:has(input:focus-visible) span { outline: 2px solid var(--td-trust); outline-offset: 2px; }
+
+/* фильтрация категорий — без JS, через :has() на общем предке */
+.td-showcase:has(#cat-to:checked) .td-card:not([data-cat='to']),
+.td-showcase:has(#cat-repair:checked) .td-card:not([data-cat='repair']),
+.td-showcase:has(#cat-body:checked) .td-card:not([data-cat='body']) { display: none; }
+
+.td-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.td-card {
+  position: relative; overflow: hidden;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--td-radius); padding: 18px 20px; box-shadow: var(--td-shadow);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.td-card::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), rgba(29, 78, 216, 0.1), transparent 65%);
+  opacity: 0; transition: opacity 0.2s ease;
+}
+.td-card:hover::before { opacity: 1; }
+.td-card h3 { margin: 0; font-size: 17px; }
+.td-card p { margin: 0; color: var(--td-muted); font-size: 14px; flex: 1; }
+.td-card__price { font-weight: 800; color: var(--td-trust); font-size: 14px; }
+
+/* ---------- таймлайн ---------- */
+
+.td-steps { list-style: none; margin: 0; padding: 0; position: relative; }
+.td-steps::before {
+  content: ''; position: absolute; left: 17px; top: 8px; bottom: 8px; width: 2px;
+  background: rgba(29, 78, 216, 0.25);
+}
+.td-step { position: relative; padding: 0 0 22px 56px; }
+.td-step i {
+  position: absolute; left: 0; top: 0; font-style: normal;
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 800;
+  background: var(--td-trust); color: #fff;
+  box-shadow: 0 0 0 4px var(--td-bg);
+}
+.td-step h3 { margin: 4px 0 2px; font-size: 17px; }
+.td-step p { margin: 0; color: var(--td-muted); font-size: 14px; }
+
+/* enhancement: шаги всплывают при прокрутке там, где это поддержано */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .td-step {
+      animation: td-step-in both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+    @keyframes td-step-in { from { opacity: 0; transform: translateY(18px); } }
+  }
+}
+
+/* ---------- стена отзывов ---------- */
+
+.td-reviews { columns: 2 280px; column-gap: 14px; }
+.td-review {
+  break-inside: avoid; margin: 0 0 14px;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--td-radius); padding: 16px 18px; box-shadow: var(--td-shadow);
+}
+.td-review__stars { color: #d97706; letter-spacing: 2px; font-size: 14px; }
+.td-review blockquote { margin: 8px 0; font-size: 14.5px; }
+.td-review figcaption { font-size: 13px; color: var(--td-muted); }
+.td-review a { color: var(--td-trust); }
+
+/* ---------- полка документов + lightbox ---------- */
+
+.td-docs { display: flex; gap: 16px; flex-wrap: wrap; }
+.td-doc {
+  font: inherit; cursor: pointer; text-align: center;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--td-radius); padding: 12px; width: 150px;
+  box-shadow: var(--td-shadow); transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.td-doc:hover { transform: translateY(-3px); border-color: var(--td-trust); }
+.td-doc:focus-visible { outline: 2px solid var(--td-trust); outline-offset: 2px; }
+.td-doc svg { width: 100%; height: auto; display: block; border-radius: 6px; }
+.td-doc span { display: block; margin-top: 8px; font-size: 13px; font-weight: 700; }
+
+.td-lightbox {
+  width: min(420px, 92vw); border: 1px solid var(--td-border);
+  border-radius: var(--td-radius); padding: 22px; background: #fff; color: var(--td-text);
+}
+.td-lightbox::backdrop { background: rgba(28, 39, 51, 0.5); }
+.td-lightbox[open] { animation: td-lightbox-in 0.2s ease; }
+@keyframes td-lightbox-in { from { opacity: 0; transform: translateY(8px); } }
+.td-lightbox h3 { margin: 0 0 14px; font-size: 18px; }
+.td-lightbox__doc svg { width: min(260px, 70vw); height: auto; display: block; margin: 0 auto; border-radius: 8px; box-shadow: var(--td-shadow); }
+.td-lightbox__close-wrap { position: absolute; top: 10px; right: 10px; margin: 0; }
+.td-lightbox__close {
+  font: inherit; cursor: pointer; border: 1px solid var(--td-border);
+  background: var(--td-bg); color: var(--td-text); border-radius: 10px; width: 32px; height: 32px;
+}
+
+/* ---------- футер ---------- */
+
+.td-footer { border-top: 1px solid var(--td-border); margin-top: 46px; padding-top: 18px; color: var(--td-muted); font-size: 14px; }
+.td-footer code { background: rgba(31, 41, 55, 0.08); border-radius: 6px; padding: 1px 6px; }
+.td-footer a { color: var(--td-trust); }
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .td-marquee__track { animation: none; }
+  .td-marquee__track span + span { display: none; }
+  * { transition: none !important; animation: none !important; }
+}

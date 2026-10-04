@@ -83,7 +83,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.5);
 sun.position.set(6, 10, 4);
 scene.add(sun);
 
-/* ---------- солнышко: таскается мышью, направленный свет следует ---------- */
+/* ---------- солнце и часы: ходят по реальному времени ---------- */
 
 const glowTex = canvasTexture(128, 128, (ctx, w, h) => {
   const g = ctx.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
@@ -93,18 +93,121 @@ const glowTex = canvasTexture(128, 128, (ctx, w, h) => {
   ctx.fillRect(0, 0, w, h);
 });
 
+// дуга-«горизонт»: 6:00 — левый край, 12:00 — центр и вершина, 21:00 — правый край.
+// Дуга лежит в плоскости движения солнца/луны и проходит через их центр — это траектория.
+// «Пунктир сзади объектов» делается порядком отрисовки (renderOrder), а не глубиной:
+// солнце в зените не перекрывает низкие часы на столбе.
+const ARC = { z: -4.8, rx: 12.5, h: 3.0, yMin: 0.75 };
+function arcY(u) {
+  return Math.max(ARC.yMin, ARC.h * (1 - Math.pow((u - 0.5) / 0.62, 2)));
+}
+function hourToU(h) {
+  // утро 6:00–12:00 — левая половина дуги, день/вечер 12:00–21:00 — правая:
+  // полдень ровно в вершине, 19:00 — правее и ниже, но в кадре
+  return h < 12 ? (h - 6) / 12 : 0.5 + (h - 12) / 18;
+}
+const arcGeo = new THREE.BufferGeometry().setFromPoints(
+  Array.from({ length: 61 }, (_, i) => {
+    const u = i / 60;
+    return new THREE.Vector3((u - 0.5) * 2 * ARC.rx, arcY(u), ARC.z);
+  }),
+);
+const arcLine = new THREE.Line(
+  arcGeo,
+  new THREE.LineDashedMaterial({ color: 0x18202e, transparent: true, opacity: 0.15, dashSize: 0.22, gapSize: 0.18 }),
+);
+arcLine.computeLineDistances();
+arcLine.renderOrder = 1; // солнце и луна (renderOrder 2) рисуются поверх траектории
+scene.add(arcLine);
+
+// игрушечный жёлтый шарик — как в scene-builder
 const sunGizmo = new THREE.Group();
 const sunBall = new THREE.Mesh(
-  new THREE.SphereGeometry(0.55, 20, 16),
-  new THREE.MeshStandardMaterial({ color: 0xffd23c, emissive: 0xffc93c, emissiveIntensity: 1.1, roughness: 0.4 }),
+  new THREE.SphereGeometry(0.45, 20, 16),
+  new THREE.MeshStandardMaterial({ color: 0xffd23c, emissive: 0xffc93c, emissiveIntensity: 1.15, roughness: 0.35 }),
 );
 const sunGlow = new THREE.Sprite(
   new THREE.SpriteMaterial({ map: glowTex, color: 0xffd23c, transparent: true, opacity: 0.5, depthWrite: false }),
 );
-sunGlow.scale.set(3.6, 3.6, 1);
+sunGlow.scale.set(2.9, 2.9, 1);
+sunBall.renderOrder = 2;
+sunGlow.renderOrder = 2;
 sunGizmo.add(sunBall, sunGlow);
-sunGizmo.position.set(5.0, 3.6, -4.2); // ниже кромки шапки, чтобы за него хваталась мышь
+sunGizmo.visible = false; // ночью солнца нет
 scene.add(sunGizmo);
+
+// часы на столбе у дальнего края серой плиты; циферблат смотрит на камеру,
+// дуга солнца проходит слоем ближе — в полдень шарик перекрывает циферблат
+const clockPost = new THREE.Group();
+const post = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.05, 0.07, 1.15, 10),
+  new THREE.MeshStandardMaterial({ color: 0x39445a, roughness: 0.6, metalness: 0.3 }),
+);
+post.position.y = 0.575;
+clockPost.add(post);
+
+const clockFace = new THREE.Group();
+clockFace.position.set(0, 1.4, 0);
+clockFace.add(
+  new THREE.Mesh(new THREE.CircleGeometry(0.75, 40), new THREE.MeshBasicMaterial({ color: 0xffffff })),
+  new THREE.Mesh(new THREE.RingGeometry(0.75, 0.85, 40), new THREE.MeshBasicMaterial({ color: 0x232b3a })),
+);
+for (let i = 0; i < 12; i++) {
+  const tick = new THREE.Mesh(
+    new THREE.BoxGeometry(i % 3 === 0 ? 0.05 : 0.025, 0.11, 0.02),
+    new THREE.MeshBasicMaterial({ color: 0x232b3a }),
+  );
+  const a = (i / 12) * Math.PI * 2;
+  tick.position.set(Math.sin(a) * 0.56, Math.cos(a) * 0.56, 0.01);
+  tick.rotation.z = -a;
+  clockFace.add(tick);
+}
+const hourHand = new THREE.Group();
+const hourBar = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.4, 0.02), new THREE.MeshBasicMaterial({ color: 0x18202e }));
+hourBar.position.y = 0.17;
+hourHand.add(hourBar);
+const minHand = new THREE.Group();
+const minBar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.02), new THREE.MeshBasicMaterial({ color: 0x2e62e8 }));
+minBar.position.y = 0.26;
+minHand.add(minBar);
+const clockPin = new THREE.Mesh(new THREE.CircleGeometry(0.055, 16), new THREE.MeshBasicMaterial({ color: 0xff6b3d }));
+clockPin.position.z = 0.02;
+clockFace.add(hourHand, minHand, clockPin);
+clockPost.add(clockFace);
+clockPost.position.set(0, 0, -5.2);
+scene.add(clockPost);
+
+let hourOverride = null; // __ud.setHour(19) — для проверок; null = реальное время
+let currentHour = 12;
+const SUN_WHITE = new THREE.Color(0xffffff);
+const SUN_WARM = new THREE.Color(0xffc48a);
+const MOON_LIGHT = new THREE.Color(0xcfe0ff);
+
+// месяц: НАСЫЩЕННЫЙ золотисто-жёлтый серп + тёплое свечение, дуга ночью (21:00–6:00)
+const moonTex = canvasTexture(128, 128, (ctx) => {
+  ctx.fillStyle = '#ffd23c';
+  ctx.beginPath();
+  ctx.arc(64, 64, 42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(88, 46, 40, 0, Math.PI * 2);
+  ctx.fill();
+});
+const moonGlow = new THREE.Sprite(
+  new THREE.SpriteMaterial({ map: glowTex, color: 0xffd23c, transparent: true, opacity: 0, depthWrite: false }),
+);
+moonGlow.scale.set(2.4, 2.4, 1);
+const moon = new THREE.Sprite(
+  new THREE.SpriteMaterial({ map: moonTex, transparent: true, opacity: 0, depthWrite: false }),
+);
+moon.scale.set(1.7, 1.7, 1);
+moon.renderOrder = 2;
+moonGlow.renderOrder = 2;
+moon.visible = false;
+moonGlow.visible = false;
+scene.add(moon, moonGlow);
+let nightLevel = 0;
 
 /* ---------- дождь: 1800 капель одним LineSegments (1 draw call) ---------- */
 
@@ -275,6 +378,7 @@ function tree(x, z) {
 }
 tree(-10.7, -5.1);
 tree(10.6, 4.9);
+flatShadow(0.8, 0.8, 0.25, 0, -5.2); // тень столба с часами на дальнем крае плиты
 
 /* ---------- вывеска «ГАРАЖ 46» ---------- */
 
@@ -586,14 +690,47 @@ function update(dt, time) {
   }
   rainMat.opacity = 0.45 * rainLevel;
   scene.background.copy(DRY_BG).lerp(WET_BG, rainLevel);
-  sun.intensity = 1.5 - 0.85 * rainLevel;
-  hemi.intensity = 1.15 - 0.3 * rainLevel;
+  // солнце и часы — по реальному времени: полдень в центре дуги, утро/вечер по краям ниже
+  const now = new Date();
+  const h = hourOverride ?? now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+  currentHour = h;
+  const minutes = (h % 1) * 60;
+  minHand.rotation.z = -((minutes / 60) * Math.PI * 2);
+  hourHand.rotation.z = -(((h % 12) / 12) * Math.PI * 2);
+  const dayU = hourToU(h);
+  const dayTime = h >= 6 && h <= 21;
+  sunGizmo.visible = dayTime;
+  let sunBase = 0.6; // ночь — холодный лунный свет
+  if (dayTime) {
+    const sx = (dayU - 0.5) * 2 * ARC.rx;
+    const sy = arcY(dayU);
+    sunGizmo.position.set(sx, sy, ARC.z);
+    sun.position.set(sx * 1.15, sy + 5, ARC.z + 7);
+    const warm = Math.max(0, Math.min(1, (sy - 1.2) / 2)); // низкое солнце — теплее
+    sun.color.copy(SUN_WHITE).lerp(SUN_WARM, 1 - warm);
+    sunBase = 0.9 + 0.6 * warm;
+  } else {
+    // месяц ходит по той же дуге ночью: встаёт в 21:00 слева, вершина к 1:30, садится в 6:00
+    const hN = h >= 21 ? h - 21 : h + 3;
+    const mu = hN / 9;
+    moon.position.set((mu - 0.5) * 2 * ARC.rx, arcY(mu), ARC.z);
+    sun.position.set(moon.position.x * 1.15, moon.position.y + 5, ARC.z + 7);
+    sun.color.copy(MOON_LIGHT);
+  }
+  nightLevel += ((dayTime ? 0 : 1) - nightLevel) * Math.min(1, dt * 2);
+  moon.visible = nightLevel > 0.02;
+  moonGlow.visible = moon.visible;
+  moon.material.opacity = nightLevel;
+  moonGlow.material.opacity = 0.4 * nightLevel;
+
+  sun.intensity = sunBase * (1 - 0.55 * rainLevel);
+  hemi.intensity = (1.15 - 0.3 * rainLevel) * (dayTime ? 1 : 0.85);
 
   // солнце пульсирует и прячется в дождь
   const pulse = 1 + Math.sin(time * 2.6) * 0.04;
   sunBall.scale.set(pulse, pulse, pulse);
   sunGlow.material.opacity = (0.4 + 0.12 * Math.sin(time * 2.6)) * (1 - rainLevel * 0.9);
-  sunBall.material.emissiveIntensity = 1.1 * (1 - rainLevel * 0.8);
+  sunBall.material.emissiveIntensity = 1.15 * (1 - rainLevel * 0.8);
 }
 
 /* ---------- разделы: подсветка и клики ---------- */
@@ -632,41 +769,9 @@ function bandAt(clientX, clientY) {
   return hit ? bandMeshes.indexOf(hit.object) : -1;
 }
 
-function sunAt(clientX, clientY) {
-  const rect = canvas.getBoundingClientRect();
-  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-  return raycaster.intersectObject(sunBall, false).length > 0;
-}
-
-// точка на «земле» под курсором (для перетаскивания солнца)
-function groundPoint(clientX, clientY) {
-  const rect = canvas.getBoundingClientRect();
-  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-  const o = raycaster.ray.origin, d = raycaster.ray.direction;
-  if (d.y >= -1e-4) return null;
-  const p = o.clone().addScaledVector(d, -o.y / d.y);
-  if (Math.abs(p.x) > 12.5 || Math.abs(p.z) > 7.5) return null;
-  return p;
-}
-
-let sunDrag = false;
-
 canvas.addEventListener('pointermove', (e) => {
-  if (sunDrag) {
-    const p = groundPoint(e.clientX, e.clientY);
-    if (p) {
-      sunGizmo.position.set(p.x, 3.6, p.z);
-      sun.position.set(p.x * 1.4, 11, p.z * 1.4);
-    }
-    return;
-  }
   hoverBand = bandAt(e.clientX, e.clientY);
-  const overSun = sunAt(e.clientX, e.clientY);
-  canvas.style.cursor = overSun ? 'grab' : hoverBand >= 0 ? 'pointer' : 'default';
+  canvas.style.cursor = hoverBand >= 0 ? 'pointer' : 'default';
   if (!reduceMotion) {
     const rect = stage.getBoundingClientRect();
     parallax.tx = ((e.clientX - rect.left) / rect.width - 0.5) * 0.9;
@@ -675,11 +780,6 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button === 0 && sunAt(e.clientX, e.clientY)) {
-    sunDrag = true;
-    canvas.style.cursor = 'grabbing';
-    return;
-  }
   const b = bandAt(e.clientX, e.clientY);
   if (b < 0) return;
   if (b === carState.target && carState.mode !== 'idle') return;
@@ -687,13 +787,6 @@ canvas.addEventListener('pointerdown', (e) => {
   carState.target = b;
   syncPanels();
   driveTo(b);
-});
-
-window.addEventListener('pointerup', () => {
-  if (sunDrag) {
-    sunDrag = false;
-    canvas.style.cursor = 'default';
-  }
 });
 
 /* ---------- переключатель дождя ---------- */
@@ -826,11 +919,29 @@ window.__ud = {
     z: +car.position.z.toFixed(2),
     v: +carState.v.toFixed(2),
     rain: +rainLevel.toFixed(2),
-    sun: { x: +sunGizmo.position.x.toFixed(1), z: +sunGizmo.position.z.toFixed(1) },
+    sun: {
+      x: +sunGizmo.position.x.toFixed(1),
+      y: +sunGizmo.position.y.toFixed(1),
+      visible: sunGizmo.visible,
+    },
+    moon: {
+      visible: moon.visible,
+      x: +moon.position.x.toFixed(1),
+      y: +moon.position.y.toFixed(1),
+    },
+    hour: +currentHour.toFixed(2),
   }),
-  sunScreen: () => {
-    const p = worldToScreen(sunGizmo.position.clone());
-    const rect = canvas.getBoundingClientRect();
-    return { x: Math.round(rect.left + p.x), y: Math.round(rect.top + p.y) };
+  setHour: (v) => {
+    hourOverride = v === null || v === undefined ? null : Number(v);
+    return hourOverride;
+  },
+  // синхронный прогон кадров — для проверок, когда окно свернуто и rAF заморожен
+  tick: (n = 1) => {
+    for (let i = 0; i < n; i++) {
+      time += 1 / 60;
+      update(1 / 60, time);
+    }
+    renderOnce();
+    return window.__ud.state();
   },
 };

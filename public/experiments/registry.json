@@ -152,6 +152,42 @@
       ]
     },
     {
+      "id": "ui-convert",
+      "title": "Паттерны: Конверсия",
+      "description": "Квиз→ассистент→воронка, калькулятор прикидки, sticky CTA-бар, bottom sheet",
+      "href": "/experiments/ui-convert/",
+      "status": "wip",
+      "tech": [
+        "html",
+        "css",
+        "dialog"
+      ]
+    },
+    {
+      "id": "ui-trust",
+      "title": "Паттерны: Доверие",
+      "description": "До/после, живая пилюля режима, count-up, сегмент-контрол, таймлайн, lightbox",
+      "href": "/experiments/ui-trust/",
+      "status": "wip",
+      "tech": [
+        "html",
+        "css",
+        "svg"
+      ]
+    },
+    {
+      "id": "ui-cab",
+      "title": "Паттерны: Кабинет",
+      "description": "Канбан-мок: WIP-шкала, drag&drop, sparklines у KPI, честные тосты, empty states",
+      "href": "/experiments/ui-cab/",
+      "status": "wip",
+      "tech": [
+        "html",
+        "css",
+        "dnd"
+      ]
+    },
+    {
       "id": "ui-drive",
       "title": "Витрина: 3D-дорога",
       "description": "three.js: машинка ездит по дорогам между разделами сайта, объёмная вывеска",
