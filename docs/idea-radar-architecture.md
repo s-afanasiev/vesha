@@ -4,7 +4,7 @@
 
 Статус: **фаза 1 сделана** — плитка `idea-radar`, сбор из шести лент Курской области, примитивный счётчик ниш, без LLM. Критерий фазы (три дня опросов) ещё не пройден. Дальше — фаза 2: сдвиги.
 
-Соседи: [pain-radar-architecture.md](pain-radar-architecture.md) — радар болей; [pain-radar-review.md](pain-radar-review.md) — откуда взяты приёмы (общий корпус, версии таксономии, проверка цитат, чистое действие над счётчиками); [collectors-architecture.md](collectors-architecture.md) — общий каркас внешних источников. Канон — [oop-principles.md](oop-principles.md).
+Соседи: [pain-radar-architecture.md](pain-radar/pain-radar-architecture.md) — радар болей; [pain-radar-review.md](pain-radar/pain-radar-review.md) — откуда взяты приёмы (общий корпус, версии таксономии, проверка цитат, чистое действие над счётчиками); [collectors-architecture.md](collectors-architecture.md) — общий каркас внешних источников. Канон — [oop-principles.md](oop-principles.md).
 
 ## Решения
 

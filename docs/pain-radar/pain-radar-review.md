@@ -1,6 +1,6 @@
 # Радар болей — разбор и предложения
 
-Разбор от 2026-09-29: [pain-radar-architecture.md](pain-radar-architecture.md), [pain-radar-business-logic.md](pain-radar-business-logic.md) и канона [oop-principles.md](oop-principles.md), со сверкой по коду платформы (`llmGuard.js`, `quota.js`, `llm.js`, `summarizeQueue.js`, `jobSteps.js`).
+Разбор от 2026-09-29: [pain-radar-architecture.md](pain-radar-architecture.md), [pain-radar-business-logic.md](pain-radar-business-logic.md) и канона [oop-principles.md](../oop-principles.md), со сверкой по коду платформы (`llmGuard.js`, `quota.js`, `llm.js`, `summarizeQueue.js`, `jobSteps.js`).
 
 Все пункты разделов А–В — **предложения**. Решение принимается по каждому отдельно: принятый пункт переносится в свой документ, а здесь меняется статус. Метки `П…` — принципы ядра канона, в скобках — метки полной версии.
 
