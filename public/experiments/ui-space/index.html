@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Демо-макет витрины автосервиса — тема Б «Пространство»: CSS-3D глубина + Zdog-герой, без WebGL." />
+  <title>Гараж 46 — автосервис в Курске · демо-макет (тема Б «Пространство»)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./ui-space.css?v=1" />
+</head>
+<body class="sp-body">
+  <!-- глубинные плоскости фона (параллакс по скроллу) -->
+  <div class="sp-bg" aria-hidden="true">
+    <i class="sp-bg__plane sp-bg__plane--far"></i>
+    <i class="sp-bg__blob sp-bg__blob--blue"></i>
+    <i class="sp-bg__blob sp-bg__blob--warm"></i>
+    <i class="sp-bg__grid"></i>
+  </div>
+
+  <header class="sp-header">
+    <div class="sp-header__inner">
+      <a class="sp-logo" href="#">
+        <span class="sp-logo__mark">Г46</span>
+        <span class="sp-logo__text">Гараж&nbsp;<em>46</em></span>
+      </a>
+      <nav class="sp-nav" id="sp-nav">
+        <a href="#uslugi">Услуги</a>
+        <a href="#articles">Статьи</a>
+        <a href="#points">Точки</a>
+        <a href="#zayavka">Заявка</a>
+      </nav>
+      <div class="sp-header__end">
+        <a class="sp-phone" href="tel:+74712000046">8 471 200-00-46</a>
+        <a class="sp-btn sp-btn--cta sp-btn--sm" href="#zayavka">Записаться</a>
+        <button class="sp-burger" id="sp-burger" aria-label="Меню">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="sp-hero">
+    <div class="sp-hero__inner">
+      <div class="sp-hero__text">
+        <span class="sp-pill">Курск · работаем с 2011 года</span>
+        <h1>Автосервис, где машину видят <span class="sp-deep">насквозь</span></h1>
+        <p>
+          Диагностика, ТО и ремонт по честной смете до начала работ.
+          Свой склад запчастей, гарантия на работу 6 месяцев.
+        </p>
+        <div class="sp-hero__actions">
+          <a class="sp-btn sp-btn--cta" href="#zayavka">Записаться на сервис</a>
+          <a class="sp-btn sp-btn--ghost" href="#uslugi">Услуги и цены</a>
+        </div>
+      </div>
+
+      <div class="sp-hero__stage">
+        <!-- сцена: статичный SVG — базовый слой (фолбэк без JS и при reduced-motion);
+             Zdog оживляет его, если движок загрузился -->
+        <svg class="sp-scene__svg" id="sp-scene-svg" viewBox="0 0 360 360" role="img" aria-label="Колесо — символ сервиса">
+          <ellipse cx="180" cy="316" rx="96" ry="14" fill="rgba(46, 98, 232, 0.14)" />
+          <g transform="rotate(-8 180 180)">
+            <circle cx="180" cy="180" r="78" fill="none" stroke="#232B3A" stroke-width="34" />
+            <circle cx="180" cy="180" r="50" fill="none" stroke="#2E62E8" stroke-width="14" />
+            <g stroke="#DDE5F5" stroke-width="9" stroke-linecap="round">
+              <line x1="180" y1="180" x2="228" y2="180" />
+              <line x1="180" y1="180" x2="205.3" y2="221.4" />
+              <line x1="180" y1="180" x2="154.7" y2="221.4" />
+              <line x1="180" y1="180" x2="131.7" y2="180" transform="rotate(216 180 180)" />
+              <line x1="180" y1="180" x2="154.7" y2="138.6" />
+            </g>
+            <circle cx="180" cy="180" r="15" fill="#1B3A8F" />
+          </g>
+        </svg>
+        <canvas class="sp-scene__canvas" id="sp-scene-canvas" hidden></canvas>
+
+        <!-- стекло-слой поверх сцены: цифры доверия -->
+        <aside class="sp-hero__card">
+          <div class="sp-hero__rating">
+            <strong>4.9</strong>
+            <div>
+              <span class="sp-stars">★★★★★</span>
+              <small>рейтинг на 2ГИС по отзывам</small>
+            </div>
+          </div>
+          <div class="sp-hero__stats">
+            <div class="sp-stat"><strong>14</strong><span>лет на рынке</span></div>
+            <div class="sp-stat"><strong>8200+</strong><span>машин в год</span></div>
+            <div class="sp-stat"><strong>0₽</strong><span>диагностика</span></div>
+            <div class="sp-stat"><strong>6 мес</strong><span>гарантия</span></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="sp-section" id="uslugi">
+    <div class="sp-section__inner">
+      <span class="sp-pill sp-pill--soft">Услуги</span>
+      <h2>Смета до начала работ</h2>
+      <p class="sp-lead">
+        Диагностика бесплатно: покажем, что нашли, и назовём цену до первого болта.
+      </p>
+      <div class="sp-services" id="sp-services">
+        <article class="sp-card sp-card--wide">
+          <span class="sp-card__icon" aria-hidden="true">🔍</span>
+          <h3>Диагностика</h3>
+          <p>Компьютерная и ручная: подвеска, тормоза, электрика. Отчёт с фотофактами.</p>
+          <div class="sp-card__meta"><span>0₽</span><span>40 минут</span></div>
+        </article>
+        <article class="sp-card">
+          <span class="sp-card__icon" aria-hidden="true">🛢️</span>
+          <h3>Замена масла и ТО</h3>
+          <p>Масло, фильтры, сезонная проверка. Свой склад — без ожидания деталей.</p>
+          <div class="sp-card__meta"><span>от 1500₽</span><span>1 час</span></div>
+        </article>
+        <article class="sp-card">
+          <span class="sp-card__icon" aria-hidden="true">🛑</span>
+          <h3>Тормоза</h3>
+          <p>Колодки, диски, суппорты. Проточка на месте, замена жидкости.</p>
+          <div class="sp-card__meta"><span>от 2500₽</span><span>2 часа</span></div>
+        </article>
+        <article class="sp-card">
+          <span class="sp-card__icon" aria-hidden="true">⚙️</span>
+          <h3>Шиномонтаж</h3>
+          <p>Сезонная смена, балансировка, правка дисков. Хранение комплекта.</p>
+          <div class="sp-card__meta"><span>от 1800₽</span><span>40 минут</span></div>
+        </article>
+        <article class="sp-card">
+          <span class="sp-card__icon" aria-hidden="true">🧰</span>
+          <h3>Подвеска</h3>
+          <p>Стойки, рычаги, сайлентблоки. Развал-схождение после ремонта — в цене.</p>
+          <div class="sp-card__meta"><span>от 3000₽</span><span>от 1 дня</span></div>
+        </article>
+        <article class="sp-card">
+          <span class="sp-card__icon" aria-hidden="true">⚡</span>
+          <h3>Автоэлектрика</h3>
+          <p>Сигнализации, свет, генераторы, стартеры. Ищем утечки тока.</p>
+          <div class="sp-card__meta"><span>от 2000₽</span><span>от 1 часа</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="sp-section" id="articles">
+    <div class="sp-section__inner">
+      <span class="sp-pill sp-pill--soft">Статьи</span>
+      <h2>Говорим просто о сложном</h2>
+      <div class="sp-articles">
+        <a class="sp-article" href="#zayavka">
+          <span class="sp-tag">Диагностика</span>
+          <h3>Как понять, что пора на диагностику</h3>
+          <p>Пять признаков — от стуков на кочках до «гуляющего» руля, при которых тянуть нельзя.</p>
+          <span class="sp-more">Читать →</span>
+        </a>
+        <a class="sp-article" href="#zayavka">
+          <span class="sp-tag">Запчасти</span>
+          <h3>Оригинал или аналог: как выбираем</h3>
+          <p>Когда переплата оправдана, а когда проверенный аналог лучше. Наши критерии.</p>
+          <span class="sp-more">Читать →</span>
+        </a>
+        <a class="sp-article" href="#zayavka">
+          <span class="sp-tag">Электрика</span>
+          <h3>Почему горит Check Engine</h3>
+          <p>Что можно проверить самому за пять минут, а что — только со сканером.</p>
+          <span class="sp-more">Читать →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="sp-section" id="points">
+    <div class="sp-section__inner">
+      <span class="sp-pill sp-pill--soft">Точки</span>
+      <h2>Две точки в Курске</h2>
+      <div class="sp-points">
+        <div class="sp-point"><h3>ул. Энгельса, 115</h3><p>подъезд со стороны склада</p><span>пн–сб 9:00–20:00</span></div>
+        <div class="sp-point"><h3>пр. Кулакова, 5</h3><p>мультибрендовый участок</p><span>пн–сб 9:00–20:00</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sp-section" id="zayavka">
+    <div class="sp-section__inner">
+      <div class="sp-cta">
+        <div>
+          <h2>Запишитесь — перезвоним за 10 минут</h2>
+          <p>Или напишите в чат: он живёт в правом нижнем углу и работает на движке chat-engine.</p>
+        </div>
+        <form class="sp-form" id="sp-form">
+          <input required name="name" placeholder="Ваше имя" aria-label="Ваше имя" autocomplete="name" />
+          <input required name="phone" placeholder="Телефон" aria-label="Телефон" autocomplete="tel" />
+          <button class="sp-btn sp-btn--cta" type="submit">Отправить</button>
+        </form>
+        <p class="sp-form__note" id="sp-form-note" hidden>✓ Принято (демо-макет: данные никуда не уходят).</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="sp-footer">
+    <div class="sp-footer__inner">
+      <div>
+        <strong>ООО «Гараж 46»</strong>
+        <p>Диагностика · ТО · Ремонт · Шиномонтаж · Автоэлектрика · Свой склад запчастей</p>
+      </div>
+      <div class="sp-footer__links">
+        <a href="https://vk.ru/">ВКонтакте</a>
+        <a href="tel:+74712000046">8 471 200-00-46</a>
+        <a href="/experiments/">← Эксперименты</a>
+      </div>
+    </div>
+    <p class="sp-footer__demo">Демонстрационный макет для переговоров, не является официальным сайтом компании. Цены в демо условные. Тема Б «Пространство»: CSS-3D + Zdog, без WebGL.</p>
+  </footer>
+
+  <a class="sp-chat" href="/experiments/chat-engine/widget.html">💬 <span>Написать нам</span></a>
+
+  <script src="./ui-space.js?v=1"></script>
+</body>
+</html>

@@ -87,6 +87,22 @@
       "href": "/experiments/ocenka-site-v2/",
       "status": "wip",
       "tech": ["html", "css", "carousel"]
+    },
+    {
+      "id": "ui-space",
+      "title": "Витрина: Пространство",
+      "description": "Дизайн-тема Б: 3D-глубина витрины автосервиса — CSS-3D + Zdog, без WebGL",
+      "href": "/experiments/ui-space/",
+      "status": "wip",
+      "tech": ["html", "css", "zdog"]
+    },
+    {
+      "id": "ui-brutal",
+      "title": "Витрина: Брутализм",
+      "description": "Дизайн-тема В: «милый брутализм» — рамки, стикеры, продавливающиеся кнопки",
+      "href": "/experiments/ui-brutal/",
+      "status": "wip",
+      "tech": ["html", "css"]
     }
   ]
 }
