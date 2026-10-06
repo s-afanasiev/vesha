@@ -16,6 +16,7 @@ const superNotesRoutes = require('./server/routes/superNotes');
 const chatEngineRoutes = require('./server/routes/chat-engine');
 const painRadarRoutes = require('./server/routes/pain-radar');
 const experimentsRoutes = require('./server/routes/experiments');
+const playwrightMcpRoutes = require('./server/routes/playwright-mcp');
 const experimentsService = require('./server/services/experiments');
 const { startIdeaRadarSchedule } = require('./server/services/idea-radar/schedule');
 
@@ -41,6 +42,7 @@ app.use('/api/super-notes', superNotesRoutes);
 app.use('/api/chat-engine', chatEngineRoutes);
 app.use('/api/pain-radar', painRadarRoutes);
 app.use('/api/experiments', experimentsRoutes);
+app.use('/api/playwright-mcp', playwrightMcpRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);
 
