@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Виды витрин — Vesha</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem('vesha.theme') === 'sand' ? 'sand' : 'light';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'light';
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .showcases__group-title {
+      font-size: 15px; font-weight: 650; color: #6b6558;
+      margin: 26px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #e4ddcf;
+    }
+    .showcases__admin-badge {
+      font-size: 10px; letter-spacing: .06em; color: #b4632f;
+      border: 1px solid currentColor; border-radius: 4px; padding: 1px 5px; vertical-align: 2px;
+    }
+    .showcases__note { font-size: 12.5px; color: #8b8578; margin: 8px 0 0; }
+  </style>
+</head>
+<body class="page-experiments">
+  <main class="experiments">
+    <div class="experiments__nav">
+      <a class="back-link" href="/experiments/">← Эксперименты</a>
+      <div class="experiments__nav-end">
+        <div data-vesha-theme-switcher></div>
+      </div>
+    </div>
+
+    <header class="experiments__header">
+      <h1>Виды витрин</h1>
+      <p>Дизайн-темы витрин клиентского сайта и набор UI-паттернов под них. Новые стили добавляются сюда же.</p>
+    </header>
+
+    <h2 class="showcases__group-title">Витрины — разные стили одного каркаса</h2>
+    <div class="tiles" aria-live="polite">
+      <a class="tile" href="/experiments/ui-space/" data-status="wip">
+        <h2 class="tile__title">Пространство</h2>
+        <p class="tile__desc">Дизайн-тема Б: 3D-глубина витрины автосервиса — CSS-3D + Zdog, без WebGL</p>
+        <div class="tile__meta"><span class="tile__status">wip</span><span class="tile__tech">html · css · zdog</span></div>
+      </a>
+      <a class="tile" href="/experiments/ui-brutal/" data-status="wip">
+        <h2 class="tile__title">Брутализм</h2>
+        <p class="tile__desc">Дизайн-тема В: «милый брутализм» — рамки, стикеры, продавливающиеся кнопки</p>
+        <div class="tile__meta"><span class="tile__status">wip</span><span class="tile__tech">html · css</span></div>
+      </a>
+      <a class="tile" href="/experiments/ocenka-site-v2/" data-status="wip">
+        <h2 class="tile__title">Bento и жидкое стекло</h2>
+        <p class="tile__desc">Тёмная премиум-версия на примере сайта оценочной компании: стекло, bento, 3D-карусель услуг с модалкой</p>
+        <div class="tile__meta"><span class="tile__status">wip</span><span class="tile__tech">html · css · carousel</span></div>
+      </a>
+      <a class="tile" href="/experiments/ui-drive/" data-status="wip">
+        <h2 class="tile__title">3D-дорога</h2>
+        <p class="tile__desc">three.js: машинка ездит по дорогам между разделами сайта, объёмная вывеска</p>
+        <div class="tile__meta"><span class="tile__status">wip</span><span class="tile__tech">js · three · webgl</span></div>
+      </a>
+    </div>
+
+    <div id="patterns-group" hidden>
+    <h2 class="showcases__group-title">Паттерны — общий набор для любой витрины <span class="showcases__admin-badge">admin</span></h2>
+    <div class="tiles" aria-live="polite">
+      <a class="tile" href="/experiments/ui-convert/" data-status="wip">
+        <h2 class="tile__title">Конверсия</h2>
+        <p class="tile__desc">Квиз→ассистент→воронка, калькулятор прикидки, sticky CTA-бар, bottom sheet</p>
+        <div class="tile__meta"><span class="tile__status">wip</span><span class="tile__tech">html · css · dialog</span></div>
+      </a>
+      <a class="tile" href="/experiments/ui-trust/" data-status="wip">
+        <h2 class="tile__title">Доверие</h2>
+        <p class="tile__desc">До/после, живая пилюля режима, count-up, сегмент-контрол, таймлайн, lightbox</p>
+        <div class="tile__meta"><span class="tile__status">wip</span><span class="tile__tech">html · css · svg</span></div>
+      </a>
+      <a class="tile" href="/experiments/ui-cab/" data-status="wip">
+        <h2 class="tile__title">Кабинет</h2>
+        <p class="tile__desc">Канбан-мок: WIP-шкала, drag&amp;drop, sparklines у KPI, честные тосты, empty states</p>
+        <div class="tile__meta"><span class="tile__status">wip</span><span class="tile__tech">html · css · dnd</span></div>
+      </a>
+    </div>
+    </div>
+
+    <p class="showcases__note">Каркас витрины — docs/universal-framework.md, зоны паттернов — docs/ui-patterns.md.</p>
+  </main>
+
+  <script src="/theme.js"></script>
+  <script>
+    // Раздел «Паттерны» — служебная часть плитки (part patterns, visibility admin):
+    // сервер отдаёт её только админу, для остальных раздел остаётся скрытым.
+    fetch('/api/experiments')
+      .then((r) => r.json())
+      .then((d) => {
+        const hub = (d.tiles || []).find((t) => t.id === 'showcases');
+        if (hub && (hub.parts || []).some((p) => p.key === 'patterns')) {
+          document.getElementById('patterns-group').hidden = false;
+        }
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
