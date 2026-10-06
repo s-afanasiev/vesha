@@ -362,6 +362,7 @@
         </label>
         <button id="applyDir">Применить</button>
       </div>
+      <p class="call-hint">POST /api/pain-radar/scrape/config — <b>папка проверяется/создаётся внутри проекта</b></p>
       <p class="hint" id="dirStats">папка: —</p>
     </section>
 
@@ -374,6 +375,7 @@
           <select id="rubrics"><option value="">— сначала обновите —</option></select>
         </label>
       </div>
+      <p class="call-hint">«Обновить рубрики» → POST /api/pain-radar/scrape/rubrics — <b>1 обращение</b> к 2gis.ru/&lt;город&gt;/rubrics; получаем корневые рубрики со стабильными ID (raw/rubrics-&lt;город&gt;.json)</p>
       <p class="hint" id="rubricsInfo">рубрик не загружено</p>
     </section>
 
@@ -386,6 +388,7 @@
           <select id="subrubrics"><option value="">— выберите рубрику выше —</option></select>
         </label>
       </div>
+      <p class="call-hint">«Загрузить подрубрики» → POST /api/pain-radar/scrape/subrubrics — <b>1 обращение</b> к 2gis.ru/&lt;город&gt;/rubrics/subrubrics/&lt;id&gt;; получаем подрубрики группы с числом мест (raw/subrubrics-&lt;id&gt;.json)</p>
       <p class="hint" id="subInfo">подрубрик не загружено · «группа» = внутри неё ещё подрубрики</p>
     </section>
 
@@ -403,6 +406,7 @@
         </label>
         <button id="searchOrgs">Найти и собрать</button>
       </div>
+      <p class="call-hint">«Собрать организации» → POST /api/pain-radar/scrape/listing — <b>до N страниц</b> 2gis.ru/&lt;город&gt;/search/&lt;рубрика&gt;/rubricId/&lt;id&gt; (+/page/2…N); получаем организации: название, рейтинг, оценки, адрес, сайт · «Найти и собрать» → POST /scrape/search — то же по тексту запроса</p>
       <p class="hint" id="orgsInfo">—</p>
       <div class="row org-actions">
         <button id="selAll">Выбрать все</button>
@@ -427,6 +431,7 @@
         <button id="collectReviews" class="primary">Скачать отзывы выбранных</button>
         <button id="scanSites">Скан контактов (сайт/телефон)</button>
       </div>
+      <p class="call-hint">«Скан контактов» → POST /api/pain-radar/scrape/firm — <b>по 1 обращению на организацию</b> (карточка 2gis.ru/&lt;город&gt;/firm/&lt;id&gt;): сайт, телефоны, соцсети → колонка «Сайт» · «Скачать отзывы» → POST /scrape/reviews — постранично отзывный API (по 50/страницу) → reviews.ndjson + raw/</p>
       <p class="hint">отзывы пишутся в <code>reviews.ndjson</code>, сырые ответы — в <code>raw/</code>; контакты обновляют колонку «Сайт»</p>
     </section>
 

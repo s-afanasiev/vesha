@@ -227,7 +227,8 @@
       "tech": [
         "mcp",
         "playwright"
-      ]
+      ],
+      "admin": true
     }
   ]
 }

@@ -100,7 +100,7 @@
         tile.append(title, desc, meta);
 
         // Админ: тумблер видимости плитки (all ↔ admin). Щелчок по нему не открывает плитку.
-        if (isAdmin) {
+        if (isAdmin && !exp.adminLocked) {
           const toggle = document.createElement('button');
           toggle.className = 'tile__visibility';
           toggle.type = 'button';

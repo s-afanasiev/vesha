@@ -90,3 +90,15 @@ ul#perBase { margin: 0; padding-left: 16px; }
 .logbox .s200 { color: var(--prsc-accent); }
 .logbox .sbad { color: var(--prsc-bad); }
 .logbox .swarn { color: var(--prsc-warn); }
+
+.prsc button.loading::after {
+  content: ''; display: inline-block; width: 12px; height: 12px; margin-left: 8px;
+  border: 2px solid rgba(255, 255, 255, .25); border-top-color: currentColor; border-radius: 50%;
+  vertical-align: -2px; animation: prsc-spin .8s linear infinite;
+}
+@keyframes prsc-spin { to { transform: rotate(360deg); } }
+.prsc .call-hint {
+  margin: 6px 0 0; font-family: var(--prsc-mono, ui-monospace, Consolas, monospace);
+  font-size: 11.5px; color: var(--prsc-tool, #5a9bd8);
+}
+.prsc .call-hint b { color: var(--prsc-faint, #8b95a3); }

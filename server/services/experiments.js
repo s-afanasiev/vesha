@@ -31,12 +31,17 @@ function requireAdmin(req, res, next) {
 async function syncRegistry() {
   const registry = loadRegistry();
   for (const exp of registry.experiments || []) {
+    // admin: true в реестре — плитка принудительно служебная: sync каждый раз приводит
+    // её visibility к 'admin' (тумблер в каталоге такие плитки не меняет).
+    const adminForce = !!exp.admin;
+    const adminSet = adminForce ? ", visibility = 'admin'" : '';
     const { rows } = await db.query(
-      `insert into experiment_tiles (category, name)
-       values ('experiments', $1)
-       on conflict (category, name) do update set updated_at = now()
+      `insert into experiment_tiles (category, name, visibility)
+       values ('experiments', $1, $2)
+       on conflict (category, name) do update
+         set updated_at = now()${adminSet}
        returning id`,
-      [exp.id]
+      [exp.id, adminForce ? 'admin' : 'all']
     );
     const tileId = rows[0].id;
     for (const part of exp.parts || []) {
@@ -80,7 +85,7 @@ async function listVisible(user) {
     const exp = byId.get(t.name);
     if (!exp) continue; // запись в БД без файла — не показываем
     const tileParts = (partsByTile.get(t.id) || []).filter((p) => admin || p.visibility === 'all');
-    out.push({ ...exp, visibility: t.visibility, parts: tileParts });
+    out.push({ ...exp, visibility: t.visibility, adminLocked: !!exp.admin, parts: tileParts });
   }
   out.sort((a, b) => (registry.experiments || []).findIndex((e) => e.id === a.id) - (registry.experiments || []).findIndex((e) => e.id === b.id));
   return { admin, tiles: out };
