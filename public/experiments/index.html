@@ -13,6 +13,22 @@
     }
   </script>
   <link rel="stylesheet" href="/style.css" />
+  <style>
+    .tile { position: relative; }
+    .tile[data-visibility="admin"]::after {
+      content: 'admin';
+      position: absolute; top: 10px; right: 12px;
+      font-size: 10px; letter-spacing: .06em; color: #b4632f;
+      border: 1px solid currentColor; border-radius: 4px; padding: 1px 5px;
+    }
+    .tile__visibility {
+      position: absolute; bottom: 10px; right: 12px;
+      font: 11px/1.4 system-ui, sans-serif; cursor: pointer;
+      border: 1px solid #c9c2b6; background: #fffdf8; color: #6b6558;
+      border-radius: 5px; padding: 2px 8px;
+    }
+    .tile__visibility:hover { border-color: #b4632f; color: #b4632f; }
+  </style>
 </head>
 <body class="page-experiments">
   <main class="experiments">
@@ -41,6 +57,8 @@
       statusEl.textContent = message;
     }
 
+    let isAdmin = false;
+
     function renderTiles(experiments) {
       if (!experiments.length) {
         showStatus('Пока нет экспериментов.');
@@ -54,6 +72,7 @@
         tile.className = 'tile';
         tile.href = exp.href;
         tile.dataset.status = exp.status || 'wip';
+        if (exp.visibility === 'admin') tile.dataset.visibility = 'admin';
 
         const title = document.createElement('h2');
         title.className = 'tile__title';
@@ -79,19 +98,51 @@
         }
 
         tile.append(title, desc, meta);
+
+        // Админ: тумблер видимости плитки (all ↔ admin). Щелчок по нему не открывает плитку.
+        if (isAdmin) {
+          const toggle = document.createElement('button');
+          toggle.className = 'tile__visibility';
+          toggle.type = 'button';
+          toggle.textContent = exp.visibility === 'admin' ? 'только админ' : 'всем';
+          toggle.title = 'Переключить видимость плитки';
+          toggle.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const next = exp.visibility === 'admin' ? 'all' : 'admin';
+            try {
+              const res = await fetch('/api/experiments/visibility', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category: 'experiments', name: exp.id, visibility: next }),
+              });
+              const j = await res.json();
+              if (!res.ok || j.error) throw new Error(j.error || res.status);
+              exp.visibility = next;
+              toggle.textContent = next === 'admin' ? 'только админ' : 'всем';
+              tile.dataset.visibility = next;
+            } catch (err) {
+              showStatus('Не удалось переключить: ' + err.message);
+            }
+          });
+          tile.appendChild(toggle);
+        }
+
         frag.appendChild(tile);
       }
 
       grid.appendChild(frag);
     }
 
-    fetch('/experiments/registry.json')
+    // Каталог отдаёт сервер: registry × доступ из experiment_tiles (гость видит только 'all').
+    fetch('/api/experiments')
       .then((res) => {
-        if (!res.ok) throw new Error('registry ' + res.status);
+        if (!res.ok) throw new Error('catalog ' + res.status);
         return res.json();
       })
       .then((data) => {
-        renderTiles(Array.isArray(data.experiments) ? data.experiments : []);
+        isAdmin = !!data.admin;
+        renderTiles(Array.isArray(data.tiles) ? data.tiles : []);
       })
       .catch(() => {
         showStatus('Не удалось загрузить каталог экспериментов.');

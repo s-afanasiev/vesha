@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="/llm-picker.css" />
   <link rel="stylesheet" href="./pain-radar.css" />
+  <link rel="stylesheet" href="./scrape-console.css" />
 </head>
 <body class="page-experiments page-pain-radar">
   <main class="experiments">
@@ -37,6 +38,7 @@
       <button type="button" class="pr-tab" role="tab" id="tab-collect" aria-controls="panel-collect" data-tab="collect">Сбор</button>
       <button type="button" class="pr-tab" role="tab" id="tab-ideas" aria-controls="panel-ideas" data-tab="ideas">Идеи</button>
       <button type="button" class="pr-tab" role="tab" id="tab-history" aria-controls="panel-history" data-tab="history">История</button>
+      <button type="button" class="pr-tab" role="tab" id="tab-scrape" aria-controls="panel-scrape" data-tab="scrape" hidden>Пульт 2ГИС</button>
     </nav>
 
     <section class="pr-panel" id="panel-map" role="tabpanel" aria-labelledby="tab-map">
@@ -332,6 +334,119 @@
           </table>
         </div>
       </div>
+    </section>
+    <section class="pr-panel prsc" id="panel-scrape" role="tabpanel" aria-labelledby="tab-scrape" hidden>
+    <div class="prsc-headbox head">
+      <div>
+        <h2>Пульт сбора сырых данных <span class="accent">· 2ГИС</span></h2>
+        <p class="sub">вежливый сбор: троттлинг 1,2 с, потолки, стоп при 403/429</p>
+      </div>
+      <div class="counters">
+        <div class="counter"><b id="cTotal">0</b><span>обращений всего</span></div>
+        <div class="counter"><b id="cMinute">0</b><span>за минуту</span></div>
+        <div class="counter"><b id="cReviews">0</b><span>отзывов скачано</span></div>
+        <div class="counter"><b id="cFiles">0</b><span>строк в ndjson</span></div>
+      </div>
+    </div>
+
+    <div id="alarm" class="alarm hidden"></div>
+    <div id="jobline" class="jobline hidden"></div>
+    <section class="card">
+      <h2>1 · Папка данных и город</h2>
+      <div class="row">
+        <label>Путь сохранения (внутри проекта)
+          <input id="dataDir" value="data/pain-radar-corpus" spellcheck="false">
+        </label>
+        <label>Город (сегмент URL)
+          <input id="city" value="kursk" spellcheck="false" pattern="[a-zа-яё-]+">
+        </label>
+        <button id="applyDir">Применить</button>
+      </div>
+      <p class="hint" id="dirStats">папка: —</p>
+    </section>
+
+    <section class="card">
+      <h2>2 · Рубрики</h2>
+      <p class="url">первичный URL: <code id="rubricsUrl">https://2gis.ru/kursk/rubrics</code></p>
+      <div class="row">
+        <button id="loadRubrics" class="primary">Обновить рубрики</button>
+        <label>Рубрика
+          <select id="rubrics"><option value="">— сначала обновите —</option></select>
+        </label>
+      </div>
+      <p class="hint" id="rubricsInfo">рубрик не загружено</p>
+    </section>
+
+    <section class="card">
+      <h2>3 · Подрубрики</h2>
+      <p class="url">URL группы: <code id="subUrl">—</code></p>
+      <div class="row">
+        <button id="loadSubrubrics">Загрузить подрубрики выбранной</button>
+        <label>Подрубрика
+          <select id="subrubrics"><option value="">— выберите рубрику выше —</option></select>
+        </label>
+      </div>
+      <p class="hint" id="subInfo">подрубрик не загружено · «группа» = внутри неё ещё подрубрики</p>
+    </section>
+
+    <section class="card">
+      <h2>4 · Организации</h2>
+      <p class="url">листинг: <code id="listingUrl">—</code></p>
+      <div class="row">
+        <label>Страниц листинга (≤ 20)
+          <input id="maxPages" type="number" value="3" min="1" max="20">
+        </label>
+        <button id="collectOrgs" class="primary">Собрать организации</button>
+        <span class="or">или произвольный поиск:</span>
+        <label>Запрос
+          <input id="query" placeholder="например: стоматология" spellcheck="false">
+        </label>
+        <button id="searchOrgs">Найти и собрать</button>
+      </div>
+      <p class="hint" id="orgsInfo">—</p>
+      <div class="row org-actions">
+        <button id="selAll">Выбрать все</button>
+        <button id="selNone">Снять</button>
+        <button id="selNoSite">Только без сайта</button>
+        <span class="hint" id="selInfo"></span>
+      </div>
+      <div class="tablewrap">
+        <table id="orgsTable">
+          <thead><tr><th></th><th>Название</th><th>Рейтинг</th><th>Оценок</th><th>Сайт</th><th>Адрес</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>5 · Отзывы выбранных организаций</h2>
+      <div class="row">
+        <label>Потолок отзывов на организацию (≤ 300)
+          <input id="maxPerOrg" type="number" value="150" min="1" max="300">
+        </label>
+        <button id="collectReviews" class="primary">Скачать отзывы выбранных</button>
+        <button id="scanSites">Скан контактов (сайт/телефон)</button>
+      </div>
+      <p class="hint">отзывы пишутся в <code>reviews.ndjson</code>, сырые ответы — в <code>raw/</code>; контакты обновляют колонку «Сайт»</p>
+    </section>
+
+    <section class="card">
+      <h2>6 · Контроль обращений</h2>
+      <div class="row">
+        <button id="pauseBtn">Пауза</button>
+        <span class="hint" id="limitInfo"></span>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Страниц дергалось (топ)</h3>
+          <ul id="perBase" class="mono small"></ul>
+        </div>
+        <div>
+          <h3>Лог (последние)</h3>
+          <div id="log" class="mono small logbox"></div>
+        </div>
+      </div>
+    </section>
     </section>
   </main>
 

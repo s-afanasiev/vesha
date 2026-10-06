@@ -11,6 +11,34 @@
     const collect = new CollectView(new DemoJobs({ tickMs: 140 }), runs, painMap);
     const ideas = new IdeasView(DEMO.map, DEMO.ideas, painMap, runs);
     [tabs, runs, painMap, collect, ideas].forEach((part) => part.run());
+    setupAdminConsole();
+  }
+
+  // ---------- Служебная часть: пульт сбора 2ГИС (видимость — experiment_tile_parts) ----------
+
+  function setupAdminConsole() {
+    fetch('/api/experiments')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || !data.admin) return;
+        const tile = (data.tiles || []).find((t) => t.id === 'pain-radar');
+        const part = tile && (tile.parts || []).find((p) => p.key === 'scrape');
+        if (!part) return;
+        const button = byId('tab-scrape');
+        button.hidden = false;
+        let loaded = false;
+        const ensure = () => {
+          if (loaded) return;
+          loaded = true;
+          const script = document.createElement('script');
+          script.src = './scrape-console.js';
+          script.onload = () => window.initScrapeConsole && window.initScrapeConsole();
+          document.body.appendChild(script);
+        };
+        button.addEventListener('click', ensure);
+        if (window.location.hash === '#scrape') ensure();
+      })
+      .catch(() => {});
   }
 
   // ---------- Демо-данные: срез «Автосервисы · Томск · 12 месяцев» ----------

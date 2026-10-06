@@ -14,6 +14,9 @@ const llmRoutes = require('./server/routes/llm');
 const ideaRadarRoutes = require('./server/routes/ideaRadar');
 const superNotesRoutes = require('./server/routes/superNotes');
 const chatEngineRoutes = require('./server/routes/chat-engine');
+const painRadarRoutes = require('./server/routes/pain-radar');
+const experimentsRoutes = require('./server/routes/experiments');
+const experimentsService = require('./server/services/experiments');
 const { startIdeaRadarSchedule } = require('./server/services/idea-radar/schedule');
 
 const app = express();
@@ -36,6 +39,8 @@ app.use('/api/llm', llmRoutes);
 app.use('/api/idea-radar', ideaRadarRoutes);
 app.use('/api/super-notes', superNotesRoutes);
 app.use('/api/chat-engine', chatEngineRoutes);
+app.use('/api/pain-radar', painRadarRoutes);
+app.use('/api/experiments', experimentsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);
 
@@ -74,6 +79,8 @@ async function start() {
       console.warn('summarize_jobs table missing/unavailable:', histErr.message);
     }
     startIdeaRadarSchedule();
+    await experimentsService.syncRegistry();
+    console.log('experiment_tiles synced');
   } catch (err) {
     console.warn('DB migrate skipped/failed:', err.message);
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');

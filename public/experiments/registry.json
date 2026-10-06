@@ -67,6 +67,13 @@
         "js",
         "parsing",
         "llm"
+      ],
+      "parts": [
+        {
+          "key": "scrape",
+          "title": "Пульт сбора 2ГИС",
+          "admin": true
+        }
       ]
     },
     {
