@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Playwright MCP — песочница — Vesha</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    :root { --mcp-bg: #14171c; --mcp-card: #1c2027; --mcp-line: #2b313b; --mcp-text: #dde3ea; --mcp-faint: #8b95a3; --mcp-ok: #4fb477; --mcp-err: #d86b5a; --mcp-tool: #5a9bd8; }
+    body { background: var(--mcp-bg); color: var(--mcp-text); font: 14px/1.5 system-ui, "Segoe UI", sans-serif; margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 20px 24px 48px; }
+    h1 { font-size: 20px; } .accent { color: var(--mcp-ok); }
+    .sub { color: var(--mcp-faint); margin: 4px 0 18px; font-size: 13px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    label { display: grid; gap: 4px; font-size: 12px; color: var(--mcp-faint); }
+    input[type="text"], textarea { background: #12151a; color: var(--mcp-text); border: 1px solid var(--mcp-line); border-radius: 7px; padding: 8px 10px; font: inherit; }
+    input[type="text"] { min-width: 460px; }
+    input[type="checkbox"] { accent-color: var(--mcp-ok); }
+    button { background: #12151a; color: var(--mcp-text); border: 1px solid var(--mcp-line); border-radius: 7px; padding: 8px 14px; font: inherit; cursor: pointer; }
+    button.primary { background: #1d3527; border-color: var(--mcp-ok); color: #bfe8cf; font-weight: 600; }
+    button.danger { border-color: var(--mcp-err); color: #f0c0b6; }
+    button:disabled { opacity: .45; cursor: default; }
+    .status { display: flex; gap: 12px; margin: 14px 0 8px; flex-wrap: wrap; }
+    .chip { border: 1px solid var(--mcp-line); border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--mcp-faint); background: var(--mcp-card); }
+    .chip b { color: var(--mcp-text); }
+    .chip.ok b { color: var(--mcp-ok); } .chip.err b { color: var(--mcp-err); }
+    #log {
+      margin-top: 8px; height: 55vh; overflow: auto; background: #101318;
+      border: 1px solid var(--mcp-line); border-radius: 8px; padding: 10px 12px;
+      font: 12px/1.5 ui-monospace, Consolas, "Cascadia Mono", monospace; white-space: pre-wrap; word-break: break-all;
+    }
+    .k-info { color: var(--mcp-faint); } .k-tool { color: var(--mcp-tool); font-weight: 600; }
+    .k-result { color: var(--mcp-text); } .k-error { color: var(--mcp-err); font-weight: 600; }
+    .t { color: #5d6673; }
+    .hint { color: var(--mcp-faint); font-size: 12.5px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Playwright MCP <span class="accent">· песочница</span></h1>
+    <p class="sub">текстовый запрос → MCP-сервер @playwright/mcp (stdio) → видимое окно браузера; всё, что он возвращает, падает в лог сырым текстом</p>
+
+    <div class="row">
+      <label>Запрос (URL — откроет страницу; иначе — поиск в Google)
+        <input type="text" id="task" value="https://2gis.ru/kursk/rubrics" spellcheck="false">
+      </label>
+      <label style="flex-direction: row; align-items: center; gap: 6px;">
+        <input type="checkbox" id="headless"> headless (без окна)
+      </label>
+      <button id="run" class="primary">Выполнить</button>
+      <button id="stop" class="danger">Закрыть браузер</button>
+    </div>
+
+    <div class="status">
+      <span class="chip" id="chip-conn">MCP: <b>не подключен</b></span>
+      <span class="chip" id="chip-busy">задача: <b>нет</b></span>
+      <span class="chip" id="chip-tools">инструментов: <b>—</b></span>
+      <span class="chip" id="chip-lines">строк лога: <b>0</b></span>
+    </div>
+
+    <div id="log"></div>
+    <p class="hint">Если браузер не откроется — смотри ошибку в логе; чаще всего помогает <code>npx playwright install chromium</code>. Оставь окно браузера открытым: следующий запрос пойдёт в то же окно.</p>
+  </main>
+
+  <script src="./mcp-console.js"></script>
+</body>
+</html>

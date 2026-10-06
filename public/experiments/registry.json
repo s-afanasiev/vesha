@@ -217,6 +217,17 @@
         "three",
         "webgl"
       ]
+    },
+    {
+      "id": "playwright-mcp",
+      "title": "Playwright MCP: песочница",
+      "description": "Текстовый запрос → видимый браузер через @playwright/mcp; все промежуточные результаты — сырым логом",
+      "href": "/experiments/playwright-mcp/",
+      "status": "wip",
+      "tech": [
+        "mcp",
+        "playwright"
+      ]
     }
   ]
 }

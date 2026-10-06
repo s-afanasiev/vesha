@@ -4,3 +4,4 @@ node_modules/
 uploads/
 bin/
 data/
+.playwright-mcp/
