@@ -1,10 +1,12 @@
 /* Паттерны: Доверие + витрина — логика тестовой страницы (IIFE, vanilla).
    Пилюля режима: рекурсивный setTimeout раз в минуту. Count-up: значения
-   в DOM сразу, анимация — усиление; без rAF-цикла при reduced-motion. */
+   в DOM сразу, анимация — усиление; без rAF-цикла при reduced-motion.
+   Разбиение тысяч и обвязка lightbox — общие из /c/ui.js (modal@1). */
 (function () {
   'use strict';
 
   var $ = function (sel) { return document.querySelector(sel); };
+  var fmtInt = window.VeshaUI.fmtInt;
   var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- живая пилюля режима ---------- */
@@ -62,7 +64,7 @@
 
   function formatCount(el, value) {
     if (el.hasAttribute('data-format') && el.getAttribute('data-format') === 'space') {
-      return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+      return fmtInt(value);
     }
     return String(value);
   }
@@ -136,7 +138,6 @@
       lightbox.showModal();
     });
   });
-  lightbox.addEventListener('click', function (e) {
-    if (e.target === lightbox) lightbox.close();
-  });
+  // клик по подложке закрывает — общая обвязка modal@1
+  window.VeshaUI.dialogWiring(lightbox);
 })();

@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Тестовая страница паттернов кабинета: канбан-мок с WIP-шкалами, drag&drop с кнопочным фолбэком, sparklines у KPI, честные тосты и empty states. Материальная «приборная панель»." />
   <title>Паттерны: Кабинет · воронка (демо-мок)</title>
-  <link rel="stylesheet" href="./ui-cab.css?v=1" />
+  <link rel="stylesheet" href="/c/ui.css?v=1" />
+  <link rel="stylesheet" href="./ui-cab.css?v=2" />
 </head>
 <body class="cb-body">
 
@@ -87,8 +88,8 @@
     </footer>
   </main>
 
-  <div class="cb-toasts" id="cb-toasts" role="status" aria-live="polite"></div>
-
-  <script src="./ui-cab.js?v=1"></script>
+  <!-- тосты и утилиты — общий компонент toast@1 (/c/ui.js + /c/ui.css) -->
+  <script src="/c/ui.js?v=1"></script>
+  <script src="./ui-cab.js?v=2"></script>
 </body>
 </html>

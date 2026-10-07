@@ -37,6 +37,8 @@
   margin: 10px 24px 0; padding: 8px 14px; border: 1px solid var(--prsc-accent2);
   border-radius: 8px; background: #17202a; font-family: var(--prsc-mono); font-size: 13px;
 }
+/* ошибка в строке статуса — помечает console@1 (класс is-bad) */
+.prsc .jobline.is-bad { border-color: var(--prsc-bad); color: #f0c0b6; }
 
 main { padding: 16px 24px 48px; display: grid; gap: 14px; max-width: 1200px; }
 .prsc .card {

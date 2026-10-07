@@ -1,0 +1,48 @@
+/* toast@1 — общие тосты Vesha (docs/ui-components.md §3, /c/ui.js).
+   Тема нейтральна: тёмная плашка читается и на светлой, и на тёмной странице;
+   токены --vui-* страница может переопределить. err — акцент ошибки,
+   состояние не кодируется только цветом (role=alert у элемента). */
+
+#vui-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: grid;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.vui-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  background: var(--vui-toast-bg, #1c2027);
+  color: var(--vui-toast-text, #e8edf4);
+  border: 1px solid var(--vui-toast-line, rgba(255, 255, 255, .16));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28);
+}
+
+.vui-toast--err {
+  border-color: #d86b5a;
+  color: #f0c0b6;
+}
+
+.vui-toast button {
+  flex: none;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  background: rgba(255, 255, 255, .08);
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.vui-toast button:hover {
+  background: rgba(255, 255, 255, .16);
+}

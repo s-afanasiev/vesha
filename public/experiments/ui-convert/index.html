@@ -8,7 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./ui-convert.css?v=1" />
+  <link rel="stylesheet" href="/c/ui.css?v=1" />
+  <link rel="stylesheet" href="./ui-convert.css?v=2" />
 </head>
 <body class="cv-body">
   <!-- фоновые блобы светлой стеклянной материи -->
@@ -250,9 +251,8 @@
     <button class="cv-sticky__btn" type="button" id="cv-sticky-chat">💬 Чат</button>
   </nav>
 
-  <!-- ============ тосты ============ -->
-  <div class="cv-toasts" id="cv-toasts" role="status" aria-live="polite"></div>
-
-  <script src="./ui-convert.js?v=1"></script>
+  <!-- тосты и утилиты — общий компонент toast@1 (/c/ui.js + /c/ui.css) -->
+  <script src="/c/ui.js?v=1"></script>
+  <script src="./ui-convert.js?v=2"></script>
 </body>
 </html>

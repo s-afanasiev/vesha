@@ -1,6 +1,7 @@
 // Пульт сбора сырых данных 2ГИС — админская вкладка pain-radar (panel-scrape).
 // Подгружается динамически: setupAdminConsole в pain-radar.js (part scrape, видимость admin).
-// Кнопки: loader до завершения задачи (startJob → промис резолвится в поллинге, когда джоба done).
+// Механика джоб (POST → jobId → поллинг → loader кнопок → jobline) — общий
+// console@1 из /c/console.js; здесь только домен: рубрики, таблица, отрисовка состояния.
 // Таблица организаций — компонент table@1 <v-table src="/api/pain-radar/c/orgs">:
 // сортировка/поиск/выбор живут в рендерере, консоль слушает v-select/v-action.
 function initScrapeConsole() {
@@ -24,63 +25,16 @@ function initScrapeConsole() {
     config: { dataDir: 'data/pain-radar-corpus', limits: {} },
     rubricItems: [], subItems: [],
     pickedIds: [],            // строки, выбранные в таблице (событие v-select)
-    waitJobs: new Map(), // jobId → handler(job)
-    pausedNow: false,
   };
   window.__scrape = state; // отладка пульта
 
-  // ---------- сеть ----------
+  // ---------- консоль джоб: общий console@1 (/c/console.js) ----------
 
-  async function post(path, body) {
-    const res = await fetch(`/api/pain-radar/scrape/${path}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
-    });
-    const j = await res.json();
-    if (!res.ok || j.error) throw new Error(j.error || `HTTP ${res.status}`);
-    return j;
-  }
-
-  async function get(path) {
-    const res = await fetch(`/api/pain-radar/scrape/${path}`);
-    const j = await res.json();
-    if (!res.ok || j.error) throw new Error(j.error || `HTTP ${res.status}`);
-    return j;
-  }
-
-  // джоба уже запущена: регистрируем обработчик, промис резолвится в поллинге
-  function awaitJob(jobId, onDone) {
-    return new Promise((resolve) => {
-      state.waitJobs.set(jobId, (job) => {
-        try { onDone(job); } finally { resolve(job); }
-      });
-      showJob('запущено…');
-    });
-  }
-
-  // джоба: POST → промис резолвится, когда поллинг увидит done/error (результат уже в state.jobs)
-  function startJob(path, body, onDone) {
-    return post(path, body).then(({ jobId }) => awaitJob(jobId, onDone));
-  }
-
-  // loader на кнопках: от клика до фактического завершения задачи
-  async function withLoading(buttons, fn) {
-    const list = Array.isArray(buttons) ? buttons : [buttons];
-    list.forEach((b) => { b.disabled = true; b.classList.add('loading'); });
-    try {
-      await fn();
-    } catch (e) {
-      showJob(`ошибка: ${e.message || e}`, 'bad');
-    } finally {
-      list.forEach((b) => { b.classList.remove('loading'); b.disabled = false; });
-    }
-  }
-
-  function showJob(text, cls) {
-    el.jobline.textContent = text;
-    el.jobline.classList.toggle('hidden', !text);
-    el.jobline.style.borderColor = cls === 'bad' ? 'var(--prsc-bad, #d86b5a)' : 'var(--prsc-tool, #5a9bd8)';
-    el.jobline.style.color = cls === 'bad' ? '#f0c0b6' : '';
-  }
+  const jc = new VeshaUI.JobConsole({
+    base: '/api/pain-radar/scrape',
+    jobline: el.jobline,
+    onState: renderState,     // доменная отрисовка состояния (объявлена ниже)
+  }).run();
 
   // ---------- рендеры ----------
 
@@ -112,15 +66,15 @@ function initScrapeConsole() {
 
   el.applyDir.addEventListener('click', async () => {
     try {
-      await post('config', { dataDir: el.dataDir.value.trim() });
+      await jc.post('config', { dataDir: el.dataDir.value.trim() });
       el.dirStats.textContent = 'папка применена';
     } catch (e) { el.dirStats.textContent = `ошибка: ${e.message}`; }
   });
 
   el.city.addEventListener('input', applyCity);
 
-  el.loadRubrics.addEventListener('click', () => withLoading(el.loadRubrics, async () => {
-    await startJob('rubrics', { city: el.city.value.trim() || 'kursk', dataDir: el.dataDir.value.trim() }, (job) => {
+  el.loadRubrics.addEventListener('click', () => jc.withLoading(el.loadRubrics, async () => {
+    await jc.startJob('rubrics', { city: el.city.value.trim() || 'kursk', dataDir: el.dataDir.value.trim() }, (job) => {
       if (job.status === 'error') { el.rubricsInfo.textContent = `ошибка: ${job.error}`; return; }
       state.rubricItems = job.result.items;
       fillSelect(el.rubrics, state.rubricItems, rubricLabel);
@@ -134,14 +88,14 @@ function initScrapeConsole() {
     const target = sub && sub.type === 'metarubric' ? sub : currentRubric();
     if (!target) { el.subInfo.textContent = 'сначала обнови рубрики (блок 2) и выбери рубрику'; return; }
     if (target.type === 'rubric') { el.subInfo.textContent = `«${target.name}» — конечная рубрика, её собирают сразу кнопкой «Собрать организации»`; return; }
-    return withLoading(el.loadSubrubrics, async () => {
+    return jc.withLoading(el.loadSubrubrics, async () => {
       await revealGroup(target.id, el.city.value.trim() || 'kursk');
     });
   });
 
   // раскрыть группу подрубрик (job subrubrics) и авто-выбрать первую конечную [N мест]
   function revealGroup(groupId, city) {
-    return startJob('subrubrics', { city, groupId, dataDir: el.dataDir.value.trim() }, (job) => {
+    return jc.startJob('subrubrics', { city, groupId, dataDir: el.dataDir.value.trim() }, (job) => {
       if (job.status === 'error') { el.subInfo.textContent = `ошибка: ${job.error}`; return; }
       state.subItems = job.result.items;
       fillSelect(el.subrubrics, state.subItems, rubricLabel);
@@ -175,7 +129,7 @@ function initScrapeConsole() {
     }
     const target = { slug: sub.name, rubricId: sub.id };
     el.listingUrl.textContent = `https://2gis.ru/${city}/search/${encodeURIComponent(target.slug)}/rubricId/${target.rubricId}`;
-    await startJob('listing', {
+    await jc.startJob('listing', {
       city, slug: target.slug, rubricId: target.rubricId,
       maxPages: clamp(el.maxPages.value, 1, 20), dataDir: el.dataDir.value.trim(),
     }, (job) => {
@@ -185,15 +139,15 @@ function initScrapeConsole() {
     });
   }
 
-  el.collectOrgs.addEventListener('click', () => withLoading([el.collectOrgs, el.searchOrgs], collect()));
+  el.collectOrgs.addEventListener('click', () => jc.withLoading([el.collectOrgs, el.searchOrgs], collect()));
 
   el.searchOrgs.addEventListener('click', () => {
     const q = el.query.value.trim();
     if (!q) { el.orgsInfo.textContent = 'введите текст запроса'; return; }
     const city = el.city.value.trim() || 'kursk';
     el.listingUrl.textContent = `https://2gis.ru/${city}/search/${encodeURIComponent(q)}`;
-    return withLoading([el.collectOrgs, el.searchOrgs], async () => {
-      await startJob('search', {
+    return jc.withLoading([el.collectOrgs, el.searchOrgs], async () => {
+      await jc.startJob('search', {
         city, query: q, maxPages: clamp(el.maxPages.value, 1, 20), dataDir: el.dataDir.value.trim(),
       }, (job) => {
         if (job.status === 'error') { el.orgsInfo.textContent = `ошибка: ${job.error}`; return; }
@@ -210,82 +164,64 @@ function initScrapeConsole() {
 
   el.orgsTable.addEventListener('v-action', (e) => {
     const { id, response, error } = e.detail;
-    if (error) { showJob(`ошибка: ${error}`, 'bad'); return; }
+    if (error) { jc.showJob(`ошибка: ${error}`, 'bad'); return; }
     const jobId = response && response.result && response.result.jobId;
     if (id === 'scan-sites' && jobId) {
-      awaitJob(jobId, (job) => {
-        if (job.status === 'error') { showJob(`ошибка: ${job.error}`, 'bad'); return; }
+      jc.awaitJob(jobId, (job) => {
+        if (job.status === 'error') { jc.showJob(`ошибка: ${job.error}`, 'bad'); return; }
         el.orgsTable.refresh(); // контакты влиты в orgs-файл, перечитываем
         const noSite = (job.result.items || []).filter((o) => o.site_scanned && !o.site).length;
-        showJob(`контакты проверены: ${job.result.scanned}${noSite ? ` · без сайта ${noSite} — кандидаты на предложение сайта` : ''}`);
+        jc.showJob(`контакты проверены: ${job.result.scanned}${noSite ? ` · без сайта ${noSite} — кандидаты на предложение сайта` : ''}`);
       });
     }
   });
 
   el.collectReviews.addEventListener('click', () => {
     const ids = state.pickedIds;
-    if (!ids.length) { showJob('не выбрано ни одной организации — отметьте чекбоксы в таблице блока 4', 'bad'); return; }
-    if (ids.length > 120) { showJob('максимум 120 организаций за раз', 'bad'); return; }
-    return withLoading(el.collectReviews, async () => {
-      await startJob('reviews', {
+    if (!ids.length) { jc.showJob('не выбрано ни одной организации — отметьте чекбоксы в таблице блока 4', 'bad'); return; }
+    if (ids.length > 120) { jc.showJob('максимум 120 организаций за раз', 'bad'); return; }
+    return jc.withLoading(el.collectReviews, async () => {
+      await jc.startJob('reviews', {
         city: el.city.value.trim() || 'kursk', branchIds: ids,
         maxPerOrg: clamp(el.maxPerOrg.value, 1, 300), dataDir: el.dataDir.value.trim(),
       }, (job) => {
-        if (job.status === 'error') { showJob(`ошибка: ${job.error}`, 'bad'); return; }
-        showJob(`готово: отзывов скачано ${job.result.savedTotal}`);
+        if (job.status === 'error') { jc.showJob(`ошибка: ${job.error}`, 'bad'); return; }
+        jc.showJob(`готово: отзывов скачано ${job.result.savedTotal}`);
       });
     });
   });
 
   el.pauseBtn.addEventListener('click', async () => {
-    const { paused } = await post('pause', { paused: !state.pausedNow });
-    state.pausedNow = paused;
+    const { paused } = await jc.post('pause', { paused: !jc.pausedNow });
+    jc.pausedNow = paused;
     el.pauseBtn.textContent = paused ? 'Продолжить' : 'Пауза';
   });
 
-  // ---------- поллинг ----------
+  // ---------- отрисовка состояния (вызывается из поллинга console@1) ----------
 
-  let timer = 0;
-  function poll() {
-    clearTimeout(timer);
-    fetch('/api/pain-radar/scrape/state')
-      .then(r => r.json())
-      .then((s) => {
-        state.pausedNow = s.paused;
-        el.pauseBtn.textContent = s.paused ? 'Продолжить' : 'Пауза';
-        el.cTotal.textContent = s.counters.total;
-        el.cMinute.textContent = s.counters.perMinute;
-        el.cFiles.textContent = s.fileStats.ndjsonLines;
-        el.dirStats.textContent = `папка: ${s.fileStats.dataDir} · raw-файлов ${s.fileStats.rawFiles} · orgs-файлов ${s.fileStats.orgFiles}`;
-        el.limitInfo.textContent = `лимиты: троттлинг ${s.config.limits.minIntervalMs} мс · ≤ ${s.config.limits.maxPages} страниц · ≤ ${s.config.limits.maxReviewsPerOrg} отзывов/орг · стоп сессии при ${s.config.limits.sessionLimit} обращений`;
-        el.alarm.classList.toggle('hidden', !s.blockReason);
-        if (s.blockReason) el.alarm.textContent = `⛔ ${s.blockReason}`;
-        el.cReviews.textContent = (s.counters.byKind && s.counters.byKind.reviews) || 0;
+  function renderState(s) {
+    el.pauseBtn.textContent = s.paused ? 'Продолжить' : 'Пауза';
+    el.cTotal.textContent = s.counters.total;
+    el.cMinute.textContent = s.counters.perMinute;
+    el.cFiles.textContent = s.fileStats.ndjsonLines;
+    el.dirStats.textContent = `папка: ${s.fileStats.dataDir} · raw-файлов ${s.fileStats.rawFiles} · orgs-файлов ${s.fileStats.orgFiles}`;
+    el.limitInfo.textContent = `лимиты: троттлинг ${s.config.limits.minIntervalMs} мс · ≤ ${s.config.limits.maxPages} страниц · ≤ ${s.config.limits.maxReviewsPerOrg} отзывов/орг · стоп сессии при ${s.config.limits.sessionLimit} обращений`;
+    el.alarm.classList.toggle('hidden', !s.blockReason);
+    if (s.blockReason) el.alarm.textContent = `⛔ ${s.blockReason}`;
+    el.cReviews.textContent = (s.counters.byKind && s.counters.byKind.reviews) || 0;
 
-        el.perBase.innerHTML = (s.perBase || []).map(p =>
-          `<li>${p.count} × ${escapeHtml(p.base)}</li>`).join('') || '<li>—</li>';
-        el.log.innerHTML = (s.log || []).slice().reverse().map(l => {
-          const cls = l.status === 200 ? 's200' : (l.status === 403 || l.status === 429 ? 'sbad' : 'swarn');
-          const t = (l.ts || '').slice(11, 19);
-          return `<span class="${cls}">${t} [${l.kind}] ${l.status} ${l.ms}мс</span> ${escapeHtml(shorten(l.url))}`;
-        }).join('\n');
+    el.perBase.innerHTML = (s.perBase || []).map(p =>
+      `<li>${p.count} × ${escapeHtml(p.base)}</li>`).join('') || '<li>—</li>';
+    el.log.innerHTML = (s.log || []).slice().reverse().map(l => {
+      const cls = l.status === 200 ? 's200' : (l.status === 403 || l.status === 429 ? 'sbad' : 'swarn');
+      const t = (l.ts || '').slice(11, 19);
+      return `<span class="${cls}">${t} [${l.kind}] ${l.status} ${l.ms}мс</span> ${escapeHtml(shorten(l.url))}`;
+    }).join('\n');
 
-        if (s.current) {
-          const p = s.current.progress || {};
-          showJob(`${s.current.label} — ${p.done ?? 0}/${p.total ?? '?'}${p.reviews != null ? ` · отзывов ${p.reviews}` : ''}`);
-        }
-
-        // завершённые джобы, которых ждём — результат уже в state
-        for (const j of s.jobs || []) {
-          if (state.waitJobs.has(j.id) && (j.status === 'done' || j.status === 'error')) {
-            const handler = state.waitJobs.get(j.id);
-            state.waitJobs.delete(j.id);
-            try { handler(j); } catch (e) { showJob(`ошибка рендера: ${e.message || e}`, 'bad'); }
-          }
-        }
-      })
-      .catch((e) => { showJob(`ошибка поллинга: ${e.message || e}`, 'bad'); })
-      .finally(() => { timer = setTimeout(poll, 1000); });
+    if (s.current) {
+      const p = s.current.progress || {};
+      jc.showJob(`${s.current.label} — ${p.done ?? 0}/${p.total ?? '?'}${p.reviews != null ? ` · отзывов ${p.reviews}` : ''}`);
+    }
   }
 
   function shorten(url) {
@@ -293,6 +229,5 @@ function initScrapeConsole() {
     return url.replace(/key=[0-9a-f-]+/, 'key=…').replace(/https?:\/\//, '');
   }
 
-  poll();
   applyCity();
 }

@@ -1,9 +1,13 @@
 /* Паттерны: Кабинет — логика тестовой страницы (IIFE, vanilla).
    Один путь переноса статуса — moveCardTo(): drag&drop и кнопки ←/→
    вызывают его, он же пишет журнал и тост (демо-аналог двери Funnel).
-   Таймеры — одиночный setTimeout на тосты. Данные вымышленные. */
+   Таймеры — одиночный setTimeout на тосты. Данные вымышленные.
+   Тосты — общий toast@1 из /c/ui.js (docs/ui-components.md §3). */
 (function () {
   'use strict';
+
+  // локальная сигнатура (text, kind, action) → контракт VeshaUI.toast(text, {kind, action})
+  var toast = function (text, kind, action) { window.VeshaUI.toast(text, { kind: kind, action: action }); };
 
   var COLUMNS = [
     { id: 'new', title: 'Новая', limit: 5 },
@@ -188,26 +192,6 @@
     log.prepend(li);
   }
   document.getElementById('cb-log').innerHTML = '<li class="cb-log__empty">Журнал пуст — переносы карточек появятся здесь</li>';
-
-  /* ---------- тосты ---------- */
-
-  function toast(text, kind, action) {
-    var box = document.getElementById('cb-toasts');
-    var el = document.createElement('div');
-    el.className = 'cb-toast' + (kind ? ' cb-toast--' + kind : '');
-    var span = document.createElement('span');
-    span.textContent = text;
-    el.appendChild(span);
-    if (action) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = action.label;
-      btn.addEventListener('click', function () { action.fn(); el.remove(); });
-      el.appendChild(btn);
-    }
-    box.appendChild(el);
-    setTimeout(function () { el.remove(); }, 5200);
-  }
 
   /* ---------- sparklines (демо-данные, SVG polyline) ---------- */
 

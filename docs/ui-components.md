@@ -91,15 +91,30 @@ router.use('/c', experiments.requireAdmin, require('../services/pain-radar/compo
 
 | Файл | Что |
 |---|---|
-| `/c/ui.js` | `VeshaUI`: `escapeHtml`, `fmtInt`, `getJson`/`postJson` (ошибка = `Error(j.error)`), `debounce` |
+| `/c/ui.js` | `VeshaUI`: `escapeHtml`, `fmtInt`, `getJson`/`postJson` (ошибка = `Error(j.error)`), `debounce`, `toast` (toast@1), `dialogWiring` (обвязка modal@1) |
+| `/c/ui.css` | тосты toast@1: контейнер `#vui-toasts`, токены `--vui-toast-*`, род `--err` |
 | `/c/table.js` | custom element `<v-table src="/api/<ns>/c/<id>">` — рендерер `table@1` |
 | `/c/table.css` | тема рендерера: токены `--vt-*` с тёмными дефолтами («приборная»), переопределяются страницей |
+| `/c/console.js` | `VeshaUI.JobConsole` (console@1): механика джоб-консоли |
 
 `v-table` умеет из `/meta`: клик по шапке — сортировка (`aria-sort`, стрелка),
 поиск с debounce, чекбоксы + «Выбрать всё / Снять / <пресеты>», bulk-кнопки
 действий (loader до ответа), пагинация, пусто/ошибка/загрузка. События наружу:
 `v-select { ids }`, `v-action { id, response?, error? }`; метод `refresh()`.
 Тема — то, что вчера копировали руками: шапку и строку статуса держит страница.
+
+`JobConsole` (console@1) — «как ждать джобу»: `startJob`/`awaitJob` (промис по
+done/error из поллинга), `withLoading` (loader на кнопках от клика до
+завершения), `showJob` (строка статуса, ошибка — класс `is-bad`, стили у
+страницы), рекурсивный setTimeout. Домен отвечает «что делать» — колбэк
+`onState` рисует свою панель:
+
+```js
+const jc = new VeshaUI.JobConsole({
+  base: '/api/<ns>/scrape', jobline: el.jobline, onState: renderState,
+}).run();
+await jc.startJob('rubrics', body, (job) => { /* done/error */ });
+```
 
 ## 4. Каталог id
 
@@ -147,10 +162,15 @@ router.use('/c', experiments.requireAdmin, require('../services/pain-radar/compo
    таблица организаций пульта 2ГИС переезжает на контракт и получает
    сортировку, поиск, пресет «только без сайта», «Скан контактов» становится
    bulk-действием таблицы.
-2. `toast@1` + `modal@1` + утилиты в `/c/` — убрать дословные дубли песочниц
-   (пере-одевание попутно, при касании кода).
-3. `console@1` + `log@1` — обобщение механики джобов пульта (поллинг, loader,
-   jobline).
+2. ✅ **toast@1 + modal@1 + утилиты** в `/c/` (`ui.js`/`ui.css`): песочницы
+   ui-convert, ui-cab, ui-trust переведены на общие тосты/обвязку
+   диалога/`fmtInt` — дословные дубли удалены.
+3. ✅ **console@1** (`/c/console.js`, `JobConsole`): механика джоб пульта
+   (startJob/awaitJob/withLoading/showJob/поллинг) вынесена из
+   `scrape-console.js`; в консоли осталась только доменная отрисовка.
+   `log@1` отложен (П34): второй потребитель — песочница playwright-mcp —
+   с другим протоколом (`since=seq`); вернуть при втором scrape-стилю
+   консоли или унификации лога.
 4. `kanban@1` + `kpi-dash@1` — из `ui-cab`/chat-engine, источник — агрегаты БД
    (вот где понадобится SQL-`source`).
 5. Спека страницы + `boot.js` — когда блоков станет три-четыре.

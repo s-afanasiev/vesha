@@ -1,30 +1,15 @@
 /* Паттерны: Конверсия — логика тестовой страницы (IIFE, vanilla).
-   Таймеры — одиночный setTimeout для тостов; никаких setInterval. */
+   Таймеры — одиночный setTimeout для тостов; никаких setInterval.
+   Тосты, escapeHtml, разбиение тысяч и обвязка диалога — общие
+   toast@1/modal@1 из /c/ui.js (docs/ui-components.md §3). */
 (function () {
   'use strict';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var widgetOpen = false;
-
-  /* ---------- тосты ---------- */
-
-  function toast(text, kind, actionLabel, onAction) {
-    var box = $('#cv-toasts');
-    var el = document.createElement('div');
-    el.className = 'cv-toast' + (kind ? ' cv-toast--' + kind : '');
-    var span = document.createElement('span');
-    span.textContent = text;
-    el.appendChild(span);
-    if (actionLabel) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = actionLabel;
-      btn.addEventListener('click', function () { onAction(); el.remove(); });
-      el.appendChild(btn);
-    }
-    box.appendChild(el);
-    setTimeout(function () { el.remove(); }, 4200);
-  }
+  var escapeHtml = window.VeshaUI.escapeHtml;
+  var money = window.VeshaUI.fmtInt;
+  var toast = function (text, kind) { window.VeshaUI.toast(text, { kind: kind }); };
 
   /* ---------- мок-виджет ассистента ---------- */
 
@@ -79,12 +64,6 @@
     draft.appendChild(actions);
 
     updateSticky();
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
   }
 
   $('#cv-widget-close').addEventListener('click', function () {
@@ -193,7 +172,6 @@
   var RATE_MIN = 1600, RATE_MAX = 2200;
 
   function fmt(n) { return Math.round(n / 100) * 100; }
-  function money(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 
   function recalc() {
     var h = parseFloat($('#cv-hours').value);
@@ -232,10 +210,8 @@
     openWidget('Здравствуйте! Сколько стоит замена передних колодок и есть ли окно сегодня?',
       'вопрос из карточки услуги');
   });
-  // клик по подложке закрывает (esc закрывает сам)
-  dialog.addEventListener('click', function (e) {
-    if (e.target === dialog) dialog.close();
-  });
+  // клик по подложке закрывает (esc закрывает сам) — modal@1, общая обвязка
+  window.VeshaUI.dialogWiring(dialog);
 
   /* ---------- sticky CTA-бар ---------- */
 
