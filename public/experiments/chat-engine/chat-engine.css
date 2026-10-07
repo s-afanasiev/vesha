@@ -40,18 +40,18 @@
   gap: 12px;
 }
 
-.ce-col {
+.vk-col {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   background: var(--surface-2);
-  border: 1px solid var(--col-color, var(--border));
+  border: 1px solid var(--vk-col-color, var(--border));
   border-left-width: 4px;
   border-radius: 12px;
 }
 
-.ce-col__head {
+.vk-col__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -59,7 +59,7 @@
   padding: 11px 12px 8px;
 }
 
-.ce-col__title {
+.vk-col__title {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-heading);
@@ -68,31 +68,31 @@
   text-overflow: ellipsis;
 }
 
-.ce-col__count {
+.vk-col__count {
   flex-shrink: 0;
   font-size: 11.5px;
   font-weight: 700;
   padding: 2px 9px;
   border-radius: 999px;
-  background: var(--col-color, var(--border));
+  background: var(--vk-col-color, var(--border));
   color: rgba(18, 22, 30, 0.78);
 }
 
-.ce-col__cards {
+.vk-col__cards {
   flex: 1;
   overflow-y: auto;
   max-height: 240px;
   padding: 2px 8px 10px;
 }
 
-.ce-col__empty {
+.vk-col__empty {
   padding: 26px 0;
   text-align: center;
   font-size: 12.5px;
   color: var(--text-faint);
 }
 
-.ce-card {
+.vk-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -101,16 +101,16 @@
   cursor: pointer;
 }
 
-.ce-card:hover {
+.vk-card:hover {
   border-color: var(--border-strong);
 }
 
-.ce-card--selected {
+.vk-card--selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.ce-card__top {
+.vk-card__top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -118,7 +118,7 @@
   margin-bottom: 3px;
 }
 
-.ce-card__name {
+.vk-card__name {
   flex: 1;
   min-width: 0;
   font-weight: 700;
@@ -129,14 +129,14 @@
   text-overflow: ellipsis;
 }
 
-.ce-card__time {
+.vk-card__time {
   flex-shrink: 0;
   font-size: 11px;
   color: var(--text-faint);
   white-space: nowrap;
 }
 
-.ce-card__snippet {
+.vk-card__snippet {
   font-size: 12px;
   color: var(--text-muted);
   display: -webkit-box;
@@ -145,24 +145,24 @@
   overflow: hidden;
 }
 
-.ce-card__status {
+.vk-card__badges {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   margin-top: 7px;
 }
 
-.ce-status {
+.vk-badge {
   font-size: 11px;
   color: var(--text-faint);
 }
 
-.ce-status--draft {
+.vk-badge--draft {
   color: #3d6ec9;
   font-weight: 600;
 }
 
-.ce-status--waiting {
+.vk-badge--waiting {
   color: #c96f2d;
   font-weight: 600;
 }
@@ -649,7 +649,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .ce-col__cards {
+  .vk-col__cards {
     max-height: 260px;
   }
 }
@@ -661,7 +661,7 @@
     height: 420px;
   }
 
-  .ce-col__cards {
+  .vk-col__cards {
     max-height: none;
   }
 }
@@ -681,12 +681,12 @@
     gap: 10px;
   }
 
-  .ce-col {
+  .vk-col {
     flex-direction: row;
     align-items: stretch;
   }
 
-  .ce-col__head {
+  .vk-col__head {
     flex: 0 0 168px;
     flex-direction: column;
     align-items: flex-start;
@@ -696,11 +696,11 @@
     border-right: 1px solid var(--border);
   }
 
-  .ce-col__title {
+  .vk-col__title {
     white-space: normal;
   }
 
-  .ce-col__cards {
+  .vk-col__cards {
     flex: 1;
     display: flex;
     flex-direction: row;
@@ -712,12 +712,12 @@
     padding: 8px;
   }
 
-  .ce-card {
+  .vk-card {
     flex: 0 0 240px;
     margin-bottom: 0;
   }
 
-  .ce-col__empty {
+  .vk-col__empty {
     padding: 0;
     align-self: center;
   }
@@ -815,15 +815,15 @@
 }
 
 /* --- колонки: лицевые модули с цветовой маркировкой --- */
-.ce-col {
+.vk-col {
   background: var(--ce-face);
   border-radius: 6px;
-  border: 1px solid var(--col-color, var(--ce-lo));
+  border: 1px solid var(--vk-col-color, var(--ce-lo));
   border-left-width: 4px;
   box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.55);
 }
 
-.ce-col__head {
+.vk-col__head {
   background: var(--ce-chassis);
   border-bottom: 1px solid var(--ce-lo);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
@@ -831,7 +831,7 @@
 }
 
 /* --- карточки: выпуклые пластинки, выделение как в файловых менеджерах --- */
-.ce-card {
+.vk-card {
   background: var(--ce-face);
   border: 1px solid;
   border-color: var(--ce-hi) var(--ce-lo) var(--ce-lo) var(--ce-hi);
@@ -839,12 +839,12 @@
   border-radius: 3px;
 }
 
-.ce-card:hover {
+.vk-card:hover {
   background: var(--ce-face-hi);
   border-color: var(--ce-hi) var(--ce-lo2, #7d8592) var(--ce-lo2, #7d8592) var(--ce-hi);
 }
 
-.ce-card--selected {
+.vk-card--selected {
   background: #dfe7f1;
   border: 2px solid var(--ce-blue);
   box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.7);

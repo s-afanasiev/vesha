@@ -4,6 +4,9 @@
   const API = '/api/chat-engine';
   const POLL_MS = 3000;
 
+  // доска — компонент kanban@1 <v-kanban> (/c/kanban.js): колонки, карточки,
+  // drag&drop и перенос через POST /c/leads/move живут в рендерере; он сам
+  // опрашивает /cards каждые 3 с. Дашборду остаётся чат и события.
   const boardEl = document.getElementById('ce-board');
   const chatEl = document.getElementById('ce-chat');
   const messagesEl = document.getElementById('ce-chat-messages');
@@ -22,19 +25,13 @@
   const personaCancel = document.getElementById('ce-persona-cancel');
 
   let stages = [];
-  let dialogues = [];
   let selectedId = null;
   let selectedDialogue = null;
   let messages = [];
   // авто-черновик: одно предложение на каждое входящее, без повторов при сбое
   let autoSuggestedFor = null;
-  let boardTimer = null;
 
-  function esc(value) {
-    const div = document.createElement('div');
-    div.textContent = value == null ? '' : String(value);
-    return div.innerHTML;
-  }
+  const esc = window.VeshaUI.escapeHtml;
 
   async function api(path, options) {
     const res = await fetch(API + path, {
@@ -60,71 +57,22 @@
 
   // --- доска -----------------------------------------------------------------
 
-  async function refreshState() {
-    const result = await api('/state');
-    stages = result.stages;
-    dialogues = result.dialogues;
-    renderBoard();
+  // этапы для селекта чата — из меты компонента канбана (те же колонки)
+  (async () => {
+    try {
+      // мета — контрактный конверт {ok, ...} без обёртки result, читаем getJson
+      const meta = await window.VeshaUI.getJson(`${API}/c/leads/meta`);
+      stages = meta.columns.map((c) => ({ id: c.id, title: c.name }));
+      if (selectedDialogue) renderChat();
+    } catch { /* селект наполнится после первого открытия чата */ }
+  })();
+
+  function refreshBoard() {
+    if (boardEl.refresh) boardEl.refresh();
   }
 
-  function relTime(iso) {
-    if (!iso) return '';
-    const ms = Date.now() - new Date(iso).getTime();
-    const min = Math.floor(ms / 60000);
-    if (min < 1) return 'только что';
-    if (min < 60) return `${min} мин.`;
-    const hours = Math.floor(min / 60);
-    if (hours < 24) return `${hours} ч.`;
-    const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} дн.`;
-    return `${Math.floor(days / 30)} мес.`;
-  }
-
-  function renderBoard() {
-    const selected = selectedId;
-    boardEl.innerHTML = stages
-      .map((stage) => {
-        const tint = stage.color || 'var(--border)';
-        const cards = dialogues.filter((d) => d.stage === stage.id);
-        const cardsHtml = cards
-          .map((d) => {
-            const statuses = [];
-            if (Number(d.open_drafts) > 0) {
-              statuses.push(`<span class="ce-status ce-status--draft">черновик готов ×${d.open_drafts}</span>`);
-            }
-            if (d.last_role === 'visitor') {
-              statuses.push('<span class="ce-status ce-status--waiting">ждёт ответа</span>');
-            }
-            if (!statuses.length) {
-              statuses.push('<span class="ce-status">ответ отправлен</span>');
-            }
-            return `
-              <div class="ce-card ${d.id === selected ? 'ce-card--selected' : ''}" data-id="${d.id}">
-                <div class="ce-card__top">
-                  <span class="ce-card__name">${esc(d.visitor_name)}</span>
-                  <span class="ce-card__time">🕐 ${esc(relTime(d.last_incoming_at || d.created_at))}</span>
-                </div>
-                <div class="ce-card__snippet">${esc(d.last_text || '—')}</div>
-                <div class="ce-card__status">${statuses.join('')}</div>
-              </div>`;
-          })
-          .join('');
-        return `
-          <div class="ce-col" style="--col-color:${tint}">
-            <div class="ce-col__head">
-              <span class="ce-col__title">${esc(stage.title)}</span>
-              <span class="ce-col__count">${cards.length}</span>
-            </div>
-            <div class="ce-col__cards">${cardsHtml || '<div class="ce-col__empty">пусто</div>'}</div>
-          </div>`;
-      })
-      .join('');
-  }
-
-  boardEl.addEventListener('click', (e) => {
-    const card = e.target.closest('.ce-card');
-    if (!card) return;
-    openChat(card.dataset.id);
+  boardEl.addEventListener('v-card-click', (e) => {
+    openChat(e.detail.id);
   });
 
   // --- чат -------------------------------------------------------------------
@@ -137,11 +85,12 @@
 
   async function openChat(id) {
     selectedId = id;
+    boardEl.selectedId = id; // подсветка карточки в рендерере
     autoSuggestedFor = null;
     chatEl.hidden = false;
     noteEl.textContent = '';
     await refreshChat();
-    refreshState();
+    refreshBoard();
   }
 
   async function refreshChat() {
@@ -208,7 +157,7 @@
         return;
       }
       await refreshChat();
-      refreshState();
+      refreshBoard();
     } catch (err) {
       noteEl.textContent = err.message;
     }
@@ -245,7 +194,7 @@
             body: { text: row.querySelector('textarea').value },
           });
           await refreshChat();
-          refreshState();
+          refreshBoard();
         } catch (err) {
           noteEl.textContent = err.message;
         }
@@ -279,7 +228,7 @@
     } finally {
       suggestBtn.disabled = false;
       await refreshChat();
-      refreshState();
+      refreshBoard();
     }
   }
 
@@ -302,7 +251,7 @@
       inputEl.value = '';
       noteEl.textContent = '';
       await refreshChat();
-      refreshState();
+      refreshBoard();
     } catch (err) {
       noteEl.textContent = err.message;
     }
@@ -318,8 +267,9 @@
   suggestBtn.addEventListener('click', suggest);
   closeBtn.addEventListener('click', () => {
     selectedId = null;
+    boardEl.selectedId = null;
     chatEl.hidden = true;
-    refreshState();
+    refreshBoard();
   });
 
   stageEl.addEventListener('change', async () => {
@@ -328,7 +278,7 @@
         method: 'POST',
         body: { stage: stageEl.value },
       });
-      refreshState();
+      refreshBoard();
     } catch (err) {
       noteEl.textContent = err.message;
     }
@@ -351,7 +301,7 @@
         method: 'POST',
         body: { visitorName: nameEl.value },
       });
-      refreshState();
+      refreshBoard();
     } catch (err) {
       noteEl.textContent = err.message;
     }
@@ -383,14 +333,21 @@
   });
 
   // --- цикл -------------------------------------------------------------------
-
-  refreshState();
-  boardTimer = setInterval(async () => {
-    try {
-      await refreshState();
-      if (selectedId) await refreshChat();
-    } catch (err) {
-      // тихий такт: доска просто не обновится до следующего тика
-    }
-  }, POLL_MS);
+  // рекурсивный setTimeout, не setInterval (правило таймеров). Доска опрашивает
+  // себя сама (v-kanban data-poll); здесь живёт только открытый чат — visitor
+  // может ответить, а черновик приехать без действий менеджера.
+  function tick() {
+    setTimeout(async () => {
+      if (!document.hidden && selectedId) {
+        try {
+          await refreshChat();
+        } catch (err) {
+          // тихий такт: чат просто не обновится до следующего тика
+        }
+      }
+      tick();
+    }, POLL_MS);
+  }
+  tick();
+  refreshBoard();
 })();

@@ -21,6 +21,10 @@ function actorOf(req) {
   return (req.user && (req.user.email || req.user.id)) || 'guest';
 }
 
+// Компонентные экземпляры (docs/ui-components.md): /c/leads — канбан воронки.
+// Граница та же, что у соседних ручек демо: страница открытая.
+router.use('/c', require('../services/chat-engine/components'));
+
 function visitorKeyOf(req) {
   return req.guest ? String(req.guest.id) : `ip:${req.ip}`;
 }

@@ -14,7 +14,8 @@
   </script>
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="/llm-picker.css" />
-  <link rel="stylesheet" href="./chat-engine.css?v=3" />
+  <link rel="stylesheet" href="/c/kanban.css" />
+  <link rel="stylesheet" href="./chat-engine.css?v=4" />
 </head>
 <body class="page-experiments">
   <main class="experiments">
@@ -43,7 +44,9 @@
     </div>
 
     <div class="ce-layout">
-      <section class="ce-board" id="ce-board" aria-label="Воронка диалогов"></section>
+      <!-- доска — компонент kanban@1 <v-kanban> (docs/ui-components.md):
+           колонки/карточки/перенос живут в рендерере, дашборд слушает v-card-click -->
+      <v-kanban class="ce-board" id="ce-board" src="/api/chat-engine/c/leads" data-poll="3000" aria-label="Воронка диалогов"></v-kanban>
 
       <aside class="ce-chat" id="ce-chat" hidden>
         <div class="ce-chat__head">
@@ -84,6 +87,8 @@
   <script src="/theme.js"></script>
   <script src="/auth.js"></script>
   <script src="/llm-picker.js"></script>
+  <script src="/c/ui.js"></script>
+  <script src="/c/kanban.js"></script>
   <script src="./dashboard.js"></script>
 </body>
 </html>
