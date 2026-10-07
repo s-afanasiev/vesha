@@ -48,3 +48,11 @@
   --vk-faint: var(--text-faint, #8b95a3);
   --vk-accent2: var(--accent, #3d6ec9);
 }
+
+/* доска в спеке: колонки рядом; узкий экран — сами перестроятся переносом */
+.boot-root v-kanban {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  align-items: start;
+}

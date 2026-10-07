@@ -23,6 +23,8 @@ function actorOf(req) {
 
 // Компонентные экземпляры (docs/ui-components.md): /c/leads — канбан воронки.
 // Граница та же, что у соседних ручек демо: страница открытая.
+// /c/pages — спеки служебных страниц (boot@1 на /c/page.html).
+router.use('/c/pages', require('../services/chat-engine/pages'));
 router.use('/c', require('../services/chat-engine/components'));
 
 function visitorKeyOf(req) {
