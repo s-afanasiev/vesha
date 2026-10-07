@@ -4,7 +4,10 @@
 
 v-table { display: block; }
 
-.vt-wrap {
+v-table {
+  /* дефолты «приборной» тёмной темы; страница переопределяет на элементе
+     ( specificity: селектора страницы выше голого v-table) — .prsc пульта,
+     .boot-root светлой страницы и т.д. */
   --vt-bg: #12151a;
   --vt-card: #171b21;
   --vt-line: #2b313b;
@@ -14,7 +17,9 @@ v-table { display: block; }
   --vt-accent2: #5a9bd8;
   --vt-bad: #d86b5a;
   --vt-mono: ui-monospace, Consolas, "Cascadia Mono", monospace;
+}
 
+.vt-wrap {
   color: var(--vt-text);
   font: inherit;
   font-size: 13px;

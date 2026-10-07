@@ -409,7 +409,7 @@
       </div>
       <p class="call-hint">«Собрать организации» → POST /api/pain-radar/scrape/listing — <b>до N страниц</b> 2gis.ru/&lt;город&gt;/search/&lt;рубрика&gt;/rubricId/&lt;id&gt; (+/page/2…N); получаем организации: название, рейтинг, оценки, адрес, сайт · «Найти и собрать» → POST /scrape/search — то же по тексту запроса</p>
       <p class="hint" id="orgsInfo">—</p>
-      <p class="call-hint">таблица — компонент <b>table@1</b> (docs/ui-components.md): шапка кликабельна (сортировка), GET /api/pain-radar/c/orgs/rows?sort=-rating&amp;q=&amp;limit=&amp;offset= · выбор и пресеты — GET /c/orgs/ids · «Скан контактов» — POST /c/orgs/actions/scan-sites</p>
+      <p class="call-hint">таблица — компонент <b>table@1</b> (docs/ui-components.md): шапка кликабельна (сортировка), GET /api/pain-radar/c/orgs/rows?sort=-rating&amp;q=&amp;limit=&amp;offset= · выбор и пресеты — GET /c/orgs/ids · «Скан контактов» — POST /c/orgs/actions/scan-sites · <a href="/c/page.html?spec=/api/pain-radar/c/pages/orgs-review" target="_blank" rel="noopener">обзор организаций — страница из спеки ↗</a></p>
       <v-table id="orgsTable" src="/api/pain-radar/c/orgs"></v-table>
     </section>
 

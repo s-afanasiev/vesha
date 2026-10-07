@@ -1,0 +1,50 @@
+/* page@1 — общий хост служебных страниц, собранных из спеки (boot@1).
+   Открывается как /c/page.html?spec=/api/<ns>/c/pages/<имя>. Хром страницы —
+   общий экспериментовый (/style.css, класс page-experiments); тема блоков
+   v-table/v-kanban мапится на светлые токены страницы. */
+
+.boot-root {
+  display: grid;
+  gap: 14px;
+  max-width: 1200px;
+  padding-bottom: 48px;
+}
+
+.boot-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.boot-head p {
+  margin: 4px 0 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 13.5px;
+}
+
+.boot-error {
+  padding: 12px 16px;
+  border: 1px solid var(--vt-bad, #d86b5a);
+  border-radius: 10px;
+  color: #b3452f;
+  background: #fdf3f1;
+  font-size: 13.5px;
+}
+
+/* блоки-компоненты на светлой странице: токены рендереров → токены Vesha */
+.boot-root v-table,
+.boot-root v-kanban {
+  --vt-bg: var(--surface, #fff);
+  --vt-card: var(--surface-2, #f4f5f7);
+  --vt-line: var(--border, #d9dde3);
+  --vt-text: var(--text, #1c2430);
+  --vt-faint: var(--text-faint, #8b95a3);
+  --vt-accent: var(--ok, #2f9e60);
+  --vt-accent2: var(--accent, #3d6ec9);
+  --vk-surface: var(--surface-2, #f4f5f7);
+  --vk-card: var(--surface, #fff);
+  --vk-line: var(--border, #d9dde3);
+  --vk-text: var(--text, #1c2430);
+  --vk-faint: var(--text-faint, #8b95a3);
+  --vk-accent2: var(--accent, #3d6ec9);
+}

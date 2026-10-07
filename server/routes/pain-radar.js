@@ -13,6 +13,8 @@ router.use('/scrape', experiments.requireAdmin);
 
 // Компонентные экземпляры (docs/ui-components.md): /c/orgs — таблица
 // организаций пульта. Тот же рубеж: служебное целиком за requireAdmin.
+// /c/pages — спеки служебных страниц (boot@1 на /c/page.html), тоже админские.
+router.use('/c/pages', experiments.requireAdmin, require('../services/pain-radar/pages'));
 router.use('/c', experiments.requireAdmin, require('../services/pain-radar/components'));
 
 router.get('/scrape/state', (_req, res) => {
