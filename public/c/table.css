@@ -1,0 +1,93 @@
+/* v-table@1 — складской рендерер контракта table@1 (docs/ui-components.md §3).
+   Токены --vt-* с «приборными» тёмными дефолтами; страница переопределяет
+   их под свою тему (образец — .prsc в scrape-console.css). */
+
+v-table { display: block; }
+
+.vt-wrap {
+  --vt-bg: #12151a;
+  --vt-card: #171b21;
+  --vt-line: #2b313b;
+  --vt-text: #dde3ea;
+  --vt-faint: #8b95a3;
+  --vt-accent: #4fb477;
+  --vt-accent2: #5a9bd8;
+  --vt-bad: #d86b5a;
+  --vt-mono: ui-monospace, Consolas, "Cascadia Mono", monospace;
+
+  color: var(--vt-text);
+  font: inherit;
+  font-size: 13px;
+  display: grid;
+  gap: 8px;
+}
+
+.vt-wrap * { box-sizing: border-box; }
+
+/* ---------- панель управления ---------- */
+
+.vt-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.vt-search {
+  background: var(--vt-bg); color: var(--vt-text); border: 1px solid var(--vt-line);
+  border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 13px;
+  min-width: 200px;
+}
+.vt-search:focus { outline: none; border-color: var(--vt-accent2); }
+
+.vt-btn {
+  background: var(--vt-bg); color: var(--vt-text); border: 1px solid var(--vt-line);
+  border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 12.5px;
+  cursor: pointer;
+}
+.vt-btn:hover:not(:disabled) { border-color: var(--vt-accent2); }
+.vt-btn:disabled { opacity: .45; cursor: default; }
+.vt-btn--act { font-weight: 600; }
+
+.vt-btn.loading::after {
+  content: ''; display: inline-block; width: 11px; height: 11px; margin-left: 7px;
+  border: 2px solid rgba(255, 255, 255, .25); border-top-color: currentColor;
+  border-radius: 50%; vertical-align: -2px; animation: vt-spin .8s linear infinite;
+}
+@keyframes vt-spin { to { transform: rotate(360deg); } }
+
+.vt-selinfo { color: var(--vt-faint); font-size: 12px; margin-left: auto; }
+
+/* ---------- таблица ---------- */
+
+.vt-scroll {
+  max-height: 420px; overflow: auto;
+  border: 1px solid var(--vt-line); border-radius: 8px;
+}
+.vt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.vt-table th, .vt-table td {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--vt-line);
+}
+.vt-table tr:last-child td { border-bottom: none; }
+
+.vt-table th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--vt-card); color: var(--vt-faint);
+  font-weight: 600; font-size: 12px; white-space: nowrap;
+}
+
+.vt-th[data-vt-sort] { cursor: pointer; }
+.vt-th[data-vt-sort]:hover, .vt-th[data-vt-sort]:focus-visible { color: var(--vt-text); outline: none; }
+.vt-arrow { color: var(--vt-accent2); font-size: 10px; }
+.vt-arrow--dim { color: var(--vt-line); }
+
+.vt-check { width: 30px; }
+.vt-check input { accent-color: var(--vt-accent2); cursor: pointer; }
+.vt-num { font-family: var(--vt-mono); }
+.vt-note { color: var(--vt-faint); }
+.vt-link { color: var(--vt-accent); text-decoration: none; }
+.vt-link:hover { text-decoration: underline; }
+.vt-empty { color: var(--vt-faint); text-align: center; padding: 18px; }
+
+/* ---------- нога: диапазон, сообщения, пагинация ---------- */
+
+.vt-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: var(--vt-faint); font-size: 12px; }
+.vt-msg--err { color: var(--vt-bad); }
+.vt-pager { margin-left: auto; display: flex; gap: 6px; }
+.vt-pager[hidden] { display: none; }

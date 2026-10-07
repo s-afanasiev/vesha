@@ -429,4 +429,24 @@ module.exports = {
     const p = path.join(abs, safe);
     return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
   },
+  // «Текущая» выборка организаций: свежайший orgs-*.json папки корпуса по mtime.
+  // Листинг/поиск дописывают файл, скан контактов обновляет его же — источник
+  // для таблицы organizations без отдельного состояния.
+  latestOrgs() {
+    const { abs } = dataDirAbs();
+    let files = [];
+    try {
+      files = fs.readdirSync(abs)
+        .filter((f) => /^orgs(-[\w-]+)?\.json$/.test(f))
+        .map((f) => ({ f, m: fs.statSync(path.join(abs, f)).mtimeMs }))
+        .sort((a, b) => b.m - a.m);
+    } catch {}
+    for (const { f } of files) {
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(abs, f), 'utf8'));
+        if (Array.isArray(data.items)) return { file: f, ...data };
+      } catch {}
+    }
+    return null;
+  },
 };

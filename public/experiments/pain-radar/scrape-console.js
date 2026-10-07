@@ -1,6 +1,8 @@
 // Пульт сбора сырых данных 2ГИС — админская вкладка pain-radar (panel-scrape).
 // Подгружается динамически: setupAdminConsole в pain-radar.js (part scrape, видимость admin).
 // Кнопки: loader до завершения задачи (startJob → промис резолвится в поллинге, когда джоба done).
+// Таблица организаций — компонент table@1 <v-table src="/api/pain-radar/c/orgs">:
+// сортировка/поиск/выбор живут в рендерере, консоль слушает v-select/v-action.
 function initScrapeConsole() {
 
   const $ = (id) => document.getElementById(id);
@@ -12,9 +14,8 @@ function initScrapeConsole() {
     subUrl: $('subUrl'), loadSubrubrics: $('loadSubrubrics'), subrubrics: $('subrubrics'), subInfo: $('subInfo'),
     listingUrl: $('listingUrl'), maxPages: $('maxPages'), collectOrgs: $('collectOrgs'),
     query: $('query'), searchOrgs: $('searchOrgs'), orgsInfo: $('orgsInfo'),
-    selAll: $('selAll'), selNone: $('selNone'), selNoSite: $('selNoSite'), selInfo: $('selInfo'),
-    orgsBody: document.querySelector('#orgsTable tbody'),
-    maxPerOrg: $('maxPerOrg'), collectReviews: $('collectReviews'), scanSites: $('scanSites'),
+    orgsTable: $('orgsTable'),
+    maxPerOrg: $('maxPerOrg'), collectReviews: $('collectReviews'),
     pauseBtn: $('pauseBtn'), limitInfo: $('limitInfo'),
     perBase: $('perBase'), log: $('log'),
   };
@@ -22,9 +23,9 @@ function initScrapeConsole() {
   const state = {
     config: { dataDir: 'data/pain-radar-corpus', limits: {} },
     rubricItems: [], subItems: [],
-    orgs: [], file: null,
+    pickedIds: [],            // строки, выбранные в таблице (событие v-select)
     waitJobs: new Map(), // jobId → handler(job)
-    orgJobId: null,
+    pausedNow: false,
   };
   window.__scrape = state; // отладка пульта
 
@@ -46,14 +47,19 @@ function initScrapeConsole() {
     return j;
   }
 
-  // джоба: POST → промис резолвится, когда поллинг увидит done/error (результат уже в state.jobs)
-  function startJob(path, body, onDone) {
-    return post(path, body).then(({ jobId }) => new Promise((resolve) => {
+  // джоба уже запущена: регистрируем обработчик, промис резолвится в поллинге
+  function awaitJob(jobId, onDone) {
+    return new Promise((resolve) => {
       state.waitJobs.set(jobId, (job) => {
         try { onDone(job); } finally { resolve(job); }
       });
       showJob('запущено…');
-    }));
+    });
+  }
+
+  // джоба: POST → промис резолвится, когда поллинг увидит done/error (результат уже в state.jobs)
+  function startJob(path, body, onDone) {
+    return post(path, body).then(({ jobId }) => awaitJob(jobId, onDone));
   }
 
   // loader на кнопках: от клика до фактического завершения задачи
@@ -78,39 +84,6 @@ function initScrapeConsole() {
 
   // ---------- рендеры ----------
 
-  function renderOrgs() {
-    const rows = state.orgs;
-    el.orgsBody.innerHTML = rows.map((o) => {
-      const noSite = o.site_scanned && !o.site;
-      const siteCell = o.site
-        ? `<a href="${escapeHtml(o.site)}" target="_blank" rel="noopener" class="site ok">${escapeHtml(shortHost(o.site))}</a>`
-        : (o.site_scanned
-          ? '<span class="site">только телефон/соцсети</span>'
-          : '<span class="site">—</span>');
-      return `<tr data-id="${o.branch_id}" class="${noSite ? 'nosite' : ''}">
-        <td><input type="checkbox" class="orgpick" value="${o.branch_id}"></td>
-        <td>${escapeHtml(o.name || '')}</td>
-        <td class="num">${o.rating ?? '—'}</td>
-        <td class="num">${o.reviews_count ?? '—'}</td>
-        <td>${siteCell}</td>
-        <td>${escapeHtml(o.address || '')}</td>
-      </tr>`;
-    }).join('');
-    updateSelInfo();
-  }
-
-  function updateSelInfo() {
-    const boxes = [...document.querySelectorAll('.orgpick')];
-    const picked = boxes.filter(b => b.checked).length;
-    const withSite = state.orgs.filter(o => o.site).length;
-    const scanned = state.orgs.filter(o => o.site_scanned).length;
-    const noSite = scanned - withSite;
-    el.selInfo.textContent = `выбрано ${picked} из ${state.orgs.length} · сайт есть у ${withSite}${scanned ? `, не проверено ${state.orgs.length - scanned}, без сайта ${noSite} — кандидаты на предложение сайта` : ''}`;
-  }
-
-  function shortHost(url) {
-    try { return new URL(url).host + new URL(url).pathname.replace(/\/$/, ''); } catch { return url; }
-  }
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
@@ -207,10 +180,8 @@ function initScrapeConsole() {
       maxPages: clamp(el.maxPages.value, 1, 20), dataDir: el.dataDir.value.trim(),
     }, (job) => {
       if (job.status === 'error') { el.orgsInfo.textContent = `ошибка: ${job.error}`; return; }
-      state.orgs = job.result.items;
-      state.file = job.result.file;
       el.orgsInfo.textContent = `всего мест в рубрике: ${job.result.total ?? '?'} · собрано: ${job.result.collected} (файл ${job.result.file})`;
-      renderOrgs();
+      el.orgsTable.refresh(); // таблица читает свежий orgs-файл на сервере
     });
   }
 
@@ -226,37 +197,33 @@ function initScrapeConsole() {
         city, query: q, maxPages: clamp(el.maxPages.value, 1, 20), dataDir: el.dataDir.value.trim(),
       }, (job) => {
         if (job.status === 'error') { el.orgsInfo.textContent = `ошибка: ${job.error}`; return; }
-        state.orgs = job.result.items;
-        state.file = job.result.file;
         el.orgsInfo.textContent = `всего найдено: ${job.result.total ?? '?'} · собрано: ${job.result.collected} (файл ${job.result.file})`;
-        renderOrgs();
+        el.orgsTable.refresh();
       });
     });
   });
 
   function clamp(v, min, max) { v = Number(v) || min; return Math.min(Math.max(v, min), max); }
 
-  function pickedIds() {
-    return [...document.querySelectorAll('.orgpick:checked')].map(b => b.value);
-  }
+  // выбор в таблице-компоненте (клиентское состояние) и её bulk-действия
+  el.orgsTable.addEventListener('v-select', (e) => { state.pickedIds = e.detail.ids; });
 
-  el.selAll.addEventListener('click', () => { setChecks(true); });
-  el.selNone.addEventListener('click', () => { setChecks(false); });
-  el.selNoSite.addEventListener('click', () => {
-    setChecks(false);
-    document.querySelectorAll('#orgsTable tbody tr').forEach(tr => {
-      if (tr.classList.contains('nosite')) tr.querySelector('.orgpick').checked = true;
-    });
-    updateSelInfo();
+  el.orgsTable.addEventListener('v-action', (e) => {
+    const { id, response, error } = e.detail;
+    if (error) { showJob(`ошибка: ${error}`, 'bad'); return; }
+    const jobId = response && response.result && response.result.jobId;
+    if (id === 'scan-sites' && jobId) {
+      awaitJob(jobId, (job) => {
+        if (job.status === 'error') { showJob(`ошибка: ${job.error}`, 'bad'); return; }
+        el.orgsTable.refresh(); // контакты влиты в orgs-файл, перечитываем
+        const noSite = (job.result.items || []).filter((o) => o.site_scanned && !o.site).length;
+        showJob(`контакты проверены: ${job.result.scanned}${noSite ? ` · без сайта ${noSite} — кандидаты на предложение сайта` : ''}`);
+      });
+    }
   });
-  function setChecks(v) {
-    document.querySelectorAll('.orgpick').forEach(b => { b.checked = v; });
-    updateSelInfo();
-  }
-  el.orgsBody.addEventListener('change', (e) => { if (e.target.classList.contains('orgpick')) updateSelInfo(); });
 
   el.collectReviews.addEventListener('click', () => {
-    const ids = pickedIds();
+    const ids = state.pickedIds;
     if (!ids.length) { showJob('не выбрано ни одной организации — отметьте чекбоксы в таблице блока 4', 'bad'); return; }
     if (ids.length > 120) { showJob('максимум 120 организаций за раз', 'bad'); return; }
     return withLoading(el.collectReviews, async () => {
@@ -266,23 +233,6 @@ function initScrapeConsole() {
       }, (job) => {
         if (job.status === 'error') { showJob(`ошибка: ${job.error}`, 'bad'); return; }
         showJob(`готово: отзывов скачано ${job.result.savedTotal}`);
-      });
-    });
-  });
-
-  el.scanSites.addEventListener('click', () => {
-    const ids = pickedIds();
-    if (!ids.length) { showJob('не выбрано ни одной организации — отметьте чекбоксы в таблице блока 4', 'bad'); return; }
-    return withLoading(el.scanSites, async () => {
-      await startJob('firm', { city: el.city.value.trim() || 'kursk', branchIds: ids, dataDir: el.dataDir.value.trim() }, (job) => {
-        if (job.status === 'error') { showJob(`ошибка: ${job.error}`, 'bad'); return; }
-        const byId = new Map(job.result.items.map(o => [o.branch_id, o]));
-        state.orgs = state.orgs.map(o => {
-          const upd = byId.get(o.branch_id);
-          return upd ? { ...o, site: upd.site, site_scanned: true, phones: upd.phones, socials: upd.socials } : o;
-        });
-        renderOrgs();
-        showJob(`контакты проверены: ${job.result.scanned}`);
       });
     });
   });

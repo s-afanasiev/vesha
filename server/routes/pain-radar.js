@@ -11,6 +11,10 @@ const router = express.Router();
 // Скрытие вкладки в UI — удобство; вот здесь настоящая граница.
 router.use('/scrape', experiments.requireAdmin);
 
+// Компонентные экземпляры (docs/ui-components.md): /c/orgs — таблица
+// организаций пульта. Тот же рубеж: служебное целиком за requireAdmin.
+router.use('/c', experiments.requireAdmin, require('../services/pain-radar/components'));
+
 router.get('/scrape/state', (_req, res) => {
   res.json(scrape.publicState());
 });
