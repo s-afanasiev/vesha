@@ -383,12 +383,12 @@
       <h2>3 · Подрубрики</h2>
       <p class="url">URL группы: <code id="subUrl">—</code></p>
       <div class="row">
-        <button id="loadSubrubrics">Загрузить подрубрики выбранной</button>
+        <button id="loadSubrubrics">Раскрыть выбранную группу ↓</button>
         <label>Подрубрика
           <select id="subrubrics"><option value="">— выберите рубрику выше —</option></select>
         </label>
       </div>
-      <p class="call-hint">«Загрузить подрубрики» → POST /api/pain-radar/scrape/subrubrics — <b>1 обращение</b> к 2gis.ru/&lt;город&gt;/rubrics/subrubrics/&lt;id&gt;; получаем подрубрики группы с числом мест (raw/subrubrics-&lt;id&gt;.json)</p>
+      <p class="call-hint">«Раскрыть выбранную группу» → POST /api/pain-radar/scrape/subrubrics — <b>1 обращение</b> к 2gis.ru/&lt;город&gt;/rubrics/subrubrics/&lt;id&gt;; получаем подрубрики группы с числом мест; первая конечная [N мест] выбирается автоматически (raw/subrubrics-&lt;id&gt;.json). «Собрать организации» сам раскрывает группы и пустой селект</p>
       <p class="hint" id="subInfo">подрубрик не загружено · «группа» = внутри неё ещё подрубрики</p>
     </section>
 

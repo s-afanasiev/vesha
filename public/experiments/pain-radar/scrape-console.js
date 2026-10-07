@@ -156,44 +156,65 @@ function initScrapeConsole() {
   }));
 
   el.loadSubrubrics.addEventListener('click', () => {
-    const rub = currentRubric();
-    if (!rub) { el.subInfo.textContent = 'сначала выберите рубрику в блоке 2'; return; }
+    // работает с тем, что выбрано сейчас: подрубрика-[группа] → раскрыть её; иначе — рубрику блока 2
+    const sub = currentSub();
+    const target = sub && sub.type === 'metarubric' ? sub : currentRubric();
+    if (!target) { el.subInfo.textContent = 'сначала обнови рубрики (блок 2) и выбери рубрику'; return; }
+    if (target.type === 'rubric') { el.subInfo.textContent = `«${target.name}» — конечная рубрика, её собирают сразу кнопкой «Собрать организации»`; return; }
     return withLoading(el.loadSubrubrics, async () => {
-      await startJob('subrubrics', { city: el.city.value.trim() || 'kursk', groupId: rub.id, dataDir: el.dataDir.value.trim() }, (job) => {
-        if (job.status === 'error') { el.subInfo.textContent = `ошибка: ${job.error}`; return; }
-        state.subItems = job.result.items;
-        fillSelect(el.subrubrics, state.subItems, rubricLabel);
-        el.subUrl.textContent = job.result.url;
-        el.subInfo.textContent = `подрубрик: ${job.result.count} · конечные [N мест] можно собирать ниже, [группа] — раскрыть ещё раз`;
-      });
+      await revealGroup(target.id, el.city.value.trim() || 'kursk');
     });
   });
 
-  function currentListingTarget() {
-    const sub = currentSub();
-    if (sub && sub.type === 'rubric') return { slug: sub.name, rubricId: sub.id };
-    return null;
-  }
-
-  function collect(target) {
-    if (!target) { el.orgsInfo.textContent = 'выберите конечную подрубрику [N мест] в блоке 3 — для [группа] сначала нажмите «Загрузить подрубрики выбранной»'; return; }
-    const city = el.city.value.trim() || 'kursk';
-    el.listingUrl.textContent = `https://2gis.ru/${city}/search/${encodeURIComponent(target.slug)}/rubricId/${target.rubricId}`;
-    return withLoading([el.collectOrgs, el.searchOrgs], async () => {
-      await startJob('listing', {
-        city, slug: target.slug, rubricId: target.rubricId,
-        maxPages: clamp(el.maxPages.value, 1, 20), dataDir: el.dataDir.value.trim(),
-      }, (job) => {
-        if (job.status === 'error') { el.orgsInfo.textContent = `ошибка: ${job.error}`; return; }
-        state.orgs = job.result.items;
-        state.file = job.result.file;
-        el.orgsInfo.textContent = `всего мест в рубрике: ${job.result.total ?? '?'} · собрано: ${job.result.collected} (файл ${job.result.file})`;
-        renderOrgs();
-      });
+  // раскрыть группу подрубрик (job subrubrics) и авто-выбрать первую конечную [N мест]
+  function revealGroup(groupId, city) {
+    return startJob('subrubrics', { city, groupId, dataDir: el.dataDir.value.trim() }, (job) => {
+      if (job.status === 'error') { el.subInfo.textContent = `ошибка: ${job.error}`; return; }
+      state.subItems = job.result.items;
+      fillSelect(el.subrubrics, state.subItems, rubricLabel);
+      el.subUrl.textContent = job.result.url;
+      const firstRubricIdx = state.subItems.findIndex((it) => it.type === 'rubric');
+      if (firstRubricIdx >= 0) el.subrubrics.value = String(firstRubricIdx);
+      const chosen = currentSub();
+      el.subInfo.textContent = chosen && chosen.type === 'rubric'
+        ? `подрубрик: ${job.result.count} · к сбору готова: ${chosen.name} [${chosen.branch_count ?? '?'} мест] — жми «Собрать организации»`
+        : `подрубрик: ${job.result.count} · внутри только группы — раскрывай дальше`;
     });
   }
 
-  el.collectOrgs.addEventListener('click', () => collect(currentListingTarget()));
+  // «Собрать организации» сам доводит до цели: раскрывает пустой блок 3 и группы,
+  // конечная [N мест] собирается сразу.
+  async function collect() {
+    const city = el.city.value.trim() || 'kursk';
+    let sub = currentSub();
+    if (!sub) {
+      const rub = currentRubric();
+      if (!rub) { el.orgsInfo.textContent = 'сначала обнови рубрики (блок 2) и выбери рубрику'; return; }
+      el.orgsInfo.textContent = `подрубрики ещё не загружены — раскрываю группу «${rub.name}»…`;
+      await revealGroup(rub.id, city);
+      sub = currentSub();
+    }
+    if (sub.type === 'metarubric') {
+      el.orgsInfo.textContent = `«${sub.name}» — группа, а не листинг: раскрываю её подрубрики…`;
+      await revealGroup(sub.id, city);
+      sub = currentSub();
+      if (!sub || sub.type !== 'rubric') { el.orgsInfo.textContent = 'внутри этой группы нет конечных рубрик — выбери вложенную группу и раскрой её'; return; }
+    }
+    const target = { slug: sub.name, rubricId: sub.id };
+    el.listingUrl.textContent = `https://2gis.ru/${city}/search/${encodeURIComponent(target.slug)}/rubricId/${target.rubricId}`;
+    await startJob('listing', {
+      city, slug: target.slug, rubricId: target.rubricId,
+      maxPages: clamp(el.maxPages.value, 1, 20), dataDir: el.dataDir.value.trim(),
+    }, (job) => {
+      if (job.status === 'error') { el.orgsInfo.textContent = `ошибка: ${job.error}`; return; }
+      state.orgs = job.result.items;
+      state.file = job.result.file;
+      el.orgsInfo.textContent = `всего мест в рубрике: ${job.result.total ?? '?'} · собрано: ${job.result.collected} (файл ${job.result.file})`;
+      renderOrgs();
+    });
+  }
+
+  el.collectOrgs.addEventListener('click', () => withLoading([el.collectOrgs, el.searchOrgs], collect()));
 
   el.searchOrgs.addEventListener('click', () => {
     const q = el.query.value.trim();

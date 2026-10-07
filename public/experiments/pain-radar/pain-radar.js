@@ -31,7 +31,7 @@
           if (loaded) return;
           loaded = true;
           const script = document.createElement('script');
-          script.src = './scrape-console.js';
+          script.src = './scrape-console.js?v=' + Date.now(); // против устаревшего кэша при правках пульта
           script.onload = () => window.initScrapeConsole && window.initScrapeConsole();
           document.body.appendChild(script);
         };
