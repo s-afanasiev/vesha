@@ -52,8 +52,21 @@ function assertRateLimit(req) {
     err.retryAfterSec = retryAfterSec;
     throw err;
   }
+  // Гостю — пауза между запросами (по cookie и по IP): серия подряд, в том числе
+  // параллельная, упирается в неё раньше часового лимита.
+  const cooldownMs = owners[0].isGuest ? config.llmGuestCooldownSec * 1000 : 0;
+  const cooling = states.find(({ bucket }) => bucket.lastAt && now - bucket.lastAt < cooldownMs);
+  if (cooling) {
+    const retryAfterSec = Math.max(1, Math.ceil((cooling.bucket.lastAt + cooldownMs - now) / 1000));
+    const err = new Error(`Гостевой лимит LLM: следующий запрос — через ${retryAfterSec} с. Войдите, чтобы не ждать.`);
+    err.status = 429;
+    err.code = 'llm_cooldown';
+    err.retryAfterSec = retryAfterSec;
+    throw err;
+  }
   for (const { owner, bucket } of states) {
     bucket.count += 1;
+    bucket.lastAt = now;
     buckets.set(owner.key, bucket);
   }
   const used = Math.max(...states.map(({ bucket }) => bucket.count));

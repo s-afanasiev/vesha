@@ -10,6 +10,7 @@ Vesha — тонкий Express + статика, каталог эксперим
 
 | Коммит | Что |
 |---|---|
+| 11.10.2026 | пауза гостя между LLM-запросами `LLM_GUEST_COOLDOWN_SEC` (30 с, по cookie и IP, 429 `llm_cooldown` + `Retry-After`) в `llmGuard.js` — гостевые пути к серверному ключу (notes-export, черновик chat-engine) идут через guard; `ADMIN_EMAILS` в `.env.example` |
 | 11.10.2026 | пресет LLM-шлюза `LLM_OPENAI_BASE_URL/MODEL/API_KEY` (набор целиком, фолбэк — `OPENAI_*`): ключ стороннего провайдера не уходит на api.openai.com из vision/Whisper; тест в `test/llm.test.js` |
 | 11.10.2026 | доступ: `polls`, `stories`, `gov-texts`, `mark` — только админ (`experiments.requireAdmin`), в UI — part `ops` в `registry.json` (кнопки опроса, «Нейросеть» и запуск разметки видит только админ; метрики И8 — все); `/mark` — через `runGuarded` (квота и слот LLM, заголовки `X-RateLimit-*`/`Retry-After`); тесты границы в `test/llm-guard.test.js`. Закрыт открытый вопрос №2 («кто нажимает „Опросить“») |
 | `2c5240c` | пересборка сюжетов: полная только пока нет сдвигов/разметки, дальше — мягкое прикрепление (иначе каскад стёр бы разметку) |
@@ -43,7 +44,7 @@ Vesha — тонкий Express + статика, каталог эксперим
 
 ## Как запускать и проверять
 
-- Тесты: `npm test` (44, все зелёные — прогонять перед «готово»). `superNotes` ходит в Postgres по `.env`: в ворктри без `.env` он падает на авторизации — это окружение, не регрессия.
+- Тесты: `npm test` (46, все зелёные — прогонять перед «готово»). `superNotes` ходит в Postgres по `.env`: в ворктри без `.env` он падает на авторизации — это окружение, не регрессия.
 - Сервер: `npm start` (порт 3000), миграции накатываются при старте; БД — локальный Postgres 15 `localhost:5432` (без pgvector; pg_trgm доступен, сознательно не включён — см. И10).
 - Дашборд: `/experiments/idea-radar/`. Ручки: `POST /api/idea-radar/polls | stories | gov-texts | mark` (только админ), `GET /api/idea-radar/sources | metrics | keywords | publications | disk`.
 - Живой smoke: `node main.js` в фоне + fetch-скрипт; сервер останавливать после проверки. Внешние источники — только через ручки, не из тестов.

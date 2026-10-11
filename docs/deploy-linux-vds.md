@@ -37,8 +37,10 @@ DATABASE_URL=postgres://vesha:пароль@localhost:5432/vesha
 # PGPORT=5432   # опционально: сильнее DB_MODE
 ```
 
-Остальное по месту: `SESSION_SECRET` (длинная случайная строка), ключ LLM
-(`GEMINI_API_KEY` или `OPENAI_*`), за reverse proxy — `TRUST_PROXY=true`.
+Остальное по месту: `SESSION_SECRET` (длинная случайная строка), `ADMIN_EMAILS`
+(email админов через запятую — без него служебные части экспериментов недоступны),
+ключ LLM (`GEMINI_API_KEY`, `OPENAI_*` для самого OpenAI или `LLM_OPENAI_*` для
+стороннего OpenAI-совместимого провайдера), за reverse proxy — `TRUST_PROXY=true`.
 
 ## 3. Запуск
 

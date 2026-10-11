@@ -91,6 +91,7 @@ const config = {
   llmAllowPrivateEndpoints: boolEnv('LLM_ALLOW_PRIVATE_ENDPOINTS', false),
   llmAllowedOpenaiHosts: listEnv('LLM_ALLOWED_OPENAI_HOSTS'),
   llmGuestRequestsPerHour: intEnv('LLM_GUEST_REQUESTS_PER_HOUR', 10),
+  llmGuestCooldownSec: intEnv('LLM_GUEST_COOLDOWN_SEC', 30),
   llmUserRequestsPerHour: intEnv('LLM_USER_REQUESTS_PER_HOUR', 60),
   llmMaxConcurrent: intEnv('LLM_MAX_CONCURRENT', 4),
   notesExportLlmTimeoutMs: intEnv('NOTES_EXPORT_LLM_TIMEOUT_MS', 3 * 60 * 1000),

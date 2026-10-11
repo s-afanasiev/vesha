@@ -216,7 +216,7 @@ Env: `GEMINI_API_KEY`, `YANDEX_API_KEY` или `YANDEX_IAM_TOKEN`, `YANDEX_FOLDE
 - Локальные и private IP блокируются; разрешить их можно только явным `LLM_ALLOW_PRIVATE_ENDPOINTS=true`.
 - Редиректы endpoint запрещены, чтобы ключ не ушёл на другой хост.
 - Каждый LLM-route должен выполнять вызов через `runGuarded(req, task)` из `server/services/llmGuard.js`.
-- Guard ограничивает гостя одновременно по guest cookie и IP, пользователя — по user ID; лимиты и общая конкурентность задаются через `LLM_*`.
+- Guard ограничивает гостя одновременно по guest cookie и IP, пользователя — по user ID; лимиты и общая конкурентность задаются через `LLM_*`. Гостю вдобавок пауза между запросами — `LLM_GUEST_COOLDOWN_SEC` (по умолчанию 30 с, ответ 429 `llm_cooldown` с `Retry-After`): без ключа гость тратит серверный.
 - Счётчики guard хранятся в памяти процесса. Для нескольких Node-инстансов их нужно вынести в Redis/Postgres.
 - За одним доверенным Nginx/Caddy задайте `TRUST_PROXY=true`, иначе IP-лимит будет видеть адрес proxy.
 - Событие `llm:change` содержит только provider/ready/statusLabel — API-ключ в событие не попадает.

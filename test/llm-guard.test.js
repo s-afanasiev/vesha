@@ -7,12 +7,14 @@ const { runGuarded, __test } = require('../server/services/llmGuard');
 const ideaRadarRoutes = require('../server/routes/ideaRadar');
 
 const originalGuestLimit = config.llmGuestRequestsPerHour;
+const originalGuestCooldown = config.llmGuestCooldownSec;
 const originalUserLimit = config.llmUserRequestsPerHour;
 const originalConcurrent = config.llmMaxConcurrent;
 const originalAdminEmails = config.adminEmails;
 
 test.afterEach(() => {
   config.llmGuestRequestsPerHour = originalGuestLimit;
+  config.llmGuestCooldownSec = originalGuestCooldown;
   config.llmUserRequestsPerHour = originalUserLimit;
   config.llmMaxConcurrent = originalConcurrent;
   config.adminEmails = originalAdminEmails;
@@ -47,6 +49,28 @@ test('guest cannot reset the limit by rotating the guest id on the same IP', asy
     ),
     (err) => err.status === 429
   );
+});
+
+test('guest waits for the cooldown between LLM requests, a new cookie does not help', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  config.llmGuestCooldownSec = 30;
+  const req = { guest: { id: 'guest-1' }, ip: '203.0.113.20' };
+
+  assert.equal(await runGuarded(req, async () => 'ok'), 'ok');
+  t.mock.timers.tick(10 * 1000);
+  await assert.rejects(
+    runGuarded({ guest: { id: 'guest-2' }, ip: '203.0.113.20' }, async () => 'not reached'),
+    (err) => err.status === 429 && err.code === 'llm_cooldown' && err.retryAfterSec === 20
+  );
+  t.mock.timers.tick(20 * 1000);
+  assert.equal(await runGuarded(req, async () => 'ok'), 'ok');
+});
+
+test('signed-in users have no cooldown', async () => {
+  config.llmGuestCooldownSec = 30;
+  const req = { user: { id: 'user-1' } };
+  assert.equal(await runGuarded(req, async () => 'ok'), 'ok');
+  assert.equal(await runGuarded(req, async () => 'ok'), 'ok');
 });
 
 const ADMIN = { id: 'admin-1', email: 'admin@example.com' };
