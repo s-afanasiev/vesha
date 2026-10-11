@@ -20,8 +20,9 @@
       onPick: (filter) => feed.show(filter),
       onLoaded: (data) => feed.setVocabulary(data.niches, data.weeks),
     });
-    new MarkingView(api, {
+    const marking = new MarkingView(api, {
       run: byId('mark-run'),
+      picker: byId('mark-picker'),
       status: byId('mark-status'),
       metrics: byId('mark-metrics'),
     });
@@ -36,6 +37,21 @@
     feed.onFilterChange = (filter) => counts.highlight(filter);
     [sources, counts, feed].forEach((part) => part.load());
     loadDiskIndicator(api, byId('disk-badge'));
+    setupOps([sources, marking]);
+  }
+
+  // Служебная часть: опрос и разметка (видимость — experiment_tile_parts, part ops).
+  function setupOps(views) {
+    fetch('/api/experiments')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || !data.admin) return;
+        const tile = (data.tiles || []).find((t) => t.id === 'idea-radar');
+        const part = tile && (tile.parts || []).find((p) => p.key === 'ops');
+        if (!part) return;
+        views.forEach((view) => view.enableOps());
+      })
+      .catch(() => {});
   }
 
   // Когда следующий автоматический опрос (расписание таймера на сервере).
@@ -151,7 +167,16 @@
       this.onPolled = onPolled;
       this.onSchedule = onSchedule;
       this.busy = false;
+      this.canPoll = false;
+      this.sources = [];
       this.pollAllBtn.addEventListener('click', () => this.poll(null));
+    }
+
+    // Опрос — служебная часть (ops): кнопки только у админа, API закрыт так же.
+    enableOps() {
+      this.canPoll = true;
+      this.pollAllBtn.hidden = false;
+      this.renderRows();
     }
 
     async load() {
@@ -165,11 +190,16 @@
     }
 
     render(sources) {
+      this.sources = sources;
       this.onSources(sources);
-      this.body.replaceChildren(...sources.map((source) => this.row(source)));
+      this.renderRows();
     }
 
-    row(source) {
+    renderRows() {
+      this.body.replaceChildren(...this.sources.map((source) => this.row(source)));
+    }
+
+    pollButton(source) {
       const pollBtn = el('button', {
         type: 'button',
         class: 'vesha-btn vesha-btn--outline vesha-btn--sm',
@@ -177,7 +207,10 @@
         disabled: this.busy,
       });
       pollBtn.addEventListener('click', () => this.poll(source.slug));
+      return pollBtn;
+    }
 
+    row(source) {
       const sub = el('span', { class: 'ir-source-sub' }, [
         el('span', { class: 'ir-chip', text: KIND_LABELS[source.kind] || source.kind }),
         el('span', { text: [source.region, source.rubric].filter(Boolean).join(' · ') }),
@@ -193,7 +226,7 @@
         el('td', { class: 'ir-num', text: source.lastPoll ? String(source.lastPoll.itemsNew) : '—' }),
         el('td', { class: 'ir-num', text: String(source.total) }),
         el('td', { class: 'ir-poll-when', text: source.latestPublishedAt ? formatDateTime(source.latestPublishedAt) : '—' }),
-        el('td', {}, [pollBtn]),
+        el('td', {}, [this.canPoll ? this.pollButton(source) : null]),
       ]);
     }
 
@@ -392,6 +425,12 @@
       this.refreshReady();
       this.load();
       this.els.run.addEventListener('click', () => this.run());
+    }
+
+    // Разметка — служебная часть (ops): кнопка и выбор нейросети только у админа, метрики видны всем.
+    enableOps() {
+      this.els.run.hidden = false;
+      this.els.picker.hidden = false;
     }
 
     refreshReady() {

@@ -6,6 +6,8 @@ const { refreshAll } = require('../services/idea-radar/refresh');
 const { rebuildStories } = require('../services/idea-radar/stories');
 const { deliverPendingActs } = require('../services/idea-radar/govTexts');
 const { markPendingStories, PROMPT_VERSION } = require('../services/idea-radar/marking');
+const { runGuarded } = require('../services/llmGuard');
+const experiments = require('../services/experiments');
 const { listSources, listPublications, publicationsSince, getMarkingMetrics } = require('../services/idea-radar/store');
 const { scheduleInfo } = require('../services/idea-radar/schedule');
 const { getStorageInfo } = require('../services/storageInfo');
@@ -14,6 +16,11 @@ const { buildNoiseRule } = require('../services/idea-radar/relevance');
 const { loadNiches, buildNicheMatcher, matchableText } = require('../services/radar/niches');
 
 const router = express.Router();
+
+// Опрос, пересборка сюжетов, доставка госактов и разметка — служебная часть радара
+// (part ops): тратят внешние источники и LLM, пишут в общий корпус. Лента и счётчики открыты.
+// Скрытие кнопок в UI — удобство; вот здесь настоящая граница.
+router.use(['/polls', '/stories', '/gov-texts', '/mark'], experiments.requireAdmin);
 
 // Фильтр по нише считается в JS по свежему окну ленты — на объёмах фазы 1 этого хватает.
 const NICHE_FILTER_WINDOW = 3000;
@@ -65,10 +72,22 @@ router.post('/gov-texts', async (req, res) => {
 });
 
 // Разметка сдвигов: LLM из llm-picker (ключ с фронта), батч сюжетов за раз.
+// Без ключа с фронта LLM-сервис берёт серверный — батч целиком идёт через runGuarded
+// (квота и слот общей платформы, docs/experiments.md).
 router.post('/mark', async (req, res) => {
   const limit = intParam(req.body && req.body.limit, 5, 1, 20);
-  const marking = await markPendingStories({ llm: req.body && req.body.llm, limit });
-  res.json({ marking, metrics: await getMarkingMetrics({ promptVersion: PROMPT_VERSION }) });
+  try {
+    const { marking, quota } = await runGuarded(req, async (quotaState) => ({
+      marking: await markPendingStories({ llm: req.body && req.body.llm, limit }),
+      quota: quotaState,
+    }));
+    res.setHeader('X-RateLimit-Limit', String(quota.limit));
+    res.setHeader('X-RateLimit-Remaining', String(quota.remaining));
+    res.json({ marking, metrics: await getMarkingMetrics({ promptVersion: PROMPT_VERSION }) });
+  } catch (err) {
+    if (err.retryAfterSec) res.setHeader('Retry-After', String(err.retryAfterSec));
+    throw err;
+  }
 });
 
 router.get('/metrics', async (_req, res) => {

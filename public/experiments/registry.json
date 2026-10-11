@@ -86,6 +86,13 @@
         "js",
         "rss",
         "postgres"
+      ],
+      "parts": [
+        {
+          "key": "ops",
+          "title": "Опрос и разметка",
+          "admin": true
+        }
       ]
     },
     {

@@ -39,7 +39,7 @@
     <section class="ir-card" aria-labelledby="sources-title">
       <div class="ir-card__head">
         <h2 id="sources-title">Источники</h2>
-        <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="poll-all">Опросить все</button>
+        <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="poll-all" hidden>Опросить все</button>
       </div>
       <p class="ir-status" id="poll-status" role="status" aria-live="polite"></p>
       <div class="ir-table-wrap">
@@ -74,10 +74,10 @@
     <section class="ir-card" aria-labelledby="marking-title">
       <div class="ir-card__head">
         <h2 id="marking-title">Разметка сдвигов</h2>
-        <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="mark-run" disabled>Разметить 5 сюжетов</button>
+        <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="mark-run" disabled hidden>Разметить 5 сюжетов</button>
       </div>
       <p class="ir-status" id="mark-status" role="status" aria-live="polite"></p>
-      <div data-vesha-llm-picker></div>
+      <div data-vesha-llm-picker id="mark-picker" hidden></div>
       <p class="ir-meta" id="mark-metrics">Метрики разметки ещё не загружены.</p>
     </section>
 
@@ -105,7 +105,7 @@
         </label>
       </form>
       <ol class="ir-feed" id="feed-list" aria-live="polite"></ol>
-      <p class="ir-empty" id="feed-empty" hidden>Пока пусто. Нажмите «Опросить все».</p>
+      <p class="ir-empty" id="feed-empty" hidden>Пока пусто: ленты ещё не опрашивали.</p>
       <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm ir-more" id="feed-more" hidden>Показать ещё</button>
     </section>
   </main>
