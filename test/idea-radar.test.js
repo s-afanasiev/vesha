@@ -227,10 +227,15 @@ test('shift parsing validates types, directions and niches', () => {
       },
       { type: 'weird_type', subject: 'Что-то новое', summary: 'Тип не из таксономии', niches: [] },
       { subject: 'Без summary' },
+      { summary: 'Без предмета' },
+      null,
     ],
   });
-  const shifts = marking.parseShifts('```json\n' + raw + '\n```');
+  const { shifts, rejected } = marking.parseShifts('```json\n' + raw + '\n```');
   assert.equal(shifts.length, 2);
+  // Отброшенные не теряются молча: у каждого своя причина.
+  assert.deepEqual(rejected, ['нет summary', 'нет subject', 'нет subject']);
+  assert.deepEqual(marking.parseShifts('{"shifts": []}'), { shifts: [], rejected: [] });
   assert.equal(shifts[0].type, 'new_duty');
   assert.equal(shifts[0].effectiveDate, '2026-12-01');
   // Парсер отсекает только кривое направление; чужой slug отсеет словарь на вставке.
@@ -259,6 +264,10 @@ test('marking prompt carries the niche dictionary and strict json rule', () => {
   assert.match(prompt, /auto_tires — Шиномонтаж/);
   assert.match(prompt, /строго JSON/);
   assert.match(prompt, /new_permission/);
+  // Форма ответа задана целиком: разбор требует summary, адресат — {slug, direction}.
+  assert.match(prompt, /summary — обязательно/);
+  assert.match(prompt, /"niches": \[\{"slug": "…", "direction": "duty"\}\]/);
+  assert.match(prompt, /Сдвигов нет — \{"shifts": \[\]\}/);
 });
 
 test('balance parsing recognizes common service shapes', () => {

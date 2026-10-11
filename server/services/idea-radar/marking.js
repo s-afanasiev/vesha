@@ -10,7 +10,8 @@ const { completeChat } = require('../llm');
 const { loadNiches, normalizeText } = require('../radar/niches');
 const { buildNoiseRule } = require('./relevance');
 
-const PROMPT_VERSION = 'v1';
+// v2: явная форма ответа со всеми полями (v1 не просил summary — такие сдвиги терялись).
+const PROMPT_VERSION = 'v2';
 const MAX_PUB_CHARS = 4000;
 const MAX_STORY_CHARS = 9000;
 const MARK_PAUSE_MS = 300;
@@ -57,11 +58,16 @@ function systemPrompt(niches) {
     nicheLines,
     '',
     'Правила:',
+    '- type — slug типа из списка выше; не подходит ни один — other.',
     '- subject — короткое каноничное имя предмета («маркировка шин», «онлайн-кассы»); subject_raw — как предмет назван в тексте.',
-    '- quote — дословная подстрока одной из публикаций; пересказывать нельзя. Нет цитаты — поле пустое.',
-    '- effective_date — дата вступления в силу, только если она названа в тексте (YYYY-MM-DD).',
+    '- summary — обязательно: 1–2 предложения, что изменилось, для кого и с какого момента.',
+    '- quote — дословная подстрока одной из публикаций; пересказывать нельзя. Нет цитаты — пустая строка.',
+    '- effective_date — дата вступления в силу, только если она названа в тексте (YYYY-MM-DD), иначе пустая строка.',
     '- niches — 0…3 адресатов из списка, у каждого своё направление.',
-    '- Ответ — строго JSON: {"shifts": [...]}. Без markdown-заборов и пояснений.',
+    '',
+    'Ответ — строго JSON без markdown-заборов и пояснений, ровно такой формы:',
+    '{"shifts": [{"type": "new_duty", "subject": "…", "subject_raw": "…", "summary": "…", "quote": "…", "effective_date": "", "niches": [{"slug": "…", "direction": "duty"}]}]}',
+    'Сдвигов нет — {"shifts": []}.',
   ].join('\n');
 }
 
@@ -81,6 +87,8 @@ function buildStoryContent(story) {
 }
 
 // Модель присылает JSON, иногда в markdown-заборах — снимаем их, валидируем строго.
+// Сдвиг без subject или summary не сохраняется, но и не теряется молча: причина
+// уходит в rejected, итог батча её показывает.
 function parseShifts(text) {
   const raw = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
   let data;
@@ -89,12 +97,16 @@ function parseShifts(text) {
   } catch {
     throw new Error('ответ модели не JSON');
   }
-  const shifts = Array.isArray(data.shifts) ? data.shifts : [];
-  return shifts
-    .map((shift) => {
+  const rejected = [];
+  const shifts = (data && Array.isArray(data.shifts) ? data.shifts : [])
+    .map((item) => {
+      const shift = item && typeof item === 'object' ? item : {};
       const subject = String(shift.subject || '').trim().slice(0, 120);
       const summary = String(shift.summary || '').trim().slice(0, 500);
-      if (!subject || !summary) return null;
+      if (!subject || !summary) {
+        rejected.push(subject ? 'нет summary' : 'нет subject');
+        return null;
+      }
       const type = String(shift.type || '').trim().toLowerCase();
       const niches = (Array.isArray(shift.niches) ? shift.niches : [])
         .map((entry) => ({
@@ -115,6 +127,7 @@ function parseShifts(text) {
       };
     })
     .filter(Boolean);
+  return { shifts, rejected };
 }
 
 // Дословность цитаты проверяем после нормализации: пробелы, кавычки, тире, «ё».
@@ -162,7 +175,7 @@ async function markStory(story, niches, llm, subjectIdByName) {
     temperature: 0.2,
     timeoutMs: config.llmTimeoutMs,
   });
-  const parsed = parseShifts(result.text);
+  const { shifts: parsed, rejected } = parseShifts(result.text);
 
   const saved = await db.withClient(async (client) => {
     await client.query('BEGIN');
@@ -213,11 +226,14 @@ async function markStory(story, niches, llm, subjectIdByName) {
       throw err;
     }
   });
-  return { shifts: saved, model: result.model };
+  return { shifts: saved, rejected, model: result.model };
 }
 
 // Сюжеты без непомеченных публикаций нельзя размечать — записываем это правилом шума,
 // чтобы сюжет не висел «в ожидании» вечно; в метриках И8 такие не участвуют.
+// Очередь: сначала госакты с доставленным текстом (главный источник сдвигов, И4), потом
+// остальное от свежих к старым. Госакт без текста вперёд не пускаем: по заголовку
+// «О внесении изменений…» сдвиг не разметить, а вызов модели платный.
 async function markPendingStories({ llm, limit = 5 } = {}) {
   if (!llm || typeof llm !== 'object') throw badSelection();
   const niches = await loadNiches();
@@ -240,7 +256,8 @@ async function markPendingStories({ llm, limit = 5 } = {}) {
          WHERE m.story_id = st.id AND m.prompt_version = $1
        )
      GROUP BY st.id
-     ORDER BY min(p.published_at) DESC NULLS LAST
+     ORDER BY bool_or(s.kind = 'gov' AND COALESCE(p.body, '') <> '') DESC,
+              min(p.published_at) DESC NULLS LAST
      LIMIT $2`,
     [PROMPT_VERSION, limit]
   );
@@ -249,6 +266,8 @@ async function markPendingStories({ llm, limit = 5 } = {}) {
   let shiftsFound = 0;
   let withoutShifts = 0;
   let skippedByNoise = 0;
+  let rejectedShifts = 0;
+  const rejectedReasons = new Set();
   const errors = [];
   for (const [index, story] of rows.entries()) {
     if (index > 0) await pause(MARK_PAUSE_MS);
@@ -268,14 +287,26 @@ async function markPendingStories({ llm, limit = 5 } = {}) {
       const outcome = await markStory({ ...story, pubs: meaningful }, niches, llm, subjectIdByName);
       marked += 1;
       shiftsFound += outcome.shifts;
-      if (!outcome.shifts) withoutShifts += 1;
+      rejectedShifts += outcome.rejected.length;
+      outcome.rejected.forEach((reason) => rejectedReasons.add(reason));
+      // «Без сдвигов» — только когда модель сама ответила пустым списком.
+      if (!outcome.shifts && !outcome.rejected.length) withoutShifts += 1;
     } catch (err) {
       // Не пишем marking с ошибкой: сюжет останется в ожидании и повторится на следующем запуске.
       errors.push({ title: story.title, error: String(err.message).slice(0, 200) });
     }
   }
 
-  return { requested: rows.length, marked, shiftsFound, withoutShifts, skippedByNoise, errors: errors.slice(0, 3) };
+  return {
+    requested: rows.length,
+    marked,
+    shiftsFound,
+    withoutShifts,
+    skippedByNoise,
+    rejectedShifts,
+    rejectedReasons: [...rejectedReasons],
+    errors: errors.slice(0, 3),
+  };
 }
 
 function badSelection() {

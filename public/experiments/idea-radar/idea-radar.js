@@ -34,10 +34,11 @@
       },
       onSchedule: (schedule) => renderScheduleBadge(byId('poll-next-badge'), schedule),
     });
+    const govTexts = new GovTextsView(api, byId('gov-texts'), byId('poll-status'));
     feed.onFilterChange = (filter) => counts.highlight(filter);
     [sources, counts, feed].forEach((part) => part.load());
     loadDiskIndicator(api, byId('disk-badge'));
-    setupOps([sources, marking]);
+    setupOps([sources, govTexts, marking]);
   }
 
   // Служебная часть: опрос и разметка (видимость — experiment_tile_parts, part ops).
@@ -132,6 +133,10 @@
 
     mark(body) {
       return this.request('/mark', { method: 'POST', body: JSON.stringify(body) });
+    }
+
+    govTexts(limit) {
+      return this.request('/gov-texts', { method: 'POST', body: JSON.stringify({ limit }) });
     }
 
     metrics() {
@@ -273,6 +278,50 @@
       this.body.querySelectorAll('button').forEach((btn) => {
         btn.disabled = busy;
       });
+    }
+
+    say(text, isError = false) {
+      this.status.textContent = text;
+      this.status.classList.toggle('ir-status--error', isError);
+    }
+  }
+
+  // ---------- Тексты госактов ----------
+
+  // Партия меньше серверной по умолчанию: PDF тянутся по одному, ответ должен уложиться
+  // в таймаут прокси.
+  const GOV_TEXTS_BATCH = 10;
+
+  class GovTextsView {
+    constructor(api, button, status) {
+      this.api = api;
+      this.button = button;
+      this.status = status;
+      this.button.addEventListener('click', () => this.run());
+    }
+
+    // Доставка текстов — служебная часть (ops): кнопка только у админа, API закрыт так же.
+    enableOps() {
+      this.button.hidden = false;
+    }
+
+    async run() {
+      this.button.disabled = true;
+      this.say(`Доставляю тексты госактов — до ${GOV_TEXTS_BATCH} PDF, это может занять пару минут…`);
+      try {
+        const { delivery } = await this.api.govTexts(GOV_TEXTS_BATCH);
+        const summary = [
+          `Тексты госактов: доставлено ${delivery.delivered}`,
+          `без текста или с ошибкой ${delivery.failed}`,
+          `осталось ${delivery.remaining}`,
+        ].join(', ');
+        const failure = delivery.failures.length ? ` (${delivery.failures[0].error})` : '';
+        this.say(`${summary}${failure}.`);
+      } catch (err) {
+        this.say(`Доставка текстов не удалась: ${err.message}`, true);
+      } finally {
+        this.button.disabled = false;
+      }
     }
 
     say(text, isError = false) {
@@ -482,6 +531,9 @@
           `без сдвигов: ${marking.withoutShifts}`,
         ];
         if (marking.skippedByNoise) parts.push(`мимо по шуму: ${marking.skippedByNoise}`);
+        if (marking.rejectedShifts) {
+          parts.push(`отброшено сдвигов: ${marking.rejectedShifts} (${marking.rejectedReasons.join(', ')})`);
+        }
         if (marking.errors.length) {
           parts.push(`ошибок: ${marking.errors.length} (${marking.errors[0].error})`);
         }

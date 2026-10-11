@@ -88,6 +88,12 @@ body.page-idea-radar .experiments {
   flex-wrap: wrap;
 }
 
+.ir-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .ir-card__head h2 {
   margin: 0;
   font-size: 1.12rem;

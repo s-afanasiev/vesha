@@ -39,7 +39,10 @@
     <section class="ir-card" aria-labelledby="sources-title">
       <div class="ir-card__head">
         <h2 id="sources-title">Источники</h2>
-        <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="poll-all" hidden>Опросить все</button>
+        <div class="ir-card__actions">
+          <button type="button" class="vesha-btn vesha-btn--outline vesha-btn--sm" id="gov-texts" hidden>Доставить тексты госактов</button>
+          <button type="button" class="vesha-btn vesha-btn--primary vesha-btn--sm" id="poll-all" hidden>Опросить все</button>
+        </div>
       </div>
       <p class="ir-status" id="poll-status" role="status" aria-live="polite"></p>
       <div class="ir-table-wrap">
