@@ -26,7 +26,7 @@ function isLoopbackHostname(hostname) {
 }
 
 function serverOpenaiConfigured() {
-  return Boolean(config.openaiApiKey || config.openaiAllowKeyless);
+  return Boolean(config.llmOpenaiApiKey || config.openaiAllowKeyless);
 }
 
 function publicStatus() {
@@ -52,8 +52,8 @@ function publicStatus() {
     },
     openai: {
       configured: serverOpenaiConfigured(),
-      baseUrl: config.openaiBaseUrl,
-      model: config.openaiModel,
+      baseUrl: config.llmOpenaiBaseUrl,
+      model: config.llmOpenaiModel,
       customEndpointsEnabled,
       privateEndpointsEnabled: customEndpointsEnabled && config.llmAllowPrivateEndpoints,
     },
@@ -454,12 +454,12 @@ async function completeOpenai({
 }) {
   const userKey = String(apiKey || '').trim();
   const usesUserProfile = Boolean(userKey);
-  const key = usesUserProfile ? userKey : String(config.openaiApiKey || '').trim();
-  const serverUrl = openaiChatUrl(config.openaiBaseUrl);
+  const key = usesUserProfile ? userKey : String(config.llmOpenaiApiKey || '').trim();
+  const serverUrl = openaiChatUrl(config.llmOpenaiBaseUrl);
   const url = openaiChatUrl(
-    usesUserProfile ? baseUrl || config.openaiBaseUrl : config.openaiBaseUrl
+    usesUserProfile ? baseUrl || config.llmOpenaiBaseUrl : config.llmOpenaiBaseUrl
   );
-  const modelName = usesUserProfile ? model || config.openaiModel : config.openaiModel;
+  const modelName = usesUserProfile ? model || config.llmOpenaiModel : config.llmOpenaiModel;
   if (usesUserProfile && url.href !== serverUrl.href) await assertCustomEndpointAllowed(url);
   if (!key && !config.openaiAllowKeyless) {
     throw bad('На сервере не настроен OpenAI-совместимый профиль', 500);
@@ -543,10 +543,10 @@ async function checkBalance(selection = {}) {
     };
   }
   const usesUserProfile = Boolean(parsed.apiKey);
-  const key = usesUserProfile ? parsed.apiKey : String(config.openaiApiKey || '').trim();
+  const key = usesUserProfile ? parsed.apiKey : String(config.llmOpenaiApiKey || '').trim();
   if (!key) return { available: false, reason: 'Для проверки баланса нужен API ключ.' };
-  const chatUrl = openaiChatUrl(usesUserProfile ? parsed.baseUrl || config.openaiBaseUrl : config.openaiBaseUrl);
-  if (usesUserProfile && chatUrl.href !== openaiChatUrl(config.openaiBaseUrl).href) {
+  const chatUrl = openaiChatUrl(usesUserProfile ? parsed.baseUrl || config.llmOpenaiBaseUrl : config.llmOpenaiBaseUrl);
+  if (usesUserProfile && chatUrl.href !== openaiChatUrl(config.llmOpenaiBaseUrl).href) {
     await assertCustomEndpointAllowed(chatUrl);
   }
   const origin = chatUrl.origin;

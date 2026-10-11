@@ -207,7 +207,7 @@ const result = await completeChat({
 
 Статус ключей без секретов: `GET /api/llm/status`. Код виджета: `public/llm-picker.js`, стили `public/llm-picker.css`, сервис `server/services/llm.js`, роут `server/routes/llm.js`. Образец в UI: `public/experiments/notes-export/`.
 
-Env: `GEMINI_API_KEY`, `YANDEX_API_KEY` или `YANDEX_IAM_TOKEN`, `YANDEX_FOLDER_ID`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`. Для локального keyless endpoint нужен явный `OPENAI_ALLOW_KEYLESS=true`.
+Env: `GEMINI_API_KEY`, `YANDEX_API_KEY` или `YANDEX_IAM_TOKEN`, `YANDEX_FOLDER_ID`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`. Для локального keyless endpoint нужен явный `OPENAI_ALLOW_KEYLESS=true`. Сторонний OpenAI-совместимый провайдер для шлюза — `LLM_OPENAI_BASE_URL`, `LLM_OPENAI_MODEL`, `LLM_OPENAI_API_KEY`: набор целиком (задан хоть один — шлюз берёт только их), чтобы ключ провайдера не ушёл на api.openai.com из vision и Whisper, а `OPENAI_API_KEY` — на чужой адрес.
 
 Правила gateway:
 

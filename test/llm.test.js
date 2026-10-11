@@ -8,9 +8,9 @@ const originalConfig = {
   isProduction: config.isProduction,
   geminiApiKey: config.geminiApiKey,
   geminiModel: config.geminiModel,
-  openaiApiKey: config.openaiApiKey,
-  openaiBaseUrl: config.openaiBaseUrl,
-  openaiModel: config.openaiModel,
+  llmOpenaiApiKey: config.llmOpenaiApiKey,
+  llmOpenaiBaseUrl: config.llmOpenaiBaseUrl,
+  llmOpenaiModel: config.llmOpenaiModel,
   openaiAllowKeyless: config.openaiAllowKeyless,
   llmMaxResponseBytes: config.llmMaxResponseBytes,
   llmEnableCustomEndpoints: config.llmEnableCustomEndpoints,
@@ -54,9 +54,9 @@ test('provider parsing drops fields belonging to other providers', () => {
 });
 
 test('server OpenAI key is never sent to a client-selected URL', async () => {
-  config.openaiApiKey = 'server-secret';
-  config.openaiBaseUrl = 'https://api.openai.com/v1';
-  config.openaiModel = 'server-model';
+  config.llmOpenaiApiKey = 'server-secret';
+  config.llmOpenaiBaseUrl = 'https://api.openai.com/v1';
+  config.llmOpenaiModel = 'server-model';
   let request;
   global.fetch = async (url, options) => {
     request = { url: String(url), options };
@@ -83,8 +83,8 @@ test('server OpenAI key is never sent to a client-selected URL', async () => {
 });
 
 test('custom endpoint requires user key and server permission', async () => {
-  config.openaiBaseUrl = 'https://api.openai.com/v1';
-  config.openaiApiKey = 'server-secret';
+  config.llmOpenaiBaseUrl = 'https://api.openai.com/v1';
+  config.llmOpenaiApiKey = 'server-secret';
   config.llmEnableCustomEndpoints = false;
 
   await assert.rejects(
@@ -183,4 +183,42 @@ test('private and reserved IP ranges are rejected', () => {
   }
   assert.equal(__test.isBlockedIp('8.8.8.8'), false);
   assert.equal(__test.isBlockedIp('2001:4860:4860::8888'), false);
+});
+
+test('gateway OpenAI preset is a whole set: LLM_OPENAI_* never mixes with OPENAI_*', () => {
+  const names = ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'LLM_OPENAI_API_KEY', 'LLM_OPENAI_BASE_URL', 'LLM_OPENAI_MODEL'];
+  const savedEnv = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const configPath = require.resolve('../server/config');
+  const cached = require.cache[configPath];
+  // Пустые значения тоже «заданы»: dotenv не подмешает в тест ключи из .env.
+  const load = (env) => {
+    Object.assign(process.env, env);
+    delete require.cache[configPath];
+    return require(configPath);
+  };
+  try {
+    const direct = load({
+      OPENAI_API_KEY: 'openai-secret',
+      OPENAI_BASE_URL: '',
+      OPENAI_MODEL: '',
+      LLM_OPENAI_API_KEY: '',
+      LLM_OPENAI_BASE_URL: '',
+      LLM_OPENAI_MODEL: '',
+    });
+    assert.equal(direct.llmOpenaiApiKey, 'openai-secret');
+    assert.equal(direct.llmOpenaiBaseUrl, 'https://api.openai.com/v1');
+
+    // Сторонний адрес без своего ключа не получает ключ OpenAI; прямой ключ OpenAI — на месте.
+    const vendor = load({ LLM_OPENAI_BASE_URL: 'https://llm.example/v1/', LLM_OPENAI_MODEL: 'vendor/model' });
+    assert.equal(vendor.llmOpenaiApiKey, '');
+    assert.equal(vendor.llmOpenaiBaseUrl, 'https://llm.example/v1');
+    assert.equal(vendor.llmOpenaiModel, 'vendor/model');
+    assert.equal(vendor.openaiApiKey, 'openai-secret');
+  } finally {
+    for (const [name, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    require.cache[configPath] = cached;
+  }
 });

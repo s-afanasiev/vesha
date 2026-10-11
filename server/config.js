@@ -43,6 +43,16 @@ if (process.env.DATABASE_SSL === 'true' || process.env.PGSSLMODE === 'require') 
   dbConfig.ssl = { rejectUnauthorized: false };
 }
 
+// Серверный пресет OpenAI-совместимого провайдера для LLM-шлюза — набор целиком:
+// задан хоть один LLM_OPENAI_* — берутся только они, иначе прежние OPENAI_*.
+// OPENAI_API_KEY ещё уходит напрямую на api.openai.com (vision, суммаризация): ключ
+// стороннего провайдера туда попадать не должен, а ключ OpenAI — на чужой адрес.
+const llmOpenaiEnv = ['LLM_OPENAI_API_KEY', 'LLM_OPENAI_BASE_URL', 'LLM_OPENAI_MODEL'].some(
+  (name) => envStr(name)
+)
+  ? 'LLM_OPENAI_'
+  : 'OPENAI_';
+
 const config = {
   isProduction: process.env.NODE_ENV === 'production',
   port: intEnv('PORT', 3000),
@@ -64,8 +74,9 @@ const config = {
     ''
   ),
   openaiApiKey: process.env.OPENAI_API_KEY || '',
-  openaiBaseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
-  openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  llmOpenaiApiKey: envStr(`${llmOpenaiEnv}API_KEY`),
+  llmOpenaiBaseUrl: (envStr(`${llmOpenaiEnv}BASE_URL`) || 'https://api.openai.com/v1').replace(/\/$/, ''),
+  llmOpenaiModel: envStr(`${llmOpenaiEnv}MODEL`) || 'gpt-4o-mini',
   openaiAllowKeyless: boolEnv('OPENAI_ALLOW_KEYLESS', false),
   llmDefaultProvider: envStr('LLM_DEFAULT_PROVIDER') || 'gemini',
   llmTimeoutMs: intEnv('LLM_TIMEOUT_MS', 3 * 60 * 1000),
