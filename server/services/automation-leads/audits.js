@@ -12,6 +12,15 @@ function domainOf(value) {
   return String(value).trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase();
 }
 
+// Сайты места из поля карточки: без подписей-каналов и без соцсетей. Одно правило
+// для сбора (что проверять) и разбора (что считать сайтом).
+function siteDomains(websites) {
+  return (websites || [])
+    .filter((w) => !/\s/.test(String(w).trim()))
+    .map(domainOf)
+    .filter((d) => d && !SOCIAL_HOST.test(d));
+}
+
 // Карточка места: контакты, каналы, гигиена, масштаб.
 class CardFacts {
   async run(place, world, node) {
@@ -22,10 +31,7 @@ class CardFacts {
     }
     const websites = card.websites || [];
     const labels = websites.filter((w) => /\s/.test(String(w).trim()));
-    const sites = websites
-      .filter((w) => !/\s/.test(String(w).trim()))
-      .map(domainOf)
-      .filter((d) => d && !SOCIAL_HOST.test(d));
+    const sites = siteDomains(websites);
     const facts = {
       phone: (card.phones || [])[0] || '',
       sites,
@@ -68,10 +74,16 @@ class SiteFacts {
       return { has: true, audited: false, domain, url: `https://${domain}` };
     }
     const ok = !audit.error && Number(audit.status) < 400;
+    // Таймаут, слишком большая страница или 401/403/429 — сайт есть, но проверить не
+    // дали (часто защита от ботов): это «не знаем», а не «не открывается» (П38).
+    const unverifiable = !ok && (
+      ['timeout', 'too_large'].includes(audit.errorCode) || [401, 403, 429].includes(Number(audit.status))
+    );
     const facts = {
       has: true,
       audited: true,
       ok,
+      unverifiable,
       domain,
       url: audit.url || `https://${domain}`,
       status: audit.status || null,
@@ -92,7 +104,7 @@ class SiteFacts {
     node.complete({
       summary: ok
         ? `${domain} · ${facts.platform || 'движок не опознан'} · ${has.join(', ') || 'витрина без цен и заказа'}`
-        : `${domain} · не открывается (${audit.status || audit.error})`,
+        : `${domain} · ${unverifiable ? 'проверить не дали' : 'не открывается'} (${audit.status || audit.error})`,
     });
     return facts;
   }
@@ -143,4 +155,4 @@ class ReviewFailures {
   }
 }
 
-module.exports = { CardFacts, SiteFacts, ReviewFailures, domainOf };
+module.exports = { CardFacts, SiteFacts, ReviewFailures, domainOf, siteDomains };

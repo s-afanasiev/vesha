@@ -16,15 +16,16 @@ class RubricFit {
 
 // Цифровые пробелы из фактов карточки и сайта. Вес — вклад в балл: «нет сайта»
 // тяжелее прочих, гигиена карточки (не подтверждена, нет часов) видна, но балла
-// не даёт — её чинят не наши продукты. Не проверенный сайт пробелов не даёт:
-// «не знаем» ≠ «нет» (П38).
+// не даёт — её чинят не наши продукты. Не проверенный сайт и сайт, который не дал
+// себя проверить (таймаут, защита от ботов), пробелов не дают: «не знаем» ≠ «нет» (П38).
 class DigitalGaps {
   of(card, site) {
     const gaps = [];
     const add = (code, label, weight) => gaps.push({ code, label, weight });
     if (!site.has) add('no_site', 'нет сайта', 2);
-    else if (site.audited && !site.ok) add('site_down', 'сайт не открывается', 1);
-    else if (site.audited) {
+    else if (site.audited && !site.ok) {
+      if (!site.unverifiable) add('site_down', 'сайт не открывается', 1);
+    } else if (site.audited) {
       if (!site.prices) add('no_prices', 'на сайте нет цен', 1);
       if (!site.cart && !site.leadForm) add('no_order', 'нельзя заказать онлайн', 1);
     }

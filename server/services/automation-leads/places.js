@@ -46,9 +46,12 @@ class PlaceAudit {
   }
 }
 
+// Один повторитель для разбора (PlaceAudit) и сбора (PlaceCorpus). Отмена и отказ
+// источника («просил остановиться») — не неудача места, а конец всего прогона.
 class EachPlace {
-  constructor(audit) {
+  constructor(audit, { nodeType = 'PlaceAudit' } = {}) {
     this.audit = audit;
+    this.nodeType = nodeType;
   }
 
   async run(places, world, ctx) {
@@ -57,12 +60,12 @@ class EachPlace {
       if (ctx.signal && ctx.signal.aborted) throw abortError();
       try {
         const audit = await ctx.node.step(
-          { nodeType: 'PlaceAudit', title: place.name, payload: { branch_id: place.branch_id } },
+          { nodeType: this.nodeType, title: place.name, payload: { branch_id: place.branch_id } },
           (n) => this.audit.run(place, world, n),
         );
         results.push({ ok: true, ...audit });
       } catch (err) {
-        if (err && err.name === 'AbortError') throw err;
+        if (isStop(err)) throw err;
         results.push({ ok: false, place, code: err.code || 'error', detail: err.message });
       }
     }
@@ -73,9 +76,13 @@ class EachPlace {
 }
 
 function abortError() {
-  const err = new Error('разбор остановлен');
+  const err = new Error('прогон остановлен');
   err.name = 'AbortError';
   return err;
 }
 
-module.exports = { Places, PlaceAudit, EachPlace };
+function isStop(err) {
+  return !!err && (err.name === 'AbortError' || err.code === 'refused');
+}
+
+module.exports = { Places, PlaceAudit, EachPlace, isStop, abortError };

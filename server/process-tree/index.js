@@ -156,8 +156,9 @@ class ProcessNode {
     return this.store.createNode({ parent: this.id, nodeType, title, payload });
   }
 
+  // Из ожидания — снова в работу: исход ожидания стирается.
   start(payload) {
-    return this.store._mutate(this.id, { status: 'running', payload });
+    return this.store._mutate(this.id, { status: 'running', payload, outcome: null });
   }
 
   update(payload) {

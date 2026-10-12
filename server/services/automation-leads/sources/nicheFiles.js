@@ -1,7 +1,6 @@
-// Источник ниши из файлов первого прогона (data/pain-radar-corpus, вне git):
-// честный простой узел сквозного прогона (П31) — тот же контракт, что будет у
-// 2ГИС через каркас сборщиков, только без сети. Живой источник заменит этот
-// узел, а не дерево.
+// Источник ниши из корпуса на диске (раскладка — corpus.js): разбор читает то,
+// что положил сбор «Собрать» или опытные скрипты 11.10.2026. Корпус — снимок:
+// разбор повторяется без обращения к 2ГИС.
 //
 // Контракт источника ниши:
 //   places()          → [{ branch_id, name, address, rubrics }]   листинг ниши
@@ -40,8 +39,8 @@ async function readNdjson(file) {
 }
 
 class NicheFiles {
-  constructor(root, files) {
-    this.dir = path.join(root, files.dir);
+  constructor(dir) {
+    this.dir = dir;
     this.loaded = null;
   }
 
@@ -97,12 +96,12 @@ class NicheFiles {
   }
 }
 
-// Записанная разметка отзывов (прогон «Радара спроса» 11.10.2026, справочник v2):
-// узел-заместитель LLM-разметки с тем же контрактом of(review). Не размеченный
-// отзыв — null, а не «сбоев нет» (П38).
+// Записанная разметка отзывов корпуса (marks.jsonl, справочник v2): контракт
+// of(review). Не размеченный отзыв — null, а не «сбоев нет» (П38); нет файла
+// разметки — все отзывы не размечены, и разбор так и скажет.
 class RecordedMarking {
-  constructor(root, files) {
-    this.paths = (files.marks || []).map((p) => path.join(root, p));
+  constructor(file) {
+    this.paths = [file];
     this.loaded = null;
   }
 
@@ -116,7 +115,14 @@ class RecordedMarking {
       this.loaded = (async () => {
         const byReview = new Map();
         for (const file of this.paths) {
-          for (const batch of await readNdjson(file)) {
+          let batches;
+          try {
+            batches = await readNdjson(file);
+          } catch (err) {
+            if (err.code === 'no_niche_data') continue;
+            throw err;
+          }
+          for (const batch of batches) {
             for (const r of batch.reviews || []) byReview.set(String(r.review_id), { author: r.author, signals: r.signals || [] });
           }
         }

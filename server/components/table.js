@@ -67,7 +67,8 @@ function router(decl) {
       const ids = Array.isArray(req.body.ids) ? req.body.ids.map((v) => String(v)).filter(Boolean) : [];
       if (action.bulk && !ids.length) throw new Error('ничего не выбрано');
       if (action.max && ids.length > action.max) throw new Error(`не больше ${action.max} строк за раз`);
-      const result = await action.run({ ids, body: req.body });
+      // user — инициатор действия, как в kanban@1 /move: от его имени вехи и квоты (П37)
+      const result = await action.run({ ids, body: req.body, user: req.user || null });
       res.json({ ok: true, result });
     } catch (e) {
       res.status(400).json({ error: String(e.message || e) });

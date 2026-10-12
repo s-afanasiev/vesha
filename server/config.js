@@ -140,10 +140,15 @@ const config = {
   ideaRadarMaxBytes: intEnv('IDEA_RADAR_MAX_BYTES', 5 * 1024 * 1024),
   // Доставка текста госактов: сколько PDF разбирать за один запуск.
   ideaRadarGovTextsBatch: intEnv('IDEA_RADAR_GOV_TEXTS_BATCH', 20),
-  // «Кому автоматизировать»: корень файлов первого прогона ниш (вне git).
+  // «Кому автоматизировать»: корень корпусов ниш (niches/<slug>/, вне git).
   automationLeadsDataDir:
     process.env.AUTOMATION_LEADS_DATA_DIR ||
     require('path').join(__dirname, '..', 'data', 'pain-radar-corpus'),
+  // 2ГИС: публичный фронтовый ключ reviews API (не секрет — его отдаёт сайт 2ГИС
+  // любому браузеру); пауза между обращениями и остывание после 403/429.
+  twogisReviewsKey: process.env.TWOGIS_REVIEWS_KEY || '6e7e1929-4ea9-4a5d-8c05-d601860389bd',
+  twogisGapMs: intEnv('TWOGIS_GAP_MS', 1600),
+  twogisCooldownMin: intEnv('TWOGIS_COOLDOWN_MIN', 30),
   // Путь для замера свободного места: на сервере данные могут жить на другом томе.
   diskInfoPath: process.env.DISK_INFO_PATH || process.cwd(),
   // Плитки с visibility='admin' видят только залогиненные с этими email (listEnv уже в lower-case).

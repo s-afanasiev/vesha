@@ -48,12 +48,14 @@ async function readLimited(res, maxBytes) {
 }
 
 // Общий запрос чужого источника: таймаут, потолок байт, ошибки с кодами.
-async function request(url, { signal, timeoutMs, maxBytes, accept } = {}) {
+// headers — заголовки адаптера поверх умолчаний (страницы карт отдаются только
+// браузерному User-Agent).
+async function request(url, { signal, timeoutMs, maxBytes, accept, headers } = {}) {
   const deadline = AbortSignal.timeout(timeoutMs);
   let res;
   try {
     res = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, Accept: accept || '*/*' },
+      headers: { 'User-Agent': USER_AGENT, Accept: accept || '*/*', ...headers },
       redirect: 'follow',
       signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
     });
@@ -68,13 +70,13 @@ async function request(url, { signal, timeoutMs, maxBytes, accept } = {}) {
     throw new SourceHttpError(`http_${res.status}`, `Источник ответил ${res.status}`, res.status);
   }
   const buffer = await readLimited(res, maxBytes);
-  return { buffer, contentType: res.headers.get('content-type') || '' };
+  return { buffer, contentType: res.headers.get('content-type') || '', finalUrl: res.url, status: res.status };
 }
 
 async function fetchText(url, options = {}) {
-  const { buffer, contentType } = await request(url, options);
+  const { buffer, contentType, finalUrl, status } = await request(url, options);
   const head = buffer.subarray(0, 200).toString('latin1');
-  return { text: decode(buffer, pickCharset(contentType, head)), contentType };
+  return { text: decode(buffer, pickCharset(contentType, head)), contentType, finalUrl, status };
 }
 
 // Бинарный ответ (например, PDF госакта) — без декодирования.

@@ -1,6 +1,8 @@
 const dns = require('dns').promises;
 const net = require('net');
 const config = require('../config');
+// Правило «адрес не во внутренней сети» — общее с аудитом сайтов (collectors/netGuard).
+const { isBlockedIp } = require('./collectors/netGuard');
 
 const PROVIDERS = new Set(['gemini', 'yandex', 'openai']);
 
@@ -350,36 +352,6 @@ async function completeYandex({
     finishReason: data.result?.alternatives?.[0]?.status || null,
     usage: data.result?.usage || null,
   };
-}
-
-function isBlockedIpv4(address) {
-  const parts = address.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return true;
-  const [a, b] = parts;
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 0) ||
-    (a === 192 && b === 168) ||
-    (a === 198 && (b === 18 || b === 19)) ||
-    (a === 198 && b === 51) ||
-    (a === 203 && b === 0) ||
-    a >= 224
-  );
-}
-
-function isBlockedIp(address) {
-  const value = String(address || '').toLowerCase();
-  const version = net.isIP(value);
-  if (version === 4) return isBlockedIpv4(value);
-  if (version !== 6) return true;
-  if (value.startsWith('::ffff:')) return isBlockedIpv4(value.slice(7));
-  const firstGroup = Number.parseInt(value.split(':')[0], 16);
-  return !Number.isFinite(firstGroup) || firstGroup < 0x2000 || firstGroup > 0x3fff;
 }
 
 function openaiChatUrl(baseUrl) {

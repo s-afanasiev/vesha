@@ -1,30 +1,33 @@
 // Компонентные экземпляры «Кому автоматизировать» (docs/ui-components.md §1):
-// UI эксперимента — проекции, а не вёрстка. Ниши — table@1 с действиями
-// запуска и остановки, прогон — tree@1 над деревом процессов, лиды и продукты —
-// table@1 над последним планом. Монтируется в server/routes/automationLeads.js
-// под /api/automation-leads/c, целиком за requireAdmin.
+// UI эксперимента — проекции, а не вёрстка. Ниши — table@1: карта покрытия с
+// действиями проверить источник, собрать, разобрать, остановить; прогон — tree@1
+// над деревом процессов; лиды и продукты — table@1 над последним планом.
+// Монтируется в server/routes/automationLeads.js под /api/automation-leads/c,
+// целиком за requireAdmin; инициатор действия — в вехах прогона и в квоте LLM.
 
 const { Components } = require('../../components');
 const { Table } = require('../../components/table');
 const { Tree } = require('../../components/tree');
-const { scans, tree } = require('./index');
+const { desk, tree } = require('./index');
 
 module.exports = Components({
   'niches': Table({
-    rows: () => scans.nicheRows(),
+    rows: () => desk.nicheRows(),
     idKey: 'slug',
     columns: [
       { key: 'title', name: 'Ниша' },
       { key: 'city', name: 'Город' },
+      { key: 'corpus', name: 'Корпус' },
       { key: 'state', name: 'Состояние' },
-      { key: 'places', name: 'Мест', type: 'num' },
       { key: 'leads', name: 'Лидов', type: 'num' },
       { key: 'strong', name: 'Со сбоем', type: 'num' },
       { key: 'at', name: 'Разобрана' },
     ],
     actions: [
-      { id: 'scan', name: 'Разобрать', bulk: true, max: 1, run: ({ ids }) => scans.start(ids[0]) },
-      { id: 'stop', name: 'Остановить', bulk: true, max: 1, run: ({ ids }) => scans.stop(ids[0]) },
+      { id: 'probe', name: 'Проверить 2ГИС', bulk: true, max: 1, run: ({ ids, user }) => desk.probe(ids[0], { actor: user }) },
+      { id: 'collect', name: 'Собрать', bulk: true, max: 1, run: ({ ids, user }) => desk.collect(ids[0], { actor: user }) },
+      { id: 'scan', name: 'Разобрать', bulk: true, max: 1, run: ({ ids, user }) => desk.scan(ids[0], { actor: user }) },
+      { id: 'stop', name: 'Остановить', bulk: true, max: 1, run: ({ ids }) => desk.stop(ids[0]) },
     ],
   }),
 
@@ -32,6 +35,20 @@ module.exports = Components({
     store: tree,
     title: 'Прогоны',
     labels: {
+      NicheCollect: 'сбор ниши',
+      Listing: 'листинг',
+      ListingQuery: 'запрос',
+      PlaceCorpus: 'место',
+      CardPage: 'карточка',
+      SitePage: 'сайт',
+      FreshReviews: 'отзывы',
+      Marking: 'разметка',
+      MarkBatch: 'батч',
+      CorpusCommit: 'запись',
+      SourceProbe: 'проверка источника',
+      ProbeListing: 'листинг',
+      ProbeFirm: 'карточка',
+      ProbeReviews: 'отзывы',
       NicheScan: 'разбор ниши',
       Places: 'листинг',
       EachPlace: 'аудит',
@@ -44,7 +61,7 @@ module.exports = Components({
   }),
 
   'leads': Table({
-    rows: () => scans.leadRows(),
+    rows: () => desk.leadRows(),
     idKey: 'id',
     columns: [
       { key: 'name', name: 'Место', sortable: true },
@@ -72,7 +89,7 @@ module.exports = Components({
   }),
 
   'products': Table({
-    rows: () => scans.productRows(),
+    rows: () => desk.productRows(),
     idKey: 'key',
     columns: [
       { key: 'title', name: 'Продукт' },

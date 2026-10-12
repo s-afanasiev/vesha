@@ -5,8 +5,19 @@ const { DigitalGaps, LeadRule, RubricFit } = require('../server/services/automat
 const { FailureCatalog, OfferCatalog } = require('../server/services/automation-leads/catalogs');
 const { CardFacts, SiteFacts, ReviewFailures } = require('../server/services/automation-leads/audits');
 const { Places, PlaceAudit, EachPlace } = require('../server/services/automation-leads/places');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const { LeadPlan } = require('../server/services/automation-leads/LeadPlan');
-const { NicheScan, Scans } = require('../server/services/automation-leads/NicheScan');
+const { NicheScan } = require('../server/services/automation-leads/NicheScan');
+const { LeadsDesk } = require('../server/services/automation-leads/desk');
+const { Listing, PlaceCorpus, CardPage, SitePage, FreshReviews, Marking, NicheCollect, SourceProbe } = require('../server/services/automation-leads/collect');
+const { Corpus } = require('../server/services/automation-leads/corpus');
+const { PatientLlm } = require('../server/services/automation-leads/patientLlm');
+const { NicheFiles, RecordedMarking } = require('../server/services/automation-leads/sources/nicheFiles');
+const { NeedCatalog } = require('../server/services/radar/needCatalog');
+const { Patience } = require('../server/services/collectors/patience');
+const { SourceHttpError } = require('../server/services/collectors/http');
 
 const CARD = { channel: false, unconfirmed: true, schedule: true, promoted: false, branches: 1 };
 
@@ -21,6 +32,8 @@ test('digital gaps: no site weighs two, an unaudited site says nothing, a site c
     ['на сайте нет цен'],
   );
   assert.deepEqual(gaps.of({ ...CARD, unconfirmed: false }, { has: true, audited: true, ok: false }).map((g) => g.label), ['сайт не открывается', 'нет мессенджера']);
+  // таймаут или защита от ботов — «проверить не дали», пробела сайта нет
+  assert.deepEqual(gaps.of({ ...CARD, unconfirmed: false }, { has: true, audited: true, ok: false, unverifiable: true }).map((g) => g.label), ['нет мессенджера']);
 });
 
 test('lead rule: chains first, then a review failure is strong and a priced gap is weak', () => {
@@ -85,26 +98,59 @@ function fakeWorld({ slow = false } = {}) {
   };
 }
 
-const NICHE = { slug: 'test', title: 'Тест', city: 'Курск', rubrics: ['Крепёж', 'Сантехника'], hooks: { fastener_pick: ['Крепёж'] } };
+const NICHE = {
+  slug: 'test',
+  title: 'Тест',
+  city: 'Курск',
+  citySlug: 'kursk',
+  queries: ['крепёж', 'сантехника'],
+  rubrics: ['Крепёж', 'Сантехника'],
+  pack: 'hardware',
+  hooks: { fastener_pick: ['Крепёж'] },
+};
 
-function scanOf(world) {
-  return new NicheScan({
-    worldOf: () => world,
-    places: new Places(),
-    each: new EachPlace(new PlaceAudit({
-      card: new CardFacts(),
-      site: new SiteFacts(),
-      reviews: new ReviewFailures({ catalog: new FailureCatalog(), freshFrom: '2024-01-01' }),
-    })),
-    plan: new LeadPlan(),
+// Дверь с настоящими работами и подставным внешним миром.
+function deskOf({ world = fakeWorld(), corpus = null, collectWorld = null } = {}) {
+  const tree = new ProcessTreeStore();
+  const desk = new LeadsDesk({
+    tree,
+    niches: { test: NICHE },
+    corpus: corpus || { info: async () => null },
+    scan: new NicheScan({
+      places: new Places(),
+      each: new EachPlace(new PlaceAudit({
+        card: new CardFacts(),
+        site: new SiteFacts(),
+        reviews: new ReviewFailures({ catalog: new FailureCatalog(), freshFrom: '2024-01-01' }),
+      })),
+      plan: new LeadPlan(),
+    }),
+    collect: new NicheCollect({
+      listing: new Listing({ maxPages: 7, quietPages: 2 }),
+      each: new EachPlace(new PlaceCorpus({
+        card: new CardPage(),
+        site: new SitePage(),
+        reviews: new FreshReviews({ from: '2024-01-01', perOrg: 10 }),
+      }), { nodeType: 'PlaceCorpus' }),
+      marking: new Marking(),
+      corpus,
+    }),
+    probe: new SourceProbe(),
+    scanWorld: corpus
+      ? (niche) => ({
+        source: new NicheFiles(corpus.dirOf(niche.slug)),
+        marking: new RecordedMarking(path.join(corpus.dirOf(niche.slug), 'marks.jsonl')),
+      })
+      : () => world,
+    collectWorld: collectWorld || (() => { throw new Error('мира сбора нет'); }),
   });
+  return { desk, tree };
 }
 
 test('niche scan runs end to end: named skips in the tree, leads with evidence in the plan', async () => {
-  const tree = new ProcessTreeStore();
-  const scans = new Scans({ scan: scanOf(fakeWorld()), tree, niches: { test: NICHE } });
-  scans.start('test');
-  await scans.settle('test');
+  const { desk, tree } = deskOf();
+  desk.scan('test');
+  await desk.settle('test');
 
   const nodes = tree.nodesOf(tree.roots()[0].nodeId);
   const status = (type, title) => nodes.filter((n) => n.nodeType === type && (!title || n.title === title)).map((n) => [n.status, n.outcome && n.outcome.code]);
@@ -117,7 +163,7 @@ test('niche scan runs end to end: named skips in the tree, leads with evidence i
   // отзыв сотрудника не довод, отзыв 2020 года не свежий, не размеченный — «не знаем», а не «сбоев нет»
   assert.equal(reviewsNode.payload.summary, '3 свежих · ответов владельца 1 · сбои: консультация и подбор · не размечено 1');
 
-  const { plan } = scans.plans.get('test');
+  const { plan } = desk.plans.get('test');
   assert.deepEqual(plan.counts, { places: 3, leads: 2, strong: 1, weak: 1, rejected: 0, unaudited: 1 });
   const [first, second] = plan.leads;
   assert.equal(first.name, 'Метизы у дома');
@@ -131,15 +177,162 @@ test('niche scan runs end to end: named skips in the tree, leads with evidence i
   assert.deepEqual([site.places, site.strong, site.weak], [2, 0, 2]);
 });
 
-test('scans: one run per niche at a time, and stop cancels the run in the tree', async () => {
-  const tree = new ProcessTreeStore();
-  const scans = new Scans({ scan: scanOf(fakeWorld({ slow: true })), tree, niches: { test: NICHE } });
-  scans.start('test');
-  assert.throws(() => scans.start('test'), /уже идёт/);
-  assert.equal(scans.stop('test').stopping, true);
-  await scans.settle('test');
+test('desk: one run per lane at a time, and stop cancels the run in the tree', async () => {
+  const { desk, tree } = deskOf({ world: fakeWorld({ slow: true }) });
+  desk.scan('test');
+  assert.throws(() => desk.scan('test'), /сейчас идёт разбор/);
+  assert.equal(desk.stop('test').stopping.length, 1);
+  await desk.settle('test');
   assert.equal(tree.roots()[0].status, 'cancelled');
-  assert.equal(scans.plans.has('test'), false);
-  assert.equal(scans.stop('test').stopping, false);
-  assert.throws(() => scans.start('nope'), /неизвестная ниша/);
+  assert.equal(desk.plans.has('test'), false);
+  assert.equal(desk.stop('test').stopping.length, 0);
+  assert.throws(() => desk.scan('nope'), /неизвестная ниша/);
+});
+
+// Подставной 2ГИС, сайты и модель: тот же контракт, что у TwoGis, WebPage и PatientLlm.
+function fakeSources({ refuseFirmAfter = Infinity, slowMs = 0 } = {}) {
+  const P1 = { branch_id: '1', name: 'Метизы у дома', address: 'ул. Ленина, 1', rubrics: ['Крепёж'] };
+  const P2 = { branch_id: '2', name: 'Сантехника плюс', address: 'ул. Мира, 2', rubrics: ['Сантехника'] };
+  const P3 = { branch_id: '3', name: 'Мебельная фурнитура', address: 'ул. Садовая, 3', rubrics: ['Мебельная фурнитура'] };
+  const pages = { 'крепёж': [[P1, P3], [P1], [P3]], 'сантехника': [[P2]] };
+  const cards = {
+    1: { branch_id: '1', name: P1.name, rubrics: P1.rubrics, phones: ['+7 000'], websites: [], messengers: [], schedule: true, unconfirmed: false, promoted: false, branches: 1 },
+    2: { branch_id: '2', name: P2.name, rubrics: P2.rubrics, phones: ['+7 111'], websites: ['santeh.example'], messengers: ['wa'], schedule: true, unconfirmed: false, promoted: true, branches: 1 },
+  };
+  const reviews = {
+    1: [
+      { review_id: 'a', rating: 1, date_created: '2025-03-01T10:00:00+03:00', text: 'Продавцы не знают ассортимент, ничего не подсказали', has_official_answer: true },
+      { review_id: 'b', rating: 5, date_created: '2020-01-01T10:00:00+03:00', text: 'старый отзыв', has_official_answer: false },
+    ],
+  };
+  let firms = 0;
+  const twogis = {
+    methods: ['listing', 'firm', 'reviews'],
+    listing: async (_city, query, page) => {
+      if (slowMs) await new Promise((r) => setTimeout(r, slowMs));
+      return (pages[query] || [])[page - 1] || [];
+    },
+    firm: async (_city, id) => {
+      firms += 1;
+      if (firms > refuseFirmAfter) throw new SourceHttpError('http_403', 'Источник ответил 403', 403);
+      return cards[id] || null;
+    },
+    reviews: async (id) => reviews[id] || [],
+  };
+  const web = { page: async (url) => (url.startsWith('https://santeh.example') ? { finalUrl: url, status: 200, text: '<a>Каталог</a>' } : { error: 'нет' }) };
+  const llm = {
+    complete: async (messages) => {
+      const ids = [...messages[1].content.matchAll(/\[id (\w+)\]/g)].map((m) => m[1]);
+      return {
+        text: JSON.stringify({ reviews: ids.map((id) => ({
+          id,
+          author: 'client',
+          signals: id === 'a' ? [{ need: 'info.explain', polarity: 'missing', service: 'fasteners', quote: 'не знают ассортимент' }] : [],
+        })) }),
+        usage: { cost_rub: 0.5 },
+      };
+    },
+  };
+  return (niche, _actor, signal) => ({
+    niche,
+    twogis: new Patience(twogis, { gapMs: 0 }),
+    web,
+    llm,
+    catalog: new NeedCatalog({ pack: niche.pack }),
+    sites: new Map(),
+    signal,
+  });
+}
+
+async function tempCorpus() {
+  return new Corpus(await fs.mkdtemp(path.join(os.tmpdir(), 'leads-corpus-')));
+}
+
+test('collect writes the corpus that scan reads: from 2GIS to leads end to end', async () => {
+  const corpus = await tempCorpus();
+  const { desk, tree } = deskOf({ corpus, collectWorld: fakeSources() });
+  desk.collect('test', { actor: { id: 'u1', email: 'admin@example.com' } });
+  await desk.settle('test');
+
+  const root = tree.roots()[0];
+  assert.equal(root.status, 'completed');
+  assert.equal(root.payload.actor, 'admin@example.com');
+  const nodes = tree.nodesOf(root.nodeId);
+  const status = (type) => nodes.filter((n) => n.nodeType === type).map((n) => [n.status, n.outcome && n.outcome.code]);
+  assert.deepEqual(status('ListingQuery'), [['completed', undefined], ['completed', undefined]]);
+  assert.deepEqual(status('SitePage'), [['skipped', 'no_site'], ['completed', undefined]]);
+  assert.deepEqual(status('FreshReviews'), [['completed', undefined], ['skipped', 'no_fresh_reviews']]);
+  assert.deepEqual(status('MarkBatch'), [['completed', undefined]]);
+
+  const info = await corpus.info('test');
+  assert.deepEqual(info.counts, { listed: 3, places: 2, cards: 2, sites: 1, reviews: 1, marked: 1, costRub: 0.5 });
+
+  desk.scan('test');
+  await desk.settle('test');
+  const { plan } = desk.plans.get('test');
+  assert.deepEqual(plan.counts, { places: 2, leads: 2, strong: 1, weak: 1, rejected: 0, unaudited: 0 });
+  assert.equal(plan.leads[0].quote, '«не знают ассортимент» (2025-03)');
+  assert.equal(plan.leads[1].gaps, 'на сайте нет цен, нельзя заказать онлайн');
+  const [row] = await desk.nicheRows();
+  assert.match(row.corpus, /мест 2 · отзывов 1 · размечено 1/);
+});
+
+test('a source refusal mid-collect stops the run and keeps the previous corpus intact', async () => {
+  const corpus = await tempCorpus();
+  const first = deskOf({ corpus, collectWorld: fakeSources() });
+  first.desk.collect('test');
+  await first.desk.settle('test');
+  const before = await fs.readFile(path.join(corpus.dirOf('test'), 'meta.json'), 'utf8');
+
+  const second = deskOf({ corpus, collectWorld: fakeSources({ refuseFirmAfter: 1 }) });
+  second.desk.collect('test');
+  await second.desk.settle('test');
+  const root = second.tree.roots()[0];
+  assert.equal(root.status, 'failed');
+  assert.equal(root.outcome.code, 'refused');
+  assert.equal(await fs.readFile(path.join(corpus.dirOf('test'), 'meta.json'), 'utf8'), before);
+  await assert.rejects(fs.access(`${corpus.dirOf('test')}.collecting`));
+});
+
+test('lanes: a 2GIS probe blocks a collect but not a scan; stop cancels the probe', async () => {
+  const corpus = await tempCorpus();
+  const { desk, tree } = deskOf({ corpus, collectWorld: fakeSources({ slowMs: 30 }) });
+  desk.probe('test');
+  assert.throws(() => desk.collect('test'), /сейчас идёт проверка 2ГИС/);
+  assert.deepEqual(desk.stop('test').stopping, ['2ГИС · Курск']);
+  await desk.settle('test');
+  assert.equal(tree.roots()[0].status, 'cancelled');
+});
+
+test('patient llm waits out the quota as a named waiting state and gives up past its ceiling', async () => {
+  const store = new ProcessTreeStore();
+  const node = store.createNode({ nodeType: 'MarkBatch' });
+  node.start();
+  let attempts = 0;
+  let seenUser = null;
+  let statusWhileWaiting = null;
+  const llm = new PatientLlm({
+    guard: async (req, task) => {
+      seenUser = req.user;
+      attempts += 1;
+      if (attempts === 1) throw Object.assign(new Error('лимит'), { code: 'llm_rate_limit', retryAfterSec: 2 });
+      return task();
+    },
+    complete: async () => ({ text: 'ok' }),
+    wait: async () => { statusWhileWaiting = store.nodesOf(node.id)[0].status; },
+  });
+  const result = await llm.forActor({ id: 'u1' }).complete([], { node });
+  assert.equal(result.text, 'ok');
+  assert.equal(statusWhileWaiting, 'waiting');
+  assert.deepEqual(seenUser, { id: 'u1' });
+  const [raw] = store.nodesOf(node.id);
+  assert.equal(raw.status, 'running');
+  assert.equal(raw.outcome, null);
+
+  const stuck = new PatientLlm({
+    guard: async () => { throw Object.assign(new Error('лимит'), { code: 'llm_rate_limit', retryAfterSec: 3600 }); },
+    wait: async () => {},
+    maxWaitMs: 60 * 1000,
+  });
+  await assert.rejects(stuck.forActor(null).complete([], {}), (err) => err.code === 'llm_quota');
 });
