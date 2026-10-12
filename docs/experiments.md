@@ -111,6 +111,7 @@ Vesha — тонкий Express + статика. Главный продукт �
 | `extract-audio` | Клиент + узкий API | Типичный новый лабораторный эксперимент: общая шапка, свои css/js, `/api/extract-audio/*`. |
 | `summarize` | Клиент + очередь + медиабинарники + AI | Долгие джобы, SSE/поллинг, история в Postgres. |
 | `podborka` | Полноценный мини-продукт | Upload, vision, поиск, квоты гостя/юзера, `/api/looks`. План: `docs/podborka-architecture.md`. |
+| `automation-leads` | Служебный, UI без своего JS | Страница = спека boot@1 из компонентов (`table@1`, `tree@1`), прогон виден деревом процессов (`server/process-tree/`). План: `docs/automation-leads-architecture.md`. |
 
 Новый эксперимент почти всегда ближе к `extract-audio` или `roc`, а не к `podborka`. Не тащи Postgres и OAuth «на всякий случай».
 

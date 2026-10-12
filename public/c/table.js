@@ -4,6 +4,8 @@
 // debounce, выбор (всё/снять/пресеты через /ids), bulk-действия с loader,
 // пагинация. События: v-select {ids}, v-action {id, response?|error?}.
 // Метод: refresh(). Состояние выбора — клиентское, живёт в элементе.
+// data-poll="3000" — тихий опрос как у v-kanban: перерисовка, только если
+// строки изменились; в фоне вкладки сервер не дёргается.
 (() => {
   'use strict';
   const { escapeHtml, fmtInt, getJson, postJson, debounce } = window.VeshaUI;
@@ -25,6 +27,7 @@
     }
 
     get src() { return this.getAttribute('src'); }
+    get pollMs() { return Number(this.getAttribute('data-poll')) || 0; }
 
     async _boot() {
       this.innerHTML = '<div class="vt-wrap"><div class="vt-msg">загрузка…</div></div>';
@@ -41,28 +44,42 @@
       this._s.limit = (meta.limits && meta.limits.pageSize) || 50;
       this._renderChrome();
       await this._load();
+      this._schedulePoll();
     }
 
     refresh() { return this._s ? this._load() : Promise.resolve(); }
 
+    _schedulePoll() {
+      const ms = this.pollMs;
+      if (!ms) return;
+      setTimeout(() => {
+        if (!document.hidden && !this._s.loading) this._load({ quiet: true });
+        this._schedulePoll();
+      }, ms);
+    }
+
     // ---------- данные ----------
 
-    async _load() {
+    async _load({ quiet = false } = {}) {
       const s = this._s;
       const seq = ++s.seq;
-      s.loading = true; this._foot();
+      if (!quiet) { s.loading = true; this._foot(); }
       const qs = new URLSearchParams({ limit: s.limit, offset: s.offset });
       if (s.sort) qs.set('sort', s.sort);
       if (s.q) qs.set('q', s.q);
       try {
         const data = await getJson(`${this.src}/rows?${qs}`);
         if (seq !== s.seq) return; // поздний ответ не мешает свежему запросу
+        const key = JSON.stringify([data.total, data.rows]);
+        if (quiet && key === s.lastKey) return; // тихий опрос: ничего не поменялось
+        s.lastKey = key;
         s.rows = data.rows || [];
         s.total = data.total || 0;
+        if (quiet) { this._renderBody(); this._foot(); this._updateSel(); }
       } catch (e) {
-        if (seq === s.seq) this._flash(e.message);
+        if (seq === s.seq && !quiet) this._flash(e.message);
       } finally {
-        if (seq === s.seq) { s.loading = false; this._renderBody(); this._foot(); }
+        if (seq === s.seq && !quiet) { s.loading = false; this._renderBody(); this._foot(); }
       }
     }
 

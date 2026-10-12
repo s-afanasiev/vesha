@@ -10,7 +10,7 @@ const express = require('express');
 
 // что умеет монтировать boot@1 на клиенте; новый вид — строка здесь и
 // конструктор в MOUNT /c/boot.js
-const KNOWN_BLOCKS = new Set(['table@1', 'kanban@1']);
+const KNOWN_BLOCKS = new Set(['table@1', 'kanban@1', 'tree@1']);
 
 function Pages(declarations) {
   const router = express.Router();

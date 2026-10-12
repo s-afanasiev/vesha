@@ -107,6 +107,35 @@ router.use('/c', experiments.requireAdmin, require('../services/pain-radar/compo
 проверяет правило). Первый источник не из памяти: карточки приходят из
 Postgres через доменную дверь.
 
+## 2б. Контракт `tree@1`
+
+Зеркало дерева процессов ([process-tree-ui-canon.md](process-tree-ui-canon.md)):
+домен объявляет `Tree({ store, title, labels })` над хранилищем
+`server/process-tree/` (`ProcessTreeStore`), каркас конструирует ручки. Только
+чтение (П14): запуск и остановка — доменные действия. База: `/api/<namespace>/c/<id>`.
+
+| Эндпоинт | Что делает |
+|---|---|
+| `GET /meta` | заголовок, подписи видов узлов `labels: { nodeType: 'подпись' }` |
+| `GET /roots` | `{ ok, version, roots }` — прогоны (корни), новые первыми |
+| `GET /tree?root=<id\|latest>&since=<version>` | `{ ok, version, unchanged: true }`, если с версии ничего не менялось, иначе `{ ok, version, rootId, tree }`; `tree: null` — прогонов нет |
+
+Узел: `nodeId`, `parentNodeId`, `nodeType`, `title`, `status`
+(`created | running | waiting | completed | skipped | failed | cancelled`),
+`payload` (строка `payload.summary` показывается в строке узла), `outcome`
+`{ ok, code, detail }`, времена. Проекция добавляет `displayStatus`,
+`statusTone`, `depth`, `lineage`, `children`, `stats` (дети по статусам) и
+`deep` — исходы внуков и глубже по виду узла: у группы из 150 мест видно
+«сайт: пропущено 68», не раскрывая каждое место. Ключи payload с секретами
+(`apiKey`, `token`, `password`…) режутся на входе в хранилище.
+
+Узел едет в контексте запуска: доменный шаг получает его аргументом и зовёт
+`node.step({ nodeType, title }, (child) => …)` — обёртка открывает ребёнка,
+закрывает его по возврату, на исключении ставит `failed` (`AbortError` —
+`cancelled`) и пробрасывает дальше; где ошибка становится результатом,
+решает вызывающий (П24). Реализация: `server/components/tree.js`,
+`server/process-tree/{index,projection}.js`. Пилот — `automation-leads/scans`.
+
 ## 3. Склад рендереров — `public/c/`
 
 Один комплект vanilla-рендереров на все проекты; контракт позволяет заменить
@@ -121,12 +150,16 @@ Postgres через доменную дверь.
 | `/c/console.js` | `VeshaUI.JobConsole` (console@1): механика джоб-консоли |
 | `/c/kanban.js` | custom element `<v-kanban src="..." data-poll="3000">` — рендерер `kanban@1` |
 | `/c/kanban.css` | тема рендерера: токены `--vk-*`, колонка красится из `/meta` (`--vk-col-color`); раскладку доски держит страница |
+| `/c/tree.js` | custom element `<v-tree src="..." data-poll="1000">` — рендерер `tree@1`: выбор прогона, статусы, фишки детей-фильтры, свёртка `deep`, порции больших групп, инспектор payload |
+| `/c/tree.css` | тема рендерера: токены `--vtr-*`, тон узла — класс `.vtr--<statusTone>` |
 | `/c/boot.js` + `/c/page.html` + `/c/page.css` | boot@1: сборка служебной страницы из спеки (`?spec=/api/<ns>/c/pages/<имя>`) |
 
 `v-table` умеет из `/meta`: клик по шапке — сортировка (`aria-sort`, стрелка),
 поиск с debounce, чекбоксы + «Выбрать всё / Снять / <пресеты>», bulk-кнопки
 действий (loader до ответа), пагинация, пусто/ошибка/загрузка. События наружу:
 `v-select { ids }`, `v-action { id, response?, error? }`; метод `refresh()`.
+`data-poll="3000"` — тихий опрос, как у `v-kanban`: перерисовка, только если
+строки изменились, выбор сохраняется, в фоне вкладки сервер не дёргается.
 Тема — то, что вчера копировали руками: шапку и строку статуса держит страница.
 
 `JobConsole` (console@1) — «как ждать джобу»: `startJob`/`awaitJob` (промис по
@@ -154,6 +187,7 @@ await jc.startJob('rubrics', body, (job) => { /* done/error */ });
 | `console@1` | кнопки→джобы→поллинг→loader→строка статуса | `scrape-console.js` (`startJob`/`withLoading`/`showJob`/`poll`) |
 | `log@1` | сырой лог с инкрементальным поллингом | пульт, песочница playwright-mcp |
 | `kanban@1` | колонки, WIP-шкала, drag&drop + кнопочный фолбэк | `ui-cab`, chat-engine dashboard |
+| `tree@1` | зеркало дерева процессов: прогоны, статусы, фильтр детей, свёртка исходов, инспектор | канон process-tree, `automation-leads` |
 | `kpi-dash@1` | KPI-карточки + sparklines | `ui-cab` |
 | `form@1` | поля+валидация+submit с loading/ошибкой | лид-форма (дубль ×4) |
 | `empty@1` | empty states, один на все списки | `ui-cab` |
@@ -228,8 +262,13 @@ id в каталог §4 + строка в `KNOWN_BLOCKS` (pages.js) и `MOUNT` 
 потом шаги 2 → 1. Редкий шаг: только при втором потребителе или явной
 просьбе (П34).
 
-Блоки, которые умеет boot@1 сегодня: `table@1`, `kanban@1`. Проверка
-сборки: неизвестный блок в спеке валит старт сервера, на странице — плашку.
+Блоки, которые умеет boot@1 сегодня: `table@1`, `kanban@1`, `tree@1`; у
+каждого необязательные `poll` (мс тихого опроса) и `title` (заголовок секции
+над блоком). Проверка сборки: неизвестный блок в спеке валит старт сервера,
+на странице — плашку. Страница эксперимента может сама быть хостом спеки:
+`public/experiments/automation-leads/index.html` — общий хром и
+`VeshaBoot.boot('/api/automation-leads/c/pages/main')`, своего JS у
+эксперимента нет.
 
 ### 5.2. «Меняем в одном месте — меняется везде?»
 
@@ -271,7 +310,13 @@ id в каталог §4 + строка в `KNOWN_BLOCKS` (pages.js) и `MOUNT` 
    агрегатах БД — там же родится SQL-`source` для агрегатов.
 5. ✅ **Спека страницы + boot** (`server/components/pages.js` + `/c/boot.js`,
    пилот `pain-radar/orgs-review`).
-6. **Рост-точка:** редактор блоков (условие в §5); `form@1`, `empty@1`,
+6. ✅ **tree@1** (`server/process-tree/`, `server/components/tree.js`,
+   `/c/tree.js`, пилот `automation-leads/scans`, 13.10.2026): зеркало дерева
+   процессов по канону process-tree с поправками; заодно `v-table` получил
+   `data-poll`, boot@1 — `title` блока. Мост вех в Postgres — шаг 2
+   automation-leads; вторые потребители — журналы опросов и разметки радара
+   идей, переезд — когда задача зайдёт в их код (храповик П41).
+7. **Рост-точка:** редактор блоков (условие в §5); `form@1`, `empty@1`,
    `log@1` — при появлении вторых потребителей.
 
 ## 7. Чего не делаем (П34)

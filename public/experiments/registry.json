@@ -172,6 +172,18 @@
         "playwright"
       ],
       "admin": true
+    },
+    {
+      "id": "automation-leads",
+      "title": "Кому автоматизировать",
+      "description": "Места ниши → карточка, сайт, отзывы → кому предложить сайт, ассистента или воронку и почему",
+      "href": "/experiments/automation-leads/",
+      "status": "wip",
+      "tech": [
+        "process-tree",
+        "2гис"
+      ],
+      "admin": true
     }
   ]
 }

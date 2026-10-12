@@ -1,6 +1,7 @@
 // boot@1 — сборка служебной страницы из спеки (docs/ui-components.md §5).
 // Спека: GET <spec-url> → {kind:'page', version:1, title, subtitle?, blocks[]}.
-// Блоки: table@1 → <v-table src>, kanban@1 → <v-kanban src [poll]>.
+// Блоки: table@1 → <v-table src [poll]>, kanban@1 → <v-kanban src [poll]>,
+// tree@1 → <v-tree src [poll]>; title блока — заголовок секции над ним.
 // Неизвестный блок — честная плашка на странице, а не молчаливый пропуск
 // (контракт проверяют при сборке, П8). Гость видит ошибку API как есть —
 // настоящая граница доступа на сервере, не здесь.
@@ -16,8 +17,9 @@
   }
 
   const MOUNT = {
-    'table@1': (b) => el('v-table', { src: b.src }),
+    'table@1': (b) => el('v-table', { src: b.src, 'data-poll': b.poll }),
     'kanban@1': (b) => el('v-kanban', { src: b.src, 'data-poll': b.poll }),
+    'tree@1': (b) => el('v-tree', { src: b.src, 'data-poll': b.poll }),
   };
 
   async function boot(specUrl) {
@@ -50,6 +52,12 @@
         note.textContent = `блок ${block.kind} — рендерера нет в boot@1`;
         root.appendChild(note);
         continue;
+      }
+      if (block.title) {
+        const head = document.createElement('h2');
+        head.className = 'boot-block-title';
+        head.textContent = block.title;
+        root.appendChild(head);
       }
       root.appendChild(make(block));
     }

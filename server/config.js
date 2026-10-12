@@ -140,6 +140,10 @@ const config = {
   ideaRadarMaxBytes: intEnv('IDEA_RADAR_MAX_BYTES', 5 * 1024 * 1024),
   // Доставка текста госактов: сколько PDF разбирать за один запуск.
   ideaRadarGovTextsBatch: intEnv('IDEA_RADAR_GOV_TEXTS_BATCH', 20),
+  // «Кому автоматизировать»: корень файлов первого прогона ниш (вне git).
+  automationLeadsDataDir:
+    process.env.AUTOMATION_LEADS_DATA_DIR ||
+    require('path').join(__dirname, '..', 'data', 'pain-radar-corpus'),
   // Путь для замера свободного места: на сервере данные могут жить на другом томе.
   diskInfoPath: process.env.DISK_INFO_PATH || process.cwd(),
   // Плитки с visibility='admin' видят только залогиненные с этими email (listEnv уже в lower-case).

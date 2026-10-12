@@ -31,7 +31,23 @@
   font-size: 13.5px;
 }
 
+.boot-block-title {
+  margin: 10px 0 -6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
 /* блоки-компоненты на светлой странице: токены рендереров → токены Vesha */
+.boot-root v-tree {
+  --vtr-bg: var(--surface, #fff);
+  --vtr-card: var(--surface-2, #f4f5f7);
+  --vtr-line: var(--border, #d9dde3);
+  --vtr-text: var(--text, #1c2430);
+  --vtr-faint: var(--text-faint, #8b95a3);
+  --vtr-info: var(--accent, #3d6ec9);
+  --vtr-ok: var(--ok, #2f9e60);
+}
+
 .boot-root v-table,
 .boot-root v-kanban {
   --vt-bg: var(--surface, #fff);

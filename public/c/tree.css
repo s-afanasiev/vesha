@@ -1,0 +1,99 @@
+/* v-tree@1 — складской рендерер контракта tree@1 (docs/ui-components.md §3).
+   Токены --vtr-* с «приборными» тёмными дефолтами, как у v-table; светлая
+   страница переопределяет их (page.css). Тон узла приходит из проекции
+   (statusTone) классом .vtr--<tone>. */
+
+v-tree {
+  display: block;
+  --vtr-bg: #12151a;
+  --vtr-card: #171b21;
+  --vtr-line: #2b313b;
+  --vtr-text: #dde3ea;
+  --vtr-faint: #8b95a3;
+  --vtr-info: #5a9bd8;
+  --vtr-ok: #4fb477;
+  --vtr-warn: #d8a04a;
+  --vtr-bad: #d86b5a;
+  --vtr-mono: ui-monospace, Consolas, "Cascadia Mono", monospace;
+}
+
+.vtr-wrap { display: grid; gap: 8px; color: var(--vtr-text); font-size: 13px; }
+.vtr-wrap * { box-sizing: border-box; }
+
+.vtr-msg { padding: 14px; text-align: center; color: var(--vtr-faint); font-size: 13px; }
+.vtr-msg--err { color: var(--vtr-bad); }
+
+.vtr-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vtr-roots {
+  background: var(--vtr-bg); color: var(--vtr-text); border: 1px solid var(--vtr-line);
+  border-radius: 7px; padding: 5px 8px; font: inherit; font-size: 12.5px; max-width: 100%;
+}
+.vtr-status { color: var(--vtr-bad); font-size: 12px; }
+
+.vtr-body {
+  border: 1px solid var(--vtr-line); border-radius: 8px; padding: 6px;
+  max-height: 520px; overflow: auto; background: var(--vtr-bg);
+}
+
+.vtr-children { margin-left: 18px; border-left: 1px dashed var(--vtr-line); padding-left: 6px; }
+
+.vtr-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  padding: 4px 6px; border-radius: 6px; cursor: pointer;
+}
+.vtr-row:hover { background: var(--vtr-card); }
+
+.vtr-caret { width: 12px; color: var(--vtr-faint); text-align: center; flex-shrink: 0; }
+
+.vtr-pill {
+  flex-shrink: 0; font-size: 11.5px; font-weight: 600; padding: 1px 8px;
+  border-radius: 999px; border: 1px solid currentColor; white-space: nowrap;
+  color: var(--vtr-faint);
+}
+.vtr--info .vtr-pill { color: var(--vtr-info); }
+.vtr--positive .vtr-pill { color: var(--vtr-ok); }
+.vtr--warn .vtr-pill { color: var(--vtr-warn); }
+.vtr--critical .vtr-pill { color: var(--vtr-bad); }
+.vtr--muted > .vtr-row .vtr-title { color: var(--vtr-faint); }
+
+.vtr-type { color: var(--vtr-faint); font-size: 12px; white-space: nowrap; }
+.vtr-title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.vtr-summary { color: var(--vtr-faint); min-width: 0; overflow-wrap: anywhere; }
+.vtr--critical > .vtr-row .vtr-summary { color: var(--vtr-bad); }
+
+.vtr-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.vtr-chip {
+  background: var(--vtr-card); color: var(--vtr-text); border: 1px solid var(--vtr-line);
+  border-radius: 999px; padding: 0 7px; font: inherit; font-size: 11.5px; cursor: pointer;
+}
+.vtr-chip:hover { border-color: var(--vtr-info); }
+.vtr-chip.is-on { border-color: var(--vtr-info); background: var(--vtr-info); color: #fff; }
+.vtr-chip--failed { color: var(--vtr-bad); }
+.vtr-chip--completed { color: var(--vtr-ok); }
+
+.vtr-deep { color: var(--vtr-faint); font-size: 12px; font-style: italic; }
+.vtr-warn { color: var(--vtr-warn); font-size: 12px; }
+.vtr-time { margin-left: auto; color: var(--vtr-faint); font-family: var(--vtr-mono); font-size: 11.5px; white-space: nowrap; }
+
+.vtr-inspect {
+  background: none; border: 1px solid transparent; border-radius: 5px; color: var(--vtr-faint);
+  font-family: var(--vtr-mono); font-size: 11px; padding: 0 5px; cursor: pointer;
+}
+.vtr-row:hover .vtr-inspect { border-color: var(--vtr-line); }
+
+.vtr-payload {
+  margin: 2px 0 6px 20px; padding: 8px 10px; border-radius: 6px;
+  background: var(--vtr-card); border: 1px solid var(--vtr-line);
+  font-family: var(--vtr-mono); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 260px; overflow: auto;
+}
+
+.vtr-more {
+  margin: 4px 0 4px 20px; background: var(--vtr-card); color: var(--vtr-text);
+  border: 1px solid var(--vtr-line); border-radius: 7px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .vtr-children { margin-left: 8px; }
+  .vtr-time { margin-left: 0; }
+}
