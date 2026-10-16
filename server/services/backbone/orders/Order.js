@@ -36,7 +36,15 @@ class Path {
   }
 }
 
+const LEGAL_FORM = /(^|[\s«"(])(ооо|оао|зао|пао|ао|ип|гуп|муп|фгуп|нко|тоо)([\s»")]|$)/i;
+
 class Order {
+  // Заявка от организации — одна из примет B2B для замеров (§6.6).
+  static fromOrganization(client) {
+    const text = String(client || '');
+    return LEGAL_FORM.test(text) || /организаци|компани/i.test(text);
+  }
+
   // Ручная заявка: клиент обязателен, контакт и текст — по желанию.
   static draft({ client, contact, text }) {
     return {

@@ -26,10 +26,11 @@ class MemoryRepository {
     return shop ? { ...shop } : null;
   }
 
-  async createShop({ slug, name, niche }, columns, makeEvents) {
+  async createShop({ slug, name, niche, mode = 'shadow' }, columns, makeEvents) {
     const existing = await this.shopBySlug(slug);
     if (existing) return existing;
-    const shop = { id: crypto.randomUUID(), slug, name, niche, tz: 'Europe/Moscow', board_version: 1, created_at: new Date().toISOString() };
+    const now = this.journal.now();
+    const shop = { id: crypto.randomUUID(), slug, name, niche, tz: 'Europe/Moscow', board_version: 1, mode, mode_since: now, created_at: now };
     this.shops.push(shop);
     this.boards.set(shop.id, columns.map((c, position) => ({ ...c, position })));
     await this.journal.appendIn(null, makeEvents(shop));
@@ -50,7 +51,7 @@ class MemoryRepository {
   }
 
   async createOrder(shopId, columnId, draft, makeEvents) {
-    const now = new Date().toISOString();
+    const now = this.journal.now();
     const number = this.rows.filter((o) => o.shop_id === shopId).reduce((m, o) => Math.max(m, o.number), 0) + 1;
     const order = {
       id: crypto.randomUUID(), shop_id: shopId, number, column_id: columnId,
@@ -66,9 +67,17 @@ class MemoryRepository {
     const order = this.rows.find((o) => o.id === orderId && o.column_id === fromColumnId);
     if (!order) throw conflict('Заявка уже переместилась — обновите доску');
     order.column_id = toColumnId;
-    order.updated_at = new Date().toISOString();
+    order.updated_at = this.journal.now();
     await this.journal.appendIn(null, events);
     return { ...order };
+  }
+
+  async setMode(shopId, from, to, events) {
+    const shop = this.shops.find((s) => s.id === shopId && s.mode === from);
+    if (!shop) throw conflict('Режим магазина уже изменился — обновите страницу');
+    Object.assign(shop, { mode: to, mode_since: this.journal.now() });
+    await this.journal.appendIn(null, events);
+    return { ...shop };
   }
 
   // ---------- черновик счёта (шаг 2): те же отказы, что у Postgres ----------
@@ -105,7 +114,7 @@ class MemoryRepository {
       throw conflict('Черновик уже правили — повторный разбор стёр бы правки');
     }
     this.draftLines = this.draftLines.filter((l) => l.order_id !== orderId);
-    const now = new Date().toISOString();
+    const now = this.journal.now();
     for (const l of lines) {
       this.draftLines.push({
         id: crypto.randomUUID(), order_id: orderId, shop_id: shopId, position: l.position,
@@ -121,7 +130,7 @@ class MemoryRepository {
   async reviewLines(_orderIds, patches, synonyms, events) {
     const targets = patches.map((p) => this.draftLines.find((l) => l.id === p.id));
     if (targets.some((l) => !l)) throw conflict('Строка черновика изменилась — обновите черновик');
-    const now = new Date().toISOString();
+    const now = this.journal.now();
     patches.forEach((p, i) => Object.assign(targets[i], {
       sku: p.sku, qty: p.qty, unit: p.unit, confidence: p.confidence, state: p.state,
       invoice_qty: p.invoiceQty, price: p.price, question: p.question,

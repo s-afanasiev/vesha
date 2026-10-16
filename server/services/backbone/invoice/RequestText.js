@@ -3,8 +3,8 @@
 // «нужен текст или таблица», а не попытка OCR (правило VESHA: только текстовые
 // источники). Выход — строки текста; что в них товар, решают Lines.
 
-const zlib = require('node:zlib');
 const { XMLParser } = require('fast-xml-parser');
+const { unzip } = require('./zip');
 
 // Отказ разбора — результат с именем, а не сбой (П24): дверь пишет parse_failed.
 class Refusal extends Error {
@@ -32,38 +32,7 @@ class PlainText {
   }
 }
 
-// ---------- xlsx: zip из XML; хватает центрального каталога и inflateRaw ----------
-
-function unzip(buf, { maxEntryBytes }) {
-  let eocd = -1;
-  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
-    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) throw new Refusal('bad_file', 'Файл не похож на xlsx: нет оглавления zip');
-  const count = buf.readUInt16LE(eocd + 10);
-  let p = buf.readUInt32LE(eocd + 16);
-  const files = new Map();
-  for (let n = 0; n < count; n++) {
-    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Refusal('bad_file', 'Файл xlsx повреждён');
-    const method = buf.readUInt16LE(p + 10);
-    const size = buf.readUInt32LE(p + 20);
-    const nameLen = buf.readUInt16LE(p + 28);
-    const skip = nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
-    const local = buf.readUInt32LE(p + 42);
-    const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
-    files.set(name, { method, size, local });
-    p += 46 + skip;
-  }
-  return (name) => {
-    const f = files.get(name);
-    if (!f) return null;
-    const start = f.local + 30 + buf.readUInt16LE(f.local + 26) + buf.readUInt16LE(f.local + 28);
-    const raw = buf.subarray(start, start + f.size);
-    if (f.method === 0) return raw.toString('utf8');
-    if (f.method !== 8) throw new Refusal('bad_file', 'Сжатие xlsx не поддерживается');
-    return zlib.inflateRawSync(raw, { maxOutputLength: maxEntryBytes }).toString('utf8');
-  };
-}
+// ---------- xlsx: zip из XML (invoice/zip.js) ----------
 
 const xml = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false, trimValues: false });
 const list = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]);
@@ -86,7 +55,7 @@ class SheetRows {
 
   // Первый лист книги: строка листа → строка текста, ячейки через табуляцию.
   async lines(data) {
-    const read = unzip(data, { maxEntryBytes: this.maxEntryBytes });
+    const read = unzip(data, { maxEntryBytes: this.maxEntryBytes, bad: (message) => new Refusal('bad_file', message) });
     const shared = read('xl/sharedStrings.xml');
     const strings = shared ? list(xml.parse(shared).sst?.si).map(runs) : [];
     const sheet = read(this.firstSheet(read));

@@ -43,7 +43,13 @@ function router(decl) {
         bulk: !!a.bulk,
         ...(a.max ? { max: a.max } : {}),
         // поля короткой формы перед запуском: значения уезжают в тело действия рядом с ids
-        ...(a.fields ? { fields: a.fields.map((f) => ({ key: f.key, label: f.label, required: !!f.required, ...(f.placeholder ? { placeholder: f.placeholder } : {}) })) } : {}),
+        ...(a.fields ? {
+          fields: a.fields.map((f) => ({
+            key: f.key, label: f.label, required: !!f.required,
+            ...(f.multiline ? { multiline: true } : {}),
+            ...(f.placeholder ? { placeholder: f.placeholder } : {}),
+          })),
+        } : {}),
       })),
       limits,
     });

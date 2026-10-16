@@ -32,6 +32,7 @@
         <nav class="boot-pages" aria-label="Экраны костяка">
           <a href="?page=main" data-page="main">Доска</a>
           <a href="?page=draft" data-page="draft">Черновики счетов</a>
+          <a href="?page=measures" data-page="measures">Замеры</a>
         </nav>
         <div data-vesha-auth-widget></div>
       </div>
@@ -50,7 +51,8 @@
   <script src="/c/boot.js"></script>
   <script>
     // экран — из ?page=; спеки — server/services/backbone/pages.js
-    const page = new URLSearchParams(location.search).get('page') === 'draft' ? 'draft' : 'main';
+    const asked = new URLSearchParams(location.search).get('page');
+    const page = ['draft', 'measures'].includes(asked) ? asked : 'main';
     document.querySelector(`.boot-pages [data-page="${page}"]`).setAttribute('aria-current', 'page');
     VeshaBoot.boot(`/api/backbone/c/pages/${page}`);
   </script>

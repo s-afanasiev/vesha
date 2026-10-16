@@ -104,3 +104,5 @@ v-table {
 .vt-form-title { font-weight: 600; }
 .vt-field { display: inline-flex; align-items: center; gap: 6px; color: var(--vt-faint); font-size: 12px; }
 .vt-field .vt-search { min-width: 160px; }
+.vt-field--wide { flex: 1 1 100%; flex-direction: column; align-items: stretch; }
+.vt-field--wide textarea { width: 100%; font-family: var(--vt-mono); font-size: 12px; resize: vertical; }

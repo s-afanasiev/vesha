@@ -10,5 +10,6 @@ const router = express.Router();
 router.use(experiments.requireAdmin);
 router.use('/c/pages', require('../services/backbone/pages'));
 router.use('/c', require('../services/backbone/components'));
+router.use('/files', require('../services/backbone/files'));
 
 module.exports = router;

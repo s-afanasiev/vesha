@@ -5,8 +5,10 @@
 // пагинация. События: v-select {ids}, v-action {id, response?|error?}.
 // Метод: refresh(). Состояние выбора — клиентское, живёт в элементе.
 // Действие с fields — короткая форма в панели перед запуском (значения едут
-// в тело рядом с ids); max — кнопка гаснет, если выбрано больше. После
-// успешного действия строки перечитываются, result.message — в ноге.
+// в тело рядом с ids; multiline — многострочное поле для вставки таблицы);
+// max — кнопка гаснет, если выбрано больше. После успешного действия строки
+// перечитываются, result.message — в ноге, result.download (путь на этом
+// сайте) — браузер скачивает файл.
 // data-poll="3000" — тихий опрос как у v-kanban: перерисовка, только если
 // строки изменились; в фоне вкладки сервер не дёргается.
 (() => {
@@ -104,6 +106,7 @@
         this._closeForm();
         const result = response && response.result;
         if (result && typeof result.message === 'string') this._note(result.message);
+        if (result && typeof result.download === 'string' && result.download.startsWith('/')) download(result.download);
         void this._load({ quiet: true });
         this.dispatchEvent(new CustomEvent('v-action', { detail: { id, response } }));
       } catch (e) {
@@ -183,8 +186,10 @@
       form.innerHTML = `
         <span class="vt-form-title">${escapeHtml(action.name)}:</span>
         ${action.fields.map((f) => `
-          <label class="vt-field">${escapeHtml(f.label)}
-            <input class="vt-search" name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}${f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : ''}>
+          <label class="vt-field${f.multiline ? ' vt-field--wide' : ''}">${escapeHtml(f.label)}
+            ${f.multiline
+              ? `<textarea class="vt-search" rows="5" name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}${f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : ''}></textarea>`
+              : `<input class="vt-search" name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}${f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : ''}>`}
           </label>`).join('')}
         <button type="submit" class="vt-btn vt-btn--act">Применить</button>
         <button type="button" class="vt-btn" data-vt="form-cancel">Отмена</button>`;
@@ -387,6 +392,15 @@
       box.checked = pageIds.length > 0 && pageIds.every((id) => s.sel.has(id));
       box.indeterminate = !box.checked && pageIds.some((id) => s.sel.has(id));
     }
+  }
+
+  function download(href) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   function cellHtml(row, c) {

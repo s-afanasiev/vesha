@@ -3,12 +3,18 @@
 // { draft, questions, facts, failures }; заявку и журнал ведёт дверь костяка.
 //
 // Правка менеджера — тоже здесь, в revise: только инструмент знает, как строка
-// черновика пересчитывается от новой позиции или количества.
+// черновика пересчитывается от новой позиции или количества. Шаг 3: выгрузка
+// черновика в xlsx для 1С (exportFile) и чтение итогового счёта из 1С для тени
+// (readInvoice + compare).
+
+const { compareDraft } = require('./FinalInvoice');
 
 class OrderToInvoice {
-  constructor(draft, { maxLines = 200 } = {}) {
-    this.draft = draft; // InvoiceDraft
+  constructor(draft, { maxLines = 200, exporter = null, finalInvoice = null } = {}) {
+    this.draft = draft;               // InvoiceDraft
     this.maxLines = maxLines;
+    this.exporter = exporter;         // InvoiceExport
+    this.finalInvoice = finalInvoice; // FinalInvoice
     this.accepts = ['text', 'xlsx', 'pdf'];
   }
 
@@ -43,6 +49,18 @@ class OrderToInvoice {
 
   item(sku) {
     return this.draft.stock.catalog.index.bySku(sku);
+  }
+
+  exportFile(lines) {
+    return this.exporter.of(lines);
+  }
+
+  readInvoice(text) {
+    return this.finalInvoice.of(text);
+  }
+
+  compare(lines, finalLines) {
+    return compareDraft(lines, finalLines);
   }
 }
 

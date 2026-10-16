@@ -36,12 +36,27 @@ class Journal {
     );
     return rows;
   }
+
+  // Журнал магазина целиком, по порядку — вход замеров (шаг 3).
+  async history(scope) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM journal_events WHERE scope = $1 ORDER BY id',
+      [String(scope)]
+    );
+    return rows;
+  }
 }
 
 // Честный простой узел (О6): тот же контракт в памяти — для тестов и прогона без базы.
+// clock — время событий: тесты замеров двигают его сами.
 class MemoryJournal {
-  constructor() {
+  constructor({ clock = () => new Date() } = {}) {
     this.events = [];
+    this.clock = clock;
+  }
+
+  now() {
+    return this.clock().toISOString();
   }
 
   async appendIn(_client, events) {
@@ -55,7 +70,7 @@ class MemoryJournal {
         data: { ...(e.data || {}) },
         actor: e.actor,
         cause: e.cause || 'manual',
-        at: new Date().toISOString(),
+        at: this.now(),
       });
     }
   }
@@ -66,6 +81,10 @@ class MemoryJournal {
 
   async forScope(scope, { limit = 200 } = {}) {
     return this.events.filter((e) => e.scope === String(scope)).reverse().slice(0, limit);
+  }
+
+  async history(scope) {
+    return this.events.filter((e) => e.scope === String(scope));
   }
 }
 

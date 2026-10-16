@@ -1,8 +1,9 @@
 // Точка сборки костяка (docs/backbone-architecture.md §4, П3): по этому файлу
-// видна система шагов 1–2 — доска с типами колонок (Board), путь заявки (Path),
+// видна система шагов 1–3 — доска с типами колонок (Board), путь заявки (Path),
 // журнал (Journal), истина (BackboneRepository), дверь сценариев (BackboneDesk),
-// каталог-фикстура с индексом атрибутов и инструмент слота «разбор заявки в счёт».
-// Сайт, ассистент, замеры и выгрузка счёта — следующие шаги §10.
+// каталог-фикстура с индексом атрибутов, инструмент слота «разбор заявки в счёт»
+// с выгрузкой в 1С, замеры из журнала и теневой режим.
+// Сайт и ассистент — шаги 4–5 §10.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -24,11 +25,22 @@ const { Match, Matches } = require('./invoice/Match');
 const { Lines, RuleLines, ModelLines, digitsInSource } = require('./invoice/Lines');
 const { RequestText, PlainText, SheetRows, PdfTextLayer } = require('./invoice/RequestText');
 const { GuardedLlm, RecordedLlm } = require('./invoice/models');
+const { InvoiceExport } = require('./invoice/InvoiceExport');
+const { FinalInvoice } = require('./invoice/FinalInvoice');
+const { Measures } = require('./measures/Measures');
+const { WorkingHours } = require('./measures/WorkingHours');
+const { Baseline } = require('./measures/Baseline');
 
 // Магазины, которые знает костяк. Один демо-магазин ниши крепежа;
 // заведение магазинов владельцами — вместе с витриной (шаг 4).
+// Новый магазин начинает с тени (14 дней базы «до»); демо показывает помощь сразу,
+// а тень у него — без срока: включить помощь снова можно по точности, не по календарю.
 const SHOPS = {
-  'demo-krepezh': { name: 'Крепёж и сантехника (демо)', niche: 'hardware' },
+  'demo-krepezh': {
+    name: 'Крепёж и сантехника (демо)', niche: 'hardware',
+    hours: { days: [1, 2, 3, 4, 5, 6], from: '09:00', to: '19:00' },
+    mode: 'help', shadowDays: 0,
+  },
 };
 const DEMO_SHOP = 'demo-krepezh';
 const FIXTURES = path.join(__dirname, 'invoice', 'fixtures');
@@ -42,19 +54,24 @@ const catalog = new Catalog(                                              // о�
 );
 
 // Разбор заявки в счёт — конвейер форм данных, названный по выходу (О1)
+const match = new Match(catalog.index, {                                  // без модели: синонимы, атрибуты, похожесть
+  autoAccept: 0.9, ask: 0.6, defaultCoating: hardwareAttributes.defaultCoating,
+});
 const orderToInvoice = new OrderToInvoice(
   new InvoiceDraft(
     new StockCheck(catalog, { pack: 'ask' }),                             // 37 шт. при упаковке по 50 — вопрос клиенту
-    new Matches(new Match(catalog.index, {                                // без модели: синонимы, атрибуты, похожесть
-      autoAccept: 0.9, ask: 0.6, defaultCoating: hardwareAttributes.defaultCoating,
-    })),
+    new Matches(match),
     new Lines(
       new RuleLines(),                                                    // «наименование — количество ед.»
       new ModelLines({ verify: digitsInSource, maxLines: 60 }),           // остаток — модели; цифры сверяются с текстом (О18)
     ),
     new RequestText({ text: new PlainText(), xlsx: new SheetRows(), pdf: new PdfTextLayer() }, { maxBytes: 5 * 1024 * 1024 }),
   ),
-  { maxLines: 200 },
+  {
+    maxLines: 200,
+    exporter: new InvoiceExport(catalog),                                 // принятые строки → xlsx для загрузки в 1С
+    finalInvoice: new FinalInvoice(catalog.index, match, new RuleLines()), // тень: итоговый счёт из 1С для сверки
+  },
 );
 
 const llm = config.backboneModel === 'recorded'
@@ -70,6 +87,11 @@ const backboneDesk = new BackboneDesk({
   shops: SHOPS,
   tool: orderToInvoice,
   llm,
+  measuresOf: (shop, spec) => new Measures(                               // замеры из журнала (§6.6)
+    new WorkingHours({ tz: shop.tz, ...spec.hours }),                     // «час» — рабочий час магазина
+    { replyWithin: 60, silence: { inbox: 60, waitingClientDays: 2 }, sessionGap: 10, b2bLines: 5 },
+  ),
+  baseline: new Baseline({ shadowDays: 14, accuracy: 0.8, minLines: 20 }), // помощь — решением с мерой (О19)
 });
 
 const demoRequest = () => fs.readFileSync(path.join(FIXTURES, 'request-20.txt'), 'utf8');

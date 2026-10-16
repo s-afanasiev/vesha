@@ -49,12 +49,12 @@ class BackboneRepository {
   }
 
   // Магазин с доской из шаблона; если магазин уже есть — вернуть его как есть.
-  async createShop({ slug, name, niche }, columns, makeEvents) {
+  async createShop({ slug, name, niche, mode = 'shadow' }, columns, makeEvents) {
     return this.tx(async (client) => {
       const inserted = await client.query(
-        `INSERT INTO backbone_shops (slug, name, niche) VALUES ($1, $2, $3)
+        `INSERT INTO backbone_shops (slug, name, niche, mode) VALUES ($1, $2, $3, $4)
          ON CONFLICT (slug) DO NOTHING RETURNING *`,
-        [slug, name, niche]
+        [slug, name, niche, mode]
       );
       if (!inserted.rows[0]) {
         const { rows } = await client.query('SELECT * FROM backbone_shops WHERE slug = $1', [slug]);
@@ -141,6 +141,20 @@ class BackboneRepository {
       await client.query('UPDATE backbone_shops SET board_version = board_version + 1 WHERE id = $1', [shopId]);
       await this.journal.appendIn(client, [...events, ...moveEvents]);
       return version + 1;
+    });
+  }
+
+  // Режим инструмента (шаг 3): смена — только из того режима, который видел пользователь.
+  async setMode(shopId, from, to, events) {
+    return this.tx(async (client) => {
+      const { rows: [shop] } = await client.query(
+        `UPDATE backbone_shops SET mode = $3, mode_since = now()
+         WHERE id = $1 AND mode = $2 RETURNING *`,
+        [shopId, from, to]
+      );
+      if (!shop) throw conflict('Режим магазина уже изменился — обновите страницу');
+      await this.journal.appendIn(client, events);
+      return shop;
     });
   }
 

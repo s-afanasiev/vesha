@@ -207,4 +207,4 @@ class Lines {
   }
 }
 
-module.exports = { Lines, RuleLines, ModelLines, digitsInSource, unitOf };
+module.exports = { Lines, RuleLines, ModelLines, digitsInSource, unitOf, BULLET };

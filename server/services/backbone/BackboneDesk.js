@@ -7,6 +7,9 @@
 // Шаг 2: заявку разбирает инструмент слота (OrderToInvoice) в черновик счёта;
 // менеджер правит строки, правка рождает синоним; parsed, draft_ready,
 // parse_failed, reviewed — события того же журнала.
+// Шаг 3: режим магазина — тень (черновик скрыт, итоговый счёт из 1С прикладывают
+// для сверки) или помощь (черновик → xlsx для 1С → «счёт отправлен»); смена
+// режима — решение с мерой (Baseline); замеры читаются из журнала (Measures).
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
@@ -24,7 +27,10 @@ function bad(message) {
 }
 
 class BackboneDesk {
-  constructor({ repository, journal, board, path, templateOf, shops, tool = null, llm = null }) {
+  constructor({
+    repository, journal, board, path, templateOf, shops, tool = null, llm = null,
+    measuresOf = null, baseline = null, clock = () => new Date(),
+  }) {
     this.repository = repository;
     this.journal = journal;
     this.boardRule = board;
@@ -33,6 +39,9 @@ class BackboneDesk {
     this.shops = shops; // slug → { name, niche }: магазины, которые костяк знает
     this.tool = tool;   // инструмент слота: разбор заявки в счёт
     this.llm = llm;     // модель для строк, которые не разобрали правила: forActor(user)
+    this.measuresOf = measuresOf; // (магазин, его описание) → Measures в часах работы магазина
+    this.baseline = baseline;     // правило тени и включения помощи
+    this.clock = clock;
   }
 
   // Магазин по slug; при первом обращении — с доской из шаблона ниши.
@@ -42,7 +51,7 @@ class BackboneDesk {
     const spec = this.shops[slug];
     if (!spec) throw notFound(`Магазин не найден: ${slug}`);
     const columns = this.boardRule.check(this.templateOf(spec.niche));
-    return this.repository.createShop({ slug, name: spec.name, niche: spec.niche }, columns, (shop) => [{
+    return this.repository.createShop({ slug, name: spec.name, niche: spec.niche, mode: spec.mode || 'shadow' }, columns, (shop) => [{
       stream: 'board', scope: shop.id, subjectId: shop.id, type: 'board_created',
       data: { niche: spec.niche, columns: columns.map((c) => c.id) }, actor, cause: 'template',
     }]);
@@ -68,7 +77,7 @@ class BackboneDesk {
     const inbox = columns.find((c) => c.type === 'inbox');
     return this.repository.createOrder(shop.id, inbox.id, { ...draft, channel: 'manual' }, (order) => [{
       stream: 'order', scope: shop.id, subjectId: order.id, type: 'received',
-      data: { number: order.number, column: inbox.id, columnType: inbox.type, channel: order.channel },
+      data: { number: order.number, column: inbox.id, columnType: inbox.type, channel: order.channel, org: Order.fromOrganization(order.client) },
       actor, cause: 'manual',
     }]);
   }
@@ -170,17 +179,19 @@ class BackboneDesk {
   }
 
   // Заявки со сводкой черновика: сколько строк принято, к выбору, нет в каталоге;
-  // последний исход разбора — из журнала.
+  // последний исход разбора и отправленный счёт — из журнала.
   async drafts(slug) {
     const shop = await this.shop(slug);
     const [orders, lines, events] = await Promise.all([
       this.repository.orders(shop.id),
       this.repository.lines(shop.id),
-      this.journal.forScope(shop.id, { limit: 1000 }),
+      this.journal.history(shop.id),
     ]);
-    const outcome = new Map(); // заявка → последнее draft_ready | parse_failed (журнал — новые первыми)
+    const outcome = new Map(); // заявка → последнее draft_ready | parse_failed
+    const sent = new Map();    // заявка → invoice_sent
     for (const e of events) {
-      if ((e.type === 'draft_ready' || e.type === 'parse_failed') && !outcome.has(e.subject_id)) outcome.set(e.subject_id, e);
+      if (e.type === 'draft_ready' || e.type === 'parse_failed') outcome.set(e.subject_id, e);
+      if (e.type === 'invoice_sent') sent.set(e.subject_id, e);
     }
     return orders.map((order) => {
       const own = lines.filter((l) => l.order_id === order.id);
@@ -195,6 +206,7 @@ class BackboneDesk {
         reviewed: count((l) => l.review),
         sum: Math.round(own.reduce((s, l) => s + (l.invoice_qty && l.price ? l.invoice_qty * l.price : 0), 0) * 100) / 100,
         outcome: outcome.get(String(order.id)) || null,
+        sent: sent.get(String(order.id)) || null,
       };
     }).reverse();
   }
@@ -224,6 +236,117 @@ class BackboneDesk {
     }
     await this.repository.reviewLines(lines.map((l) => l.order_id), patches, synonyms, events);
     return { lines: patches.length, synonyms: synonyms.length };
+  }
+
+  // ---------- шаг 3: счёт, тень и помощь, замеры ----------
+
+  async orderLines(shop, order) {
+    const lines = (await this.repository.lines(shop.id)).filter((l) => l.order_id === order.id);
+    if (!lines.length) throw bad(`Заявка №${order.number} ещё не разобрана`);
+    return lines;
+  }
+
+  async sentOf(order) {
+    return (await this.journal.forSubject('order', order.id)).find((e) => e.type === 'invoice_sent') || null;
+  }
+
+  // Строки, которые видит менеджер: в тени черновик скрыт, пока к заявке не приложен счёт.
+  async managerLines(slug) {
+    const shop = await this.shop(slug);
+    const lines = await this.repository.lines(shop.id);
+    if (shop.mode !== 'shadow') return lines;
+    const sent = new Set((await this.journal.history(shop.id)).filter((e) => e.type === 'invoice_sent').map((e) => e.subject_id));
+    return lines.filter((l) => sent.has(String(l.order_id)));
+  }
+
+  // Выгрузка черновика в xlsx для 1С: решение — событие, файл — чистое чтение (invoiceFile).
+  async exportInvoice(slug, orderId, actor) {
+    const shop = await this.shop(slug);
+    if (shop.mode === 'shadow') throw bad('Тень: черновик менеджеру не показываем — счёт делается в 1С как обычно, потом «Приложить счёт из 1С»');
+    const order = await this.orderOf(shop, orderId);
+    const file = this.tool.exportFile(await this.orderLines(shop, order));
+    await this.repository.appendEvents([{
+      stream: 'order', scope: shop.id, subjectId: order.id, type: 'invoice_exported',
+      data: { number: order.number, lines: file.included, left: file.left, sum: file.sum }, actor, cause: 'export',
+    }]);
+    return { orderId: order.id, number: order.number, included: file.included, left: file.left, sum: file.sum };
+  }
+
+  async invoiceFile(slug, orderId) {
+    const shop = await this.shop(slug);
+    if (shop.mode === 'shadow') throw bad('Тень: выгрузки черновика нет');
+    const order = await this.orderOf(shop, orderId);
+    const file = this.tool.exportFile(await this.orderLines(shop, order));
+    return { buffer: file.buffer, filename: `schet-zayavka-${order.number}.xlsx` };
+  }
+
+  // Помощь: счёт ушёл клиенту. Точность — доля строк черновика без правки менеджера.
+  async invoiceSent(slug, orderId, actor) {
+    const shop = await this.shop(slug);
+    if (shop.mode !== 'help') throw bad('Тень: приложите итоговый счёт из 1С — так считается точность черновика');
+    const order = await this.orderOf(shop, orderId);
+    if (await this.sentOf(order)) throw bad(`Счёт по заявке №${order.number} уже отправлен`);
+    const lines = await this.orderLines(shop, order);
+    const events = await this.journal.forSubject('order', order.id);
+    const lastDraft = events.map((e) => e.type).lastIndexOf('draft_ready');
+    const edited = new Set(events.slice(lastDraft + 1)
+      .filter((e) => e.type === 'reviewed' && (e.data.verdict === 'edited' || e.data.verdict === 'replaced'))
+      .map((e) => e.data.line)).size;
+    const right = lines.length - edited;
+    const sum = Math.round(lines.reduce((s, l) => s + (l.state === 'accepted' && l.invoice_qty != null && l.price != null ? l.invoice_qty * l.price : 0), 0) * 100) / 100;
+    const data = { number: order.number, mode: 'help', source: 'draft', draft: lines.length, edited, right, base: lines.length, accuracy: right / lines.length, sum };
+    await this.repository.appendEvents([{ stream: 'order', scope: shop.id, subjectId: order.id, type: 'invoice_sent', data, actor, cause: 'invoice' }]);
+    return data;
+  }
+
+  // Тень: менеджер вставляет табличную часть итогового счёта из 1С; черновик, если его
+  // ещё нет, строится тут же — сверка идёт с тем, что инструмент дал бы без человека.
+  async attachInvoice(slug, orderId, text, { actor, user = null } = {}) {
+    const shop = await this.shop(slug);
+    if (shop.mode !== 'shadow') throw bad('Помощь: счёт отмечают кнопкой «Счёт отправлен»');
+    const order = await this.orderOf(shop, orderId);
+    if (await this.sentOf(order)) throw bad(`Счёт по заявке №${order.number} уже приложен`);
+    const final = this.tool.readInvoice(text);
+    if (!final.lines.length) throw bad('В тексте нет строк счёта — вставьте табличную часть счёта из 1С');
+    let lines = (await this.repository.lines(shop.id)).filter((l) => l.order_id === order.id);
+    if (!lines.length) {
+      const parsed = await this.parseOrder(slug, order.id, { actor, user });
+      if (!parsed.ok) throw bad(`Черновик не построен: ${parsed.message}`);
+      lines = await this.orderLines(shop, order);
+    }
+    const cmp = this.tool.compare(lines, final.lines);
+    const data = { number: order.number, mode: 'shadow', source: 'attached', ...cmp, unknown: final.unknown.length };
+    await this.repository.appendEvents([{ stream: 'order', scope: shop.id, subjectId: order.id, type: 'invoice_sent', data, actor, cause: 'invoice' }]);
+    return data;
+  }
+
+  // Замеры магазина: отчёт из журнала, режим и решение о помощи.
+  async measures(slug) {
+    const shop = await this.shop(slug);
+    const spec = this.shops[slug] || {};
+    const measures = this.measuresOf(shop, spec);
+    const now = this.clock().getTime();
+    const report = measures.report(await this.journal.history(shop.id), { now, mode: shop.mode });
+    const since = new Date(shop.mode_since).getTime();
+    const current = measures.metrics(report.cards.filter((c) => c.mode === shop.mode && c.receivedAt >= since), now);
+    const shadowDays = spec.shadowDays ?? this.baseline.shadowDays;
+    const decision = shop.mode === 'shadow' ? this.baseline.decide({ shop, metrics: current, now, shadowDays }) : null;
+    return { shop, report, current, decision, days: this.baseline.daysOf(shop, now), shadowDays };
+  }
+
+  // Смена режима: помощь — только решением с мерой; тень — всегда (новая база «до»).
+  async switchMode(slug, to, actor) {
+    if (to !== 'shadow' && to !== 'help') throw bad(`Неизвестный режим: ${to}`);
+    const { shop, current, decision, days } = await this.measures(slug);
+    if (shop.mode === to) throw bad(to === 'help' ? 'Помощь уже включена' : 'Тень уже идёт');
+    if (to === 'help' && !decision.ok) throw bad(`Помощь пока нельзя: ${decision.reason}`);
+    const data = to === 'help'
+      ? { from: shop.mode, to, reason: decision.reason, snapshot: this.baseline.snapshot(current, days) }
+      : { from: shop.mode, to, reason: 'новая база «до»' };
+    await this.repository.setMode(shop.id, shop.mode, to, [{
+      stream: 'shop', scope: shop.id, subjectId: shop.id, type: 'mode_changed', data, actor, cause: 'decision',
+    }]);
+    return data;
   }
 
   // Решение по одной строке: новые поля, синоним (артикул) или null, данные события.
