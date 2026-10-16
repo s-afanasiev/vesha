@@ -1,7 +1,8 @@
 // boot@1 — сборка служебной страницы из спеки (docs/ui-components.md §5).
 // Спека: GET <spec-url> → {kind:'page', version:1, title, subtitle?, blocks[]}.
 // Блоки: table@1 → <v-table src [poll]>, kanban@1 → <v-kanban src [poll]>,
-// tree@1 → <v-tree src [poll]>; title блока — заголовок секции над ним.
+// tree@1 → <v-tree src [poll]>, stages@1 → <v-stages src key [poll]> (key — из
+// ?<param> адреса страницы); title блока — заголовок секции над ним.
 // Неизвестный блок — честная плашка на странице, а не молчаливый пропуск
 // (контракт проверяют при сборке, П8). Гость видит ошибку API как есть —
 // настоящая граница доступа на сервере, не здесь.
@@ -20,6 +21,12 @@
     'table@1': (b) => el('v-table', { src: b.src, 'data-poll': b.poll }),
     'kanban@1': (b) => el('v-kanban', { src: b.src, 'data-poll': b.poll }),
     'tree@1': (b) => el('v-tree', { src: b.src, 'data-poll': b.poll }),
+    // ключ пути — из адреса страницы: ?<param>=… (окно статуса по ссылке)
+    'stages@1': (b) => el('v-stages', {
+      src: b.src,
+      key: new URLSearchParams(location.search).get(b.param || 'key'),
+      'data-poll': b.poll,
+    }),
   };
 
   async function boot(specUrl) {

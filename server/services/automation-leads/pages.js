@@ -17,4 +17,17 @@ module.exports = Pages({
       { kind: 'tree@1', src: `${BASE}/scans`, poll: 1000, title: 'Прогон: что реально произошло' },
     ],
   },
+  'funnel': {
+    title: 'Воронка лидов',
+    subtitle: 'лид — я × компания × оффер: «Разобрать» кладёт новые компании в «Найден», дальше ведёт человек; отказ — с причиной, ожидание — со сроком, каждый переход — событие журнала',
+    blocks: [
+      { kind: 'kanban@1', src: `${BASE}/funnel`, poll: 4000, title: 'Воронка' },
+      { kind: 'table@1', src: `${BASE}/funnel-journal`, poll: 4000, title: 'Журнал воронки' },
+    ],
+  },
+  'lead': {
+    title: 'Путь лида',
+    subtitle: 'окно статуса: шаги одного лида из журнала переходов',
+    blocks: [{ kind: 'stages@1', src: `${BASE}/lead-path`, param: 'lead', title: 'Шаги' }],
+  },
 });

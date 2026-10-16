@@ -1,0 +1,80 @@
+/* v-stages@1 — путь одной карточки по шагам (docs/ui-components.md §2а).
+   Токены --vs-*; внутри v-kanban берёт его токены --vk-*, на странице —
+   светлые дефолты: окно статуса смотрит внешняя сторона. */
+
+v-stages { display: block; }
+
+.vs-msg { padding: 10px; font-size: 13px; color: var(--vs-faint, var(--vk-faint, #8b95a3)); }
+.vs-msg--err { color: var(--vs-bad, var(--vk-bad, #d86b5a)); }
+
+.vs-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 10px; }
+.vs-title { font-size: 15px; color: var(--vs-text, var(--vk-text, #1c2430)); }
+.vs-sub { font-size: 12.5px; color: var(--vs-faint, var(--vk-faint, #8b95a3)); }
+
+.vs-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vs-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 6px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 10px 6px 6px;
+  font-size: 12.5px;
+  color: var(--vs-text, var(--vk-text, #1c2430));
+  background: var(--vs-card, var(--vk-card, #fff));
+  border: 1px solid var(--vs-line, var(--vk-line, #d9dde3));
+  border-radius: 999px;
+}
+.vs-step:not(:last-child)::after {
+  content: '→';
+  position: relative;
+  grid-column: 3;
+  grid-row: 1;
+  margin-left: 8px;
+  color: var(--vs-faint, var(--vk-faint, #8b95a3));
+}
+
+.vs-dot {
+  grid-row: 1 / span 2;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  color: var(--vs-faint, var(--vk-faint, #8b95a3));
+  border: 1px solid var(--vs-line, var(--vk-line, #d9dde3));
+}
+.vs-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-at, .vs-note { grid-column: 2; font-size: 11px; color: var(--vs-faint, var(--vk-faint, #8b95a3)); }
+
+.vs-step--done .vs-dot { color: #fff; background: var(--vs-ok, #2f9e60); border-color: var(--vs-ok, #2f9e60); }
+.vs-step--current { border-color: var(--vs-accent, var(--vk-accent2, #3d6ec9)); box-shadow: 0 0 0 1px var(--vs-accent, var(--vk-accent2, #3d6ec9)); }
+.vs-step--current .vs-dot { color: #fff; background: var(--vs-accent, var(--vk-accent2, #3d6ec9)); border-color: var(--vs-accent, var(--vk-accent2, #3d6ec9)); }
+.vs-step--current .vs-note { color: var(--vs-warn, var(--vk-warn, #b7791f)); font-weight: 600; }
+.vs-step--next { opacity: 0.6; border-style: dashed; }
+.vs-step--next .vs-name { font-weight: 500; }
+
+.vs-exit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  border-radius: 10px;
+  border: 1px solid var(--vs-bad, var(--vk-bad, #d86b5a));
+  color: var(--vs-text, var(--vk-text, #1c2430));
+}
+.vs-exit--done { border-color: var(--vs-ok, #2f9e60); }
+.vs-exit--waiting { border-color: var(--vs-warn, var(--vk-warn, #b7791f)); }
