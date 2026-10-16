@@ -96,3 +96,11 @@ v-table {
 .vt-msg--err { color: var(--vt-bad); }
 .vt-pager { margin-left: auto; display: flex; gap: 6px; }
 .vt-pager[hidden] { display: none; }
+
+/* ---------- форма действия (fields) ---------- */
+
+.vt-form { padding: 8px 10px; border: 1px solid var(--vt-line); border-radius: 8px; background: var(--vt-card); }
+.vt-form[hidden] { display: none; }
+.vt-form-title { font-weight: 600; }
+.vt-field { display: inline-flex; align-items: center; gap: 6px; color: var(--vt-faint); font-size: 12px; }
+.vt-field .vt-search { min-width: 160px; }

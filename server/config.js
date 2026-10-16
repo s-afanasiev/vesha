@@ -149,6 +149,9 @@ const config = {
   twogisReviewsKey: process.env.TWOGIS_REVIEWS_KEY || '6e7e1929-4ea9-4a5d-8c05-d601860389bd',
   twogisGapMs: intEnv('TWOGIS_GAP_MS', 1600),
   twogisCooldownMin: intEnv('TWOGIS_COOLDOWN_MIN', 30),
+  // Костяк, разбор заявки: модель для строк вне правил — шлюз (gateway, квота инициатора)
+  // или записанные ответы демо-заявки (recorded, без сети и ключа).
+  backboneModel: process.env.BACKBONE_MODEL === 'recorded' ? 'recorded' : 'gateway',
   // Путь для замера свободного места: на сервере данные могут жить на другом томе.
   diskInfoPath: process.env.DISK_INFO_PATH || process.cwd(),
   // Плитки с visibility='admin' видят только залогиненные с этими email (listEnv уже в lower-case).

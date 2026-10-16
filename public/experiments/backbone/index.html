@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Костяк: доска заявок — Vesha</title>
+  <title>Костяк: доска и черновики — Vesha</title>
   <script>
     try {
       document.documentElement.dataset.theme =
@@ -17,12 +17,24 @@
   <link rel="stylesheet" href="/c/table.css" />
   <link rel="stylesheet" href="/c/kanban.css" />
   <link rel="stylesheet" href="/c/page.css" />
+  <style>
+    .boot-pages { display: inline-flex; gap: 0.25rem; }
+    .boot-pages a { padding: 0.3rem 0.75rem; border-radius: 9999px; color: var(--text-muted); text-decoration: none; font-size: 0.95rem; }
+    .boot-pages a:hover { color: var(--text-heading); }
+    .boot-pages a[aria-current="page"] { background: var(--surface-inset); color: var(--text-heading); font-weight: 600; }
+  </style>
 </head>
 <body class="page-experiments">
   <main class="experiments">
     <div class="experiments__nav">
       <a class="back-link" href="/experiments/">← Эксперименты</a>
-      <div data-vesha-auth-widget></div>
+      <div class="experiments__nav-end">
+        <nav class="boot-pages" aria-label="Экраны костяка">
+          <a href="?page=main" data-page="main">Доска</a>
+          <a href="?page=draft" data-page="draft">Черновики счетов</a>
+        </nav>
+        <div data-vesha-auth-widget></div>
+      </div>
     </div>
 
     <!-- UI костяка — проекции, а не вёрстка: страницу собирает boot@1 из спеки
@@ -37,7 +49,10 @@
   <script src="/c/kanban.js"></script>
   <script src="/c/boot.js"></script>
   <script>
-    VeshaBoot.boot('/api/backbone/c/pages/main');
+    // экран — из ?page=; спеки — server/services/backbone/pages.js
+    const page = new URLSearchParams(location.search).get('page') === 'draft' ? 'draft' : 'main';
+    document.querySelector(`.boot-pages [data-page="${page}"]`).setAttribute('aria-current', 'page');
+    VeshaBoot.boot(`/api/backbone/c/pages/${page}`);
   </script>
 </body>
 </html>

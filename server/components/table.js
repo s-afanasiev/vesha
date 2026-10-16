@@ -37,7 +37,14 @@ function router(decl) {
       select: {
         presets: ((decl.select && decl.select.presets) || []).map((p) => ({ id: p.id, name: p.name })),
       },
-      actions: (decl.actions || []).map((a) => ({ id: a.id, name: a.name, bulk: !!a.bulk })),
+      actions: (decl.actions || []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        bulk: !!a.bulk,
+        ...(a.max ? { max: a.max } : {}),
+        // поля короткой формы перед запуском: значения уезжают в тело действия рядом с ids
+        ...(a.fields ? { fields: a.fields.map((f) => ({ key: f.key, label: f.label, required: !!f.required, ...(f.placeholder ? { placeholder: f.placeholder } : {}) })) } : {}),
+      })),
       limits,
     });
   });
@@ -67,6 +74,9 @@ function router(decl) {
       const ids = Array.isArray(req.body.ids) ? req.body.ids.map((v) => String(v)).filter(Boolean) : [];
       if (action.bulk && !ids.length) throw new Error('ничего не выбрано');
       if (action.max && ids.length > action.max) throw new Error(`не больше ${action.max} строк за раз`);
+      for (const f of action.fields || []) {
+        if (f.required && !String(req.body[f.key] ?? '').trim()) throw new Error(`${f.label}: пусто`);
+      }
       // user — инициатор действия, как в kanban@1 /move: от его имени вехи и квоты (П37)
       const result = await action.run({ ids, body: req.body, user: req.user || null });
       res.json({ ok: true, result });

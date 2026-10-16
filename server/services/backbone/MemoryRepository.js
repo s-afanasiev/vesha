@@ -1,6 +1,7 @@
 // Честный простой узел (О6): контракт BackboneRepository в памяти — для тестов
 // и прогона без базы. Те же отказы, что у Postgres: версия доски, перенос из
-// чужой колонки, колонка с карточками не удаляется.
+// чужой колонки, колонка с карточками не удаляется, черновик с правками менеджера
+// не перезаписывается повторным разбором.
 
 const crypto = require('node:crypto');
 
@@ -16,6 +17,8 @@ class MemoryRepository {
     this.shops = [];
     this.boards = new Map(); // shopId → колонки
     this.rows = [];           // заявки
+    this.draftLines = [];     // строки черновиков
+    this.synonymRows = [];    // синонимы магазинов
   }
 
   async shopBySlug(slug) {
@@ -66,6 +69,70 @@ class MemoryRepository {
     order.updated_at = new Date().toISOString();
     await this.journal.appendIn(null, events);
     return { ...order };
+  }
+
+  // ---------- черновик счёта (шаг 2): те же отказы, что у Postgres ----------
+
+  async appendEvents(events) {
+    await this.journal.appendIn(null, events);
+  }
+
+  withNumber(line) {
+    const order = this.rows.find((o) => o.id === line.order_id);
+    return { ...line, candidates: [...line.candidates], number: order ? order.number : null };
+  }
+
+  async lines(shopId) {
+    return this.draftLines
+      .filter((l) => l.shop_id === shopId)
+      .map((l) => this.withNumber(l))
+      .sort((a, b) => b.number - a.number || a.position - b.position);
+  }
+
+  async linesByIds(ids) {
+    const wanted = new Set(ids);
+    return this.draftLines.filter((l) => wanted.has(l.id)).map((l) => this.withNumber(l))
+      .sort((a, b) => a.number - b.number || a.position - b.position);
+  }
+
+  async synonyms(shopId) {
+    return this.synonymRows.filter((s) => s.shop_id === shopId).map((s) => ({ ...s }))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
+  async saveDraft(shopId, orderId, lines, events) {
+    if (this.draftLines.some((l) => l.order_id === orderId && l.review)) {
+      throw conflict('Черновик уже правили — повторный разбор стёр бы правки');
+    }
+    this.draftLines = this.draftLines.filter((l) => l.order_id !== orderId);
+    const now = new Date().toISOString();
+    for (const l of lines) {
+      this.draftLines.push({
+        id: crypto.randomUUID(), order_id: orderId, shop_id: shopId, position: l.position,
+        source: l.source, name: l.name, qty: l.qty, unit: l.unit, origin: l.origin, verify: l.verify,
+        sku: l.sku, confidence: l.confidence, state: l.state, candidates: [...(l.candidates || [])],
+        invoice_qty: l.invoiceQty, price: l.price, question: l.question,
+        review: null, reviewed_by: null, reviewed_at: null, created_at: now,
+      });
+    }
+    await this.journal.appendIn(null, events);
+  }
+
+  async reviewLines(_orderIds, patches, synonyms, events) {
+    const targets = patches.map((p) => this.draftLines.find((l) => l.id === p.id));
+    if (targets.some((l) => !l)) throw conflict('Строка черновика изменилась — обновите черновик');
+    const now = new Date().toISOString();
+    patches.forEach((p, i) => Object.assign(targets[i], {
+      sku: p.sku, qty: p.qty, unit: p.unit, confidence: p.confidence, state: p.state,
+      invoice_qty: p.invoiceQty, price: p.price, question: p.question,
+      review: p.review, reviewed_by: p.reviewedBy, reviewed_at: now,
+    }));
+    for (const s of synonyms) {
+      const known = this.synonymRows.find((r) => r.shop_id === s.shopId && r.phrase === s.phrase);
+      if (known) Object.assign(known, { hits: known.sku === s.sku ? known.hits + 1 : 1, sku: s.sku, updated_at: now });
+      else this.synonymRows.push({ shop_id: s.shopId, phrase: s.phrase, sku: s.sku, example: s.example, hits: 1, created_by: s.createdBy, created_at: now, updated_at: now });
+    }
+    await this.journal.appendIn(null, events);
   }
 
   async saveBoard(shopId, version, columns, moves, events, movedEvent) {

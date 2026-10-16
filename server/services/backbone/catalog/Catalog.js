@@ -1,7 +1,8 @@
 // Каталог магазина (docs/backbone-architecture.md §4): общее для сайта, ассистента
-// и инструмента — читается один раз (П5). Шаг 1 MVP: источник — файл-фикстура
+// и инструмента — читается один раз (П5). Источник до шага 6 — файл-фикстура
 // на 300 позиций (честный простой узел, О6; пересборка — scripts/backbone-catalog-fixture.mjs).
-// Живая выгрузка 1С / МойСклад, индекс атрибутов и синонимы — шаги 2 и 6.
+// Индекс атрибутов строится из тех же позиций при первом обращении; синонимы —
+// у магазина (backbone_synonyms), их читает разбор. Живая выгрузка 1С / МойСклад — шаг 6.
 
 const fs = require('node:fs');
 
@@ -43,14 +44,24 @@ class CsvFeed {
 }
 
 class Catalog {
-  constructor(feed) {
+  constructor(feed, index = null) {
     this.feed = feed;
+    this.attributeIndex = index;
     this.cache = null;
+    this.built = false;
   }
 
   items() {
     if (!this.cache) this.cache = this.feed.read();
     return this.cache;
+  }
+
+  get index() {
+    if (!this.built) {
+      this.attributeIndex.build(this.items());
+      this.built = true;
+    }
+    return this.attributeIndex;
   }
 
   bySku(sku) {

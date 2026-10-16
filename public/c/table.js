@@ -4,6 +4,9 @@
 // debounce, выбор (всё/снять/пресеты через /ids), bulk-действия с loader,
 // пагинация. События: v-select {ids}, v-action {id, response?|error?}.
 // Метод: refresh(). Состояние выбора — клиентское, живёт в элементе.
+// Действие с fields — короткая форма в панели перед запуском (значения едут
+// в тело рядом с ids); max — кнопка гаснет, если выбрано больше. После
+// успешного действия строки перечитываются, result.message — в ноге.
 // data-poll="3000" — тихий опрос как у v-kanban: перерисовка, только если
 // строки изменились; в фоне вкладки сервер не дёргается.
 (() => {
@@ -23,6 +26,7 @@
       this.addEventListener('click', (e) => this._onClick(e));
       this.addEventListener('keydown', (e) => this._onKey(e));
       this.addEventListener('change', (e) => this._onChange(e));
+      this.addEventListener('submit', (e) => this._onSubmit(e));
       this._boot();
     }
 
@@ -92,11 +96,15 @@
       return data.ids || [];
     }
 
-    async _runAction(id, btn) {
+    async _runAction(id, btn, values = {}) {
       const ids = [...this._s.sel];
       btn.disabled = true; btn.classList.add('loading');
       try {
-        const response = await postJson(`${this.src}/actions/${encodeURIComponent(id)}`, { ids });
+        const response = await postJson(`${this.src}/actions/${encodeURIComponent(id)}`, { ...values, ids });
+        this._closeForm();
+        const result = response && response.result;
+        if (result && typeof result.message === 'string') this._note(result.message);
+        void this._load({ quiet: true });
         this.dispatchEvent(new CustomEvent('v-action', { detail: { id, response } }));
       } catch (e) {
         this._flash(e.message);
@@ -115,7 +123,11 @@
       const t = e.target.closest('[data-vt-sort], [data-vt-action], [data-vt], [data-vt-preset]');
       if (!t || !this.contains(t)) return;
       if (t.dataset.vtSort) return this._toggleSort(t.dataset.vtSort, t.dataset.vtType);
-      if (t.dataset.vtAction) return void this._runAction(t.dataset.vtAction, t);
+      if (t.dataset.vtAction) {
+        const action = s.meta.actions.find((a) => a.id === t.dataset.vtAction);
+        if (action && action.fields && action.fields.length) return this._openForm(action);
+        return void this._runAction(t.dataset.vtAction, t);
+      }
       if (t.dataset.vtPreset) {
         return void this._ids(t.dataset.vtPreset)
           .then((ids) => this._setSelection(new Set(ids)))
@@ -127,6 +139,7 @@
             .then((ids) => this._setSelection(new Set(ids)))
             .catch((err) => this._flash(err.message));
         case 'clear': return this._setSelection(new Set());
+        case 'form-cancel': return this._closeForm();
         case 'prev': s.offset = Math.max(0, s.offset - s.limit); return void this._load();
         case 'next':
           if (s.offset + s.limit < s.total) { s.offset += s.limit; void this._load(); }
@@ -162,6 +175,41 @@
       }
     }
 
+    // ---------- форма действия ----------
+
+    _openForm(action) {
+      const form = this._els.form;
+      form.dataset.action = action.id;
+      form.innerHTML = `
+        <span class="vt-form-title">${escapeHtml(action.name)}:</span>
+        ${action.fields.map((f) => `
+          <label class="vt-field">${escapeHtml(f.label)}
+            <input class="vt-search" name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}${f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : ''}>
+          </label>`).join('')}
+        <button type="submit" class="vt-btn vt-btn--act">Применить</button>
+        <button type="button" class="vt-btn" data-vt="form-cancel">Отмена</button>`;
+      form.hidden = false;
+      const first = form.querySelector('input');
+      if (first) first.focus();
+    }
+
+    _closeForm() {
+      const form = this._els && this._els.form;
+      if (!form) return;
+      form.hidden = true;
+      form.innerHTML = '';
+      delete form.dataset.action;
+    }
+
+    _onSubmit(e) {
+      const form = e.target;
+      if (!this._els || form !== this._els.form) return;
+      e.preventDefault();
+      const values = Object.fromEntries(new FormData(form).entries());
+      const btn = this.querySelector(`[data-vt-action="${CSS.escape(form.dataset.action)}"]`);
+      if (btn) void this._runAction(form.dataset.action, btn, values);
+    }
+
     _toggleSort(key, type) {
       const s = this._s;
       const cur = s.sort ? (s.sort[0] === '-' ? { key: s.sort.slice(1), dir: -1 } : { key: s.sort, dir: 1 }) : null;
@@ -185,6 +233,16 @@
       this.dispatchEvent(new CustomEvent('v-select', { detail: { ids: [...this._s.sel] } }));
     }
 
+    _note(msg) {
+      const el = this._els && this._els.msg;
+      if (!el) return;
+      el.classList.remove('vt-msg--err');
+      el.textContent = msg;
+      this._s.noteUntil = Date.now() + 8000; // перерисовка ноги не стирает сообщение раньше срока
+      clearTimeout(this._s.flash);
+      this._s.flash = setTimeout(() => this._foot(), 8000);
+    }
+
     _flash(msg) {
       const el = this._els && this._els.msg;
       if (!el) return;
@@ -205,7 +263,7 @@
         .map((p) => `<button type="button" class="vt-btn" data-vt-preset="${escapeHtml(p.id)}">${escapeHtml(p.name)}</button>`)
         .join('');
       const actions = m.actions
-        .map((a) => `<button type="button" class="vt-btn vt-btn--act" data-vt-action="${escapeHtml(a.id)}"${a.bulk ? ' data-bulk="1"' : ''}>${escapeHtml(a.name)}</button>`)
+        .map((a) => `<button type="button" class="vt-btn vt-btn--act" data-vt-action="${escapeHtml(a.id)}"${a.bulk ? ' data-bulk="1"' : ''}${a.max ? ` data-max="${Number(a.max)}"` : ''}>${escapeHtml(a.name)}</button>`)
         .join('');
       this.innerHTML = `
         <div class="vt-wrap">
@@ -217,6 +275,7 @@
             <span class="vt-selinfo" role="status"></span>
             <span class="vt-actions">${actions}</span>
           </div>
+          <form class="vt-bar vt-form" hidden></form>
           <div class="vt-scroll">
             <table class="vt-table"><thead></thead><tbody></tbody></table>
           </div>
@@ -232,6 +291,7 @@
       this._els = {
         search: this.querySelector('.vt-search'),
         selinfo: this.querySelector('.vt-selinfo'),
+        form: this.querySelector('.vt-form'),
         thead: this.querySelector('thead'),
         tbody: this.querySelector('tbody'),
         range: this.querySelector('.vt-range'),
@@ -301,7 +361,7 @@
         this._els.prev.disabled = s.offset === 0;
         this._els.next.disabled = s.offset + s.limit >= s.total;
       }
-      if (!this._els.msg.classList.contains('vt-msg--err')) {
+      if (!this._els.msg.classList.contains('vt-msg--err') && !(s.noteUntil > Date.now())) {
         this._els.msg.textContent = s.loading ? 'загрузка…' : '';
       }
     }
@@ -313,7 +373,8 @@
         ? `выбрано ${s.sel.size} из ${s.total}`
         : (s.total ? `всего ${s.total}` : '');
       this.querySelectorAll('[data-vt-action]').forEach((btn) => {
-        if (btn.dataset.bulk === '1') btn.disabled = s.sel.size === 0;
+        const max = Number(btn.dataset.max) || 0;
+        btn.disabled = (btn.dataset.bulk === '1' && s.sel.size === 0) || (max > 0 && s.sel.size > max);
       });
     }
 

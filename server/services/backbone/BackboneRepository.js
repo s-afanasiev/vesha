@@ -14,6 +14,13 @@ function conflict(message) {
 }
 
 const COLUMN_SQL = 'SELECT id, title, type, color, wip_limit AS "limit", position FROM backbone_board_columns';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// NUMERIC приходит из pg строкой — строка черновика наружу уходит с числами.
+const num = (v) => (v == null ? null : Number(v));
+function lineRow(r) {
+  return { ...r, qty: num(r.qty), confidence: num(r.confidence), invoice_qty: num(r.invoice_qty), price: num(r.price) };
+}
 
 class BackboneRepository {
   constructor(db, journal) {
@@ -134,6 +141,91 @@ class BackboneRepository {
       await client.query('UPDATE backbone_shops SET board_version = board_version + 1 WHERE id = $1', [shopId]);
       await this.journal.appendIn(client, [...events, ...moveEvents]);
       return version + 1;
+    });
+  }
+
+  // ---------- черновик счёта: строки заявки и синонимы (шаг 2) ----------
+
+  async appendEvents(events) {
+    return this.tx((client) => this.journal.appendIn(client, events));
+  }
+
+  async lines(shopId) {
+    const { rows } = await this.db.query(
+      `SELECT l.*, o.number FROM backbone_order_lines l JOIN backbone_orders o ON o.id = l.order_id
+       WHERE l.shop_id = $1 ORDER BY o.number DESC, l.position`,
+      [shopId]
+    );
+    return rows.map(lineRow);
+  }
+
+  async linesByIds(ids) {
+    const { rows } = await this.db.query(
+      `SELECT l.*, o.number FROM backbone_order_lines l JOIN backbone_orders o ON o.id = l.order_id
+       WHERE l.id = ANY($1::uuid[]) ORDER BY o.number, l.position`,
+      [ids.filter((id) => UUID.test(id))]
+    );
+    return rows.map(lineRow);
+  }
+
+  async synonyms(shopId) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM backbone_synonyms WHERE shop_id = $1 ORDER BY updated_at DESC',
+      [shopId]
+    );
+    return rows;
+  }
+
+  // Черновик целиком: строки прошлого разбора заменяются, если менеджер их ещё не правил.
+  async saveDraft(shopId, orderId, lines, events) {
+    return this.tx(async (client) => {
+      await client.query('SELECT 1 FROM backbone_orders WHERE id = $1 FOR UPDATE', [orderId]);
+      const { rows: [{ reviewed }] } = await client.query(
+        'SELECT count(*)::int AS reviewed FROM backbone_order_lines WHERE order_id = $1 AND review IS NOT NULL',
+        [orderId]
+      );
+      if (reviewed) throw conflict('Черновик уже правили — повторный разбор стёр бы правки');
+      await client.query('DELETE FROM backbone_order_lines WHERE order_id = $1', [orderId]);
+      for (const l of lines) {
+        await client.query(
+          `INSERT INTO backbone_order_lines (order_id, shop_id, position, source, name, qty, unit, origin, verify,
+             sku, confidence, state, candidates, invoice_qty, price, question)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          [orderId, shopId, l.position, l.source, l.name, l.qty, l.unit, l.origin, l.verify,
+            l.sku, l.confidence, l.state, JSON.stringify(l.candidates || []), l.invoiceQty, l.price, l.question]
+        );
+      }
+      await this.journal.appendIn(client, events);
+    });
+  }
+
+  // Правка менеджера: строки, синонимы и события — одной транзакцией; заявки
+  // блокируются по порядку id, чтобы встречные правки не сцепились.
+  async reviewLines(orderIds, patches, synonyms, events) {
+    return this.tx(async (client) => {
+      for (const id of [...new Set(orderIds)].sort()) {
+        await client.query('SELECT 1 FROM backbone_orders WHERE id = $1 FOR UPDATE', [id]);
+      }
+      for (const p of patches) {
+        const { rowCount } = await client.query(
+          `UPDATE backbone_order_lines SET sku = $2, qty = $3, unit = $4, confidence = $5, state = $6,
+             invoice_qty = $7, price = $8, question = $9, review = $10, reviewed_by = $11, reviewed_at = now()
+           WHERE id = $1`,
+          [p.id, p.sku, p.qty, p.unit, p.confidence, p.state, p.invoiceQty, p.price, p.question, p.review, p.reviewedBy]
+        );
+        if (!rowCount) throw conflict('Строка черновика изменилась — обновите черновик');
+      }
+      for (const s of synonyms) {
+        await client.query(
+          `INSERT INTO backbone_synonyms (shop_id, phrase, sku, example, created_by)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (shop_id, phrase) DO UPDATE
+             SET hits = CASE WHEN backbone_synonyms.sku = EXCLUDED.sku THEN backbone_synonyms.hits + 1 ELSE 1 END,
+                 sku = EXCLUDED.sku, updated_at = now()`,
+          [s.shopId, s.phrase, s.sku, s.example, s.createdBy]
+        );
+      }
+      await this.journal.appendIn(client, events);
     });
   }
 
