@@ -5,6 +5,12 @@ const config = require('./config');
 
 const pool = new Pool(config.dbConfig);
 
+// Схема готова: мосты, которым нужны таблицы при старте (вехи дерева процессов),
+// ждут это обещание, а не гонятся с миграциями. Без базы оно не исполняется —
+// мосты тогда просто молчат.
+let markMigrated;
+const migrated = new Promise((resolve) => { markMigrated = resolve; });
+
 function query(text, params) {
   return pool.query(text, params);
 }
@@ -52,6 +58,7 @@ async function migrate() {
       client.release();
     }
   }
+  markMigrated();
 }
 
 module.exports = {
@@ -59,4 +66,5 @@ module.exports = {
   query,
   withClient,
   migrate,
+  migrated,
 };

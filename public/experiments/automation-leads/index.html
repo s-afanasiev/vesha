@@ -15,14 +15,28 @@
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="/c/ui.css" />
   <link rel="stylesheet" href="/c/table.css" />
+  <link rel="stylesheet" href="/c/kanban.css" />
   <link rel="stylesheet" href="/c/tree.css" />
+  <link rel="stylesheet" href="/c/stages.css" />
   <link rel="stylesheet" href="/c/page.css" />
+  <style>
+    .boot-pages { display: inline-flex; gap: 0.25rem; }
+    .boot-pages a { padding: 0.3rem 0.75rem; border-radius: 9999px; color: var(--text-muted); text-decoration: none; font-size: 0.95rem; }
+    .boot-pages a:hover { color: var(--text-heading); }
+    .boot-pages a[aria-current="page"] { background: var(--surface-inset); color: var(--text-heading); font-weight: 600; }
+  </style>
 </head>
 <body class="page-experiments">
   <main class="experiments">
     <div class="experiments__nav">
       <a class="back-link" href="/experiments/">← Эксперименты</a>
-      <div data-vesha-auth-widget></div>
+      <div class="experiments__nav-end">
+        <nav class="boot-pages" aria-label="Экраны эксперимента">
+          <a href="?page=main" data-page="main">Разбор ниш</a>
+          <a href="?page=funnel" data-page="funnel">Воронка лидов</a>
+        </nav>
+        <div data-vesha-auth-widget></div>
+      </div>
     </div>
 
     <!-- UI эксперимента — проекции, а не вёрстка: страницу собирает boot@1 из спеки
@@ -34,10 +48,18 @@
   <script src="/auth.js"></script>
   <script src="/c/ui.js"></script>
   <script src="/c/table.js"></script>
+  <script src="/c/kanban.js"></script>
   <script src="/c/tree.js"></script>
+  <script src="/c/stages.js"></script>
   <script src="/c/boot.js"></script>
   <script>
-    VeshaBoot.boot('/api/automation-leads/c/pages/main');
+    // экран — из ?page=; спеки — server/services/automation-leads/pages.js;
+    // окно статуса одного лида — ?page=lead&lead=<id> (ссылка из подробностей карточки)
+    const wanted = new URLSearchParams(location.search).get('page');
+    const page = ['funnel', 'lead'].includes(wanted) ? wanted : 'main';
+    const tab = document.querySelector(`.boot-pages [data-page="${page === 'lead' ? 'funnel' : page}"]`);
+    if (tab) tab.setAttribute('aria-current', 'page');
+    VeshaBoot.boot(`/api/automation-leads/c/pages/${page}`);
   </script>
 </body>
 </html>

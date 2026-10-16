@@ -128,6 +128,7 @@ v-kanban { display: block; }
 .vk-badge { font-size: 11px; color: var(--vk-faint, #8b95a3); }
 .vk-badge--draft { color: var(--vk-accent2, #5a9bd8); font-weight: 600; }
 .vk-badge--waiting { color: var(--vk-warn, #d8a04a); font-weight: 600; }
+.vk-badge--bad { color: var(--vk-bad, #d86b5a); font-weight: 600; }
 
 /* кнопочный фолбэк переноса (мобайл/клавиатура): на hover-устройствах —
    по наведению на карточку, на сенсорных — видны всегда */
@@ -231,3 +232,42 @@ v-kanban { display: block; }
 .vk-cfg__del { margin-left: auto; color: var(--vk-bad, #d86b5a) !important; }
 .vk-cfg__remove { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; color: var(--vk-warn, #d8a04a); }
 .vk-col--add { border-style: dashed; border-left-width: 1px; }
+
+/* вопрос перед переносом (колонка с ask) и подробности карточки (details) */
+.vk-ask__what { grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: var(--vk-text, #dde3ea); }
+
+.vk-panel.vk-details { display: block; }
+.vk-details > * + * { margin-top: 10px; }
+.vk-details__head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.vk-details__title { font-size: 15px; color: var(--vk-text, #dde3ea); }
+.vk-details__sub { font-size: 12.5px; color: var(--vk-faint, #8b95a3); }
+
+.vk-facts {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.vk-facts dt { color: var(--vk-faint, #8b95a3); }
+.vk-facts dd { margin: 0; color: var(--vk-text, #dde3ea); overflow-wrap: anywhere; }
+.vk-facts a { color: var(--vk-accent2, #5a9bd8); }
+
+.vk-details__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.vk-details__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.vk-details__label { font-size: 12px; font-weight: 600; color: var(--vk-faint, #8b95a3); margin-bottom: 4px; }
+.vk-details__journal ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; max-height: 220px; overflow-y: auto; }
+.vk-details__journal li { font-size: 12.5px; color: var(--vk-text, #dde3ea); }
+.vk-details__journal time { color: var(--vk-faint, #8b95a3); margin-right: 4px; }
+.vk-details__who { color: var(--vk-faint, #8b95a3); font-size: 11.5px; margin-left: 4px; }
+
+@media (max-width: 520px) {
+  .vk-facts { grid-template-columns: 1fr; }
+  .vk-facts dd { margin-bottom: 4px; }
+}

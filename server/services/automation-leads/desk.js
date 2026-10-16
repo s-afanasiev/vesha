@@ -18,7 +18,10 @@ class Runs {
     this.active = new Map();
   }
 
-  start({ nodeType, title, niche, actor, lanes, work, summarize }) {
+  // ctx прогона (П37): узел, сигнал отмены и тот, кто нажал, — от его имени квоты
+  // и воронка. facts — что запомнить в корне сверх строки итога: корень
+  // переживает рестарт (мост вех в базу), а план в памяти — нет.
+  start({ nodeType, title, niche, actor, user = null, lanes, work, summarize, facts }) {
     const busy = [...this.active.values()].find((r) => r.lanes.some((l) => lanes.includes(l)));
     if (busy) throw new Error(`сейчас идёт ${KIND_TITLE[busy.nodeType] || busy.nodeType}: «${busy.title}»`);
     const root = this.tree.createNode({ nodeType, title, payload: { niche, actor } });
@@ -28,8 +31,8 @@ class Runs {
     run.done = (async () => {
       root.start();
       try {
-        const result = await work({ node: root, signal: controller.signal });
-        root.complete({ summary: summarize ? summarize(result) : undefined });
+        const result = await work({ node: root, signal: controller.signal, user });
+        root.complete({ summary: summarize ? summarize(result) : undefined, ...(facts ? facts(result) : {}) });
       } catch (err) {
         if (err && err.name === 'AbortError') root.cancel('остановлено человеком');
         else root.fail(err);
@@ -77,13 +80,15 @@ class LeadsDesk {
       title: `${niche.title} · ${niche.city}`,
       niche: slug,
       actor: actorName(actor),
+      user: actor,
       lanes: [`niche:${slug}`],
       work: async (ctx) => {
         const plan = await this.scanWork.run(niche, this.scanWorld(niche), ctx);
         this.plans.set(slug, { plan, at: new Date().toISOString() });
         return plan;
       },
-      summarize: (plan) => `лидов ${plan.counts.leads} из ${plan.counts.places} мест`,
+      summarize: (plan) => `лидов ${plan.counts.leads} из ${plan.counts.places} мест${plan.intake && plan.intake.created != null ? ` · в воронку новых ${plan.intake.created}` : ''}`,
+      facts: (plan) => ({ counts: plan.counts }),
     });
   }
 
@@ -129,7 +134,7 @@ class LeadsDesk {
       : '';
     return Promise.all(Object.values(this.niches).map(async (n) => {
       const info = await this.corpus.info(n.slug);
-      const last = this.plans.get(n.slug);
+      const last = this.lastScan(n.slug);
       const kinds = this.runs.kindsFor(n.slug);
       const c = info && info.counts;
       return {
@@ -142,12 +147,22 @@ class LeadsDesk {
             info.collectedAt ? `собран ${MOSCOW.format(new Date(info.collectedAt))}` : 'собран скриптами',
             c ? `мест ${c.places} · отзывов ${c.reviews} · размечено ${c.marked}` : null,
           ].filter(Boolean).join(' · '),
-        state: (kinds.length ? `идёт: ${kinds.map((k) => KIND_TITLE[k]).join(', ')}` : last ? 'разобрана' : '—') + refused,
-        leads: last ? last.plan.counts.leads : null,
-        strong: last ? last.plan.counts.strong : null,
+        state: (kinds.length ? `идёт: ${kinds.map((k) => KIND_TITLE[k]).join(', ')}` : last ? (last.restored ? 'разобрана до рестарта — строки лидов в воронке, план: «Разобрать»' : 'разобрана') : '—') + refused,
+        leads: last ? last.counts.leads : null,
+        strong: last ? last.counts.strong : null,
         at: last ? MOSCOW.format(new Date(last.at)) : '',
       };
     }));
+  }
+
+  // Последний разбор ниши: план этого процесса, а после рестарта — корень
+  // прогона из восстановленного дерева (итог без строк плана).
+  lastScan(slug) {
+    const live = this.plans.get(slug);
+    if (live) return { counts: live.plan.counts, at: live.at };
+    const root = this.runs.tree.roots().find((r) => r.nodeType === 'NicheScan' && r.status === 'completed'
+      && r.payload.niche === slug && r.payload.counts);
+    return root ? { counts: root.payload.counts, at: root.finishedAt, restored: true } : null;
   }
 
   leadRows() {

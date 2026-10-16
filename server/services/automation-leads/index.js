@@ -2,14 +2,20 @@
 // целиком, читается как оглавление. Архитектура и решения —
 // docs/automation-leads-architecture.md.
 //
-// Два сценария над одним корпусом ниши:
-//   сбор   — 2ГИС и сайты мест → корпус на диске (листинг, карточки, сайты, отзывы, разметка);
-//   разбор — корпус → кому из бизнеса предложить сайт с каталогом, умного ассистента
-//            или канбан-воронку и почему.
+// Два сценария над одним корпусом ниши и воронка после них:
+//   сбор    — 2ГИС и сайты мест → корпус на диске (листинг, карточки, сайты, отзывы, разметка);
+//   разбор  — корпус → кому из бизнеса предложить сайт с каталогом, умного ассистента
+//             или канбан-воронку и почему → лиды в воронку владельца;
+//   воронка — лид «я × компания × оффер» со своей судьбой и журналом в Postgres;
+//             ведёт человек: пишет, звонит и переносит сам.
 
 const path = require('node:path');
 const config = require('../../config');
+const db = require('../../db');
 const { ProcessTreeStore } = require('../../process-tree');
+const { TreeLog, PgTreeRows } = require('../../process-tree/persist');
+const { Journal } = require('../backbone/orders/Journal');
+const { Board, STAGE_TYPES } = require('../backbone/board/Board');
 const { TwoGis } = require('../collectors/twogis');
 const { WebPage } = require('../collectors/webPage');
 const { Patience } = require('../collectors/patience');
@@ -25,10 +31,16 @@ const { DigitalGaps, LeadRule } = require('./rules');
 const { LeadPlan } = require('./LeadPlan');
 const { NicheScan } = require('./NicheScan');
 const { LeadsDesk } = require('./desk');
+const { LeadPath, FUNNEL_TEMPLATE } = require('./funnel/Lead');
+const { LeadFunnel, LeadIntake } = require('./funnel/LeadFunnel');
+const { LeadRepository } = require('./funnel/LeadRepository');
 const { NICHES } = require('./niches');
 
 // общее: дерево прогонов, корпус на диске, внешний мир за обёртками терпения
 const tree = new ProcessTreeStore({ keepRoots: 20 });                     // вехи: что реально произошло
+new TreeLog(new PgTreeRows(db), {                                         // мост в Postgres: прогоны переживают рестарт
+  tree: 'automation-leads', flushMs: 500, ready: db.migrated,
+}).attach(tree);
 const corpus = new Corpus(path.resolve(config.automationLeadsDataDir));   // niches/<slug>/ — одна раскладка
 const twogis = new Patience(new TwoGis({ reviewsKey: config.twogisReviewsKey }), {
   gapMs: config.twogisGapMs,                                              // пауза между любыми обращениями
@@ -49,7 +61,17 @@ const collect = new NicheCollect({
   corpus,
 });
 
-// разбор: корпус → план лидов
+// воронка: лиды владельца в Postgres, журнал — общий с костяком
+const journal = new Journal(db);                                          // stream 'lead', scope — воронка владельца
+const funnel = new LeadFunnel({
+  repository: new LeadRepository(db, journal),
+  journal,
+  board: new Board({ types: STAGE_TYPES, required: ['inbox', 'done', 'refused'], maxColumns: 12 }), // те же смысловые типы, что у заявок
+  path: new LeadPath({ maxReason: 200, maxNote: 1000, maxWaitDays: 365 }), // отказ — с причиной, ожидание — со сроком
+  template: FUNNEL_TEMPLATE,                                              // найден → отобран → предложение → … → договорились
+});
+
+// разбор: корпус → план лидов → воронка
 const scan = new NicheScan({
   places: new Places(),                                                   // места ниши из корпуса
   each: new EachPlace(new PlaceAudit({
@@ -62,6 +84,7 @@ const scan = new NicheScan({
     rule: new LeadRule({ maxBranches: 3 }),
     offers: new OfferCatalog(),
   }),
+  intake: new LeadIntake(funnel),                                         // лиды плана → воронка того, кто нажал «Разобрать»
 });
 
 const desk = new LeadsDesk({                                              // дверь: собрать, разобрать, проверить, остановить
@@ -87,4 +110,4 @@ const desk = new LeadsDesk({                                              // д�
   twogis,
 });
 
-module.exports = { desk, tree, NICHES };
+module.exports = { desk, tree, funnel, NICHES };

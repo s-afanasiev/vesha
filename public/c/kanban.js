@@ -12,6 +12,11 @@
 // порядок, цвет, лимит, удаление с переносом карточек, новая колонка. Колонки
 // тогда перечитываются из /meta на каждом такте; пока открыта форма или
 // настройка, опрос доску не перерисовывает — ввод не теряется.
+// Если источник объявил details — клик по карточке открывает подробности
+// (GET /cards/:id): факты, путь <v-stages> (если подключён /c/stages.js и
+// meta.details.stages), журнал и действия карточки из meta.actions с короткой
+// формой (POST /cards/:id/actions/:id). Колонка с ask — перед переносом в неё
+// рендерер спрашивает поля (причина, срок) и шлёт их в тот же POST /move.
 (() => {
   'use strict';
   const { escapeHtml, getJson, postJson, toast } = window.VeshaUI;
@@ -26,6 +31,7 @@
         selectedId: null,
         dragging: false, moving: false, seq: 0,
         panel: null, config: false, pendingRemove: null, busy: false,
+        details: null, actionForm: null, ask: null, stagesEl: null,
       };
       this.addEventListener('click', (e) => this._onClick(e));
       this.addEventListener('change', (e) => this._onChange(e));
@@ -67,10 +73,12 @@
 
     _editing() {
       const s = this._s;
-      return !!(s.panel || s.config || s.busy);
+      return !!(s.panel || s.config || s.busy || s.ask || s.actionForm);
     }
 
-    refresh() {
+    // force — перерисовать, даже если открыта панель: после действия человека
+    // (перенос, действие карточки), а не по такту опроса.
+    refresh(force = false) {
       const seq = ++this._s.seq;
       const s = this._s;
       // колонки с конструктором живые — перечитываем их вместе с карточками
@@ -85,7 +93,7 @@
           // во время перетаскивания доску не перерисовываем — призрак умрёт;
           // свежие данные лягут при dragend (или следующем такте); открытую
           // форму и настройку тоже не трогаем
-          if (!this._s.dragging && !this._s.moving && !this._editing()) this._render();
+          if (!this._s.dragging && !this._s.moving && (force || !this._editing())) this._render();
         })
         .catch((e) => {
           if (seq === this._s.seq && !this._s.dragging) {
@@ -106,12 +114,28 @@
 
     // ---------- перемещения (drag&drop и кнопки — одна дверь) ----------
 
-    _move(cardId, to) {
+    // Колонка спрашивает поля (ask) — сначала короткая форма, потом перенос.
+    _requestMove(cardId, to) {
+      const s = this._s;
+      const card = s.cards.find((c) => String(c[s.meta.idKey]) === String(cardId));
+      if (!card || String(card[s.meta.columnKey]) === String(to)) return;
+      const col = s.meta.columns.find((c) => c.id === to);
+      if (col && col.ask && col.ask.length) {
+        s.ask = { cardId: String(cardId), to };
+        this._render();
+        const first = this.querySelector('[data-vk-form="ask"] input, [data-vk-form="ask"] textarea');
+        if (first) first.focus();
+        return;
+      }
+      this._move(cardId, to);
+    }
+
+    _move(cardId, to, fields = {}) {
       const s = this._s;
       const card = s.cards.find((c) => String(c[s.meta.idKey]) === String(cardId));
       if (!card || String(card[s.meta.columnKey]) === String(to)) return Promise.resolve();
       s.moving = true;
-      return postJson(`${this.src}/move`, { cardId, to })
+      return postJson(`${this.src}/move`, { ...fields, cardId, to })
         .then(() => {
           card[s.meta.columnKey] = to; // оптимистично, источник подтвердил
           this.dispatchEvent(new CustomEvent('v-move', { detail: { cardId, to } }));
@@ -122,7 +146,8 @@
         })
         .finally(() => {
           s.moving = false;
-          this.refresh();
+          this.refresh(!s.panel && !s.config);
+          if (s.details && s.details.id === String(cardId)) this._loadDetails(s.details.id);
         });
     }
 
@@ -161,7 +186,7 @@
       e.preventDefault();
       col.classList.remove('is-over');
       const cardId = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || this._s.dragId;
-      if (cardId) this._move(cardId, col.dataset.col);
+      if (cardId) this._requestMove(cardId, col.dataset.col);
     }
 
     // ---------- события (делегирование) ----------
@@ -183,7 +208,7 @@
       if (btn && this.contains(btn)) {
         const card = btn.closest('.vk-card');
         const to = this._neighbourCol(card, btn.dataset.vkMove);
-        if (to) this._move(card.dataset.id, to);
+        if (to) this._requestMove(card.dataset.id, to);
         return;
       }
       const card = e.target.closest('.vk-card');
@@ -191,6 +216,7 @@
         this.selectedId = card.dataset.id;
         const data = s.cards.find((c) => String(c[s.meta.idKey]) === String(card.dataset.id));
         this.dispatchEvent(new CustomEvent('v-card-click', { detail: { id: card.dataset.id, card: data } }));
+        if (s.meta.details && s.meta.details.enabled) this._openDetails(card.dataset.id);
       }
     }
 
@@ -219,11 +245,15 @@
     _onAct(act) {
       const s = this._s;
       if (act === 'create') s.panel = s.panel === 'create' ? null : 'create';
-      if (act === 'cancel') s.panel = null;
+      if (act === 'cancel') { s.panel = null; s.ask = null; }
       if (act === 'config') { s.config = !s.config; s.pendingRemove = null; }
+      if (act === 'close-details') { s.details = null; s.actionForm = null; s.stagesEl = null; this.selectedId = null; }
+      if (act.startsWith('action:')) s.actionForm = act.slice('action:'.length);
+      if (act === 'action-cancel') s.actionForm = null;
       this._render();
-      if (act === 'create' && s.panel) {
-        const first = this.querySelector('.vk-panel input, .vk-panel textarea');
+      const form = act === 'create' && s.panel ? 'create' : act.startsWith('action:') ? 'action' : null;
+      if (form) {
+        const first = this.querySelector(`[data-vk-form="${form}"] input, [data-vk-form="${form}"] textarea`);
         if (first) first.focus();
       }
       if (!this._editing()) this.refresh();
@@ -294,6 +324,16 @@
         this._configure({ op: 'add', title: values.title, type: values.type });
         return;
       }
+      if (form.dataset.vkForm === 'ask') {
+        const { cardId, to } = s.ask || {};
+        s.ask = null;
+        if (cardId) this._move(cardId, to, values);
+        return;
+      }
+      if (form.dataset.vkForm === 'action') {
+        this._runAction(form.dataset.action, values);
+        return;
+      }
       s.busy = true;
       postJson(`${this.src}/cards`, values)
         .then(() => {
@@ -325,8 +365,13 @@
              ${configure ? `<button type="button" class="vk-tool${s.config ? ' is-on' : ''}" data-vk-act="config" aria-pressed="${s.config}">${s.config ? 'Готово' : 'Настроить колонки'}</button>` : ''}
            </div>`
         : '';
-      const panel = s.panel === 'create' ? this._createHtml() : '';
+      const panel = (s.panel === 'create' ? this._createHtml() : '')
+        + (s.ask ? this._askHtml() : '')
+        + (s.details ? this._detailsHtml() : '');
       const addCol = s.config ? this._addColumnHtml() : '';
+      // перерисовка не сбрасывает прокрутку длинных колонок и журнала карточки
+      const scrolls = new Map([...this.querySelectorAll('[data-col] .vk-col__cards, .vk-details__journal ol')]
+        .map((el) => [el.closest('[data-col]') ? el.closest('[data-col]').dataset.col : 'journal', el.scrollTop]));
       this.innerHTML = toolbar + panel + m.columns.map((col) => {
         const list = byCol.get(col.id);
         const count = col.limit
@@ -343,16 +388,15 @@
             <div class="vk-col__cards">${cards || '<div class="vk-col__empty">пусто</div>'}</div>
           </div>`;
       }).join('') + addCol;
+      for (const el of this.querySelectorAll('[data-col] .vk-col__cards, .vk-details__journal ol')) {
+        const top = scrolls.get(el.closest('[data-col]') ? el.closest('[data-col]').dataset.col : 'journal');
+        if (top) el.scrollTop = top;
+      }
+      this._mountStages();
     }
 
     _createHtml() {
-      const fields = (this._s.meta.create.fields || []).map((f) => {
-        const req = f.required ? ' required' : '';
-        const input = f.multiline
-          ? `<textarea name="${escapeHtml(f.key)}" rows="3"${req}></textarea>`
-          : `<input name="${escapeHtml(f.key)}" type="text"${req}>`;
-        return `<label class="vk-field"><span>${escapeHtml(f.label || f.key)}${f.required ? ' *' : ''}</span>${input}</label>`;
-      }).join('');
+      const fields = (this._s.meta.create.fields || []).map(fieldHtml).join('');
       return `
         <form class="vk-panel" data-vk-form="create">
           ${fields}
@@ -361,6 +405,130 @@
             <button type="button" class="vk-tool" data-vk-act="cancel">Отмена</button>
           </div>
         </form>`;
+    }
+
+    // ---------- вопрос перед переносом, подробности и действия карточки ----------
+
+    _askHtml() {
+      const s = this._s;
+      const col = s.meta.columns.find((c) => c.id === s.ask.to);
+      const card = s.cards.find((c) => String(c[s.meta.idKey]) === s.ask.cardId);
+      if (!col || !card) return '';
+      return `
+        <form class="vk-panel vk-ask" data-vk-form="ask">
+          <div class="vk-ask__what">«${escapeHtml(card[s.meta.card.title] ?? '')}» → «${escapeHtml(col.name)}»</div>
+          ${(col.ask || []).map(fieldHtml).join('')}
+          <div class="vk-panel__actions">
+            <button type="submit" class="vk-tool is-on">Перенести</button>
+            <button type="button" class="vk-tool" data-vk-act="cancel">Отмена</button>
+          </div>
+        </form>`;
+    }
+
+    _openDetails(id) {
+      const s = this._s;
+      if (s.details && s.details.id === String(id)) return;
+      s.details = { id: String(id), data: null, error: null };
+      s.actionForm = null;
+      s.stagesEl = null;
+      this._render();
+      this._loadDetails(s.details.id);
+    }
+
+    _loadDetails(id) {
+      const s = this._s;
+      return getJson(`${this.src}/cards/${encodeURIComponent(id)}`)
+        .then((data) => {
+          if (s.details && s.details.id === id) { s.details.data = data; s.details.error = null; }
+        })
+        .catch((e) => {
+          if (s.details && s.details.id === id) s.details.error = e.message;
+        })
+        .finally(() => {
+          if (s.stagesEl && s.stagesEl.refresh) s.stagesEl.refresh();
+          if (!this._editing()) this._render();
+        });
+    }
+
+    _runAction(actionId, values) {
+      const s = this._s;
+      const id = s.details && s.details.id;
+      if (!id) return;
+      s.busy = true;
+      postJson(`${this.src}/cards/${encodeURIComponent(id)}/actions/${encodeURIComponent(actionId)}`, values)
+        .then(() => {
+          s.actionForm = null;
+          toast('Готово', { kind: 'ok' });
+        })
+        .catch((e) => toast(`Не получилось: ${e.message}`, { kind: 'err' }))
+        .finally(() => {
+          s.busy = false;
+          this._loadDetails(id);
+          this.refreshCards();
+        });
+    }
+
+    _detailsHtml() {
+      const s = this._s, m = s.meta, d = s.details.data;
+      const head = (title, sub) => `
+        <div class="vk-details__head">
+          <div><strong class="vk-details__title">${escapeHtml(title)}</strong>${sub ? ` <span class="vk-details__sub">${escapeHtml(sub)}</span>` : ''}</div>
+          <button type="button" class="vk-tool" data-vk-act="close-details" aria-label="Закрыть подробности">×</button>
+        </div>`;
+      if (!d) {
+        const msg = s.details.error
+          ? `<div class="vk-msg vk-msg--err">${escapeHtml(s.details.error)}</div>`
+          : '<div class="vk-msg">загрузка…</div>';
+        return `<section class="vk-panel vk-details">${head('Карточка', '')}${msg}</section>`;
+      }
+      const facts = (d.facts || []).map((f) => {
+        const href = safeHref(f.href);
+        const value = href
+          ? `<a href="${escapeHtml(href)}"${/^https?:/i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''}>${escapeHtml(f.value)}</a>`
+          : escapeHtml(f.value);
+        return `<dt>${escapeHtml(f.label)}</dt><dd>${value}</dd>`;
+      }).join('');
+      const declared = new Map((m.actions || []).map((a) => [a.id, a]));
+      const open = s.actionForm && declared.get(s.actionForm);
+      const actions = open
+        ? `<form class="vk-details__form" data-vk-form="action" data-action="${escapeHtml(open.id)}">
+             ${(open.fields || []).map(fieldHtml).join('')}
+             <div class="vk-panel__actions">
+               <button type="submit" class="vk-tool is-on">${escapeHtml(open.name)}</button>
+               <button type="button" class="vk-tool" data-vk-act="action-cancel">Отмена</button>
+             </div>
+           </form>`
+        : (d.actions || []).map((id) => declared.get(id)).filter(Boolean)
+          .map((a) => `<button type="button" class="vk-tool" data-vk-act="action:${escapeHtml(a.id)}">${escapeHtml(a.name)}</button>`)
+          .join('');
+      const journal = (d.journal || []).map((j) => `
+        <li><time>${escapeHtml(fmtWhen(j.at))}</time> ${escapeHtml(j.what)}
+          <span class="vk-details__who">${escapeHtml([j.actor, j.why].filter(Boolean).join(' · '))}</span></li>`).join('');
+      const stages = m.details.stages && window.customElements.get('v-stages')
+        ? '<div class="vk-details__stages" data-vk-stages></div>' : '';
+      return `
+        <section class="vk-panel vk-details" aria-label="Подробности карточки">
+          ${head(d.card.title || '', d.card.subtitle || '')}
+          ${stages}
+          ${facts ? `<dl class="vk-facts">${facts}</dl>` : ''}
+          ${actions ? `<div class="vk-details__actions">${actions}</div>` : ''}
+          ${journal ? `<div class="vk-details__journal"><div class="vk-details__label">Журнал</div><ol>${journal}</ol></div>` : ''}
+        </section>`;
+    }
+
+    // Путь карточки — один и тот же <v-stages> между перерисовками: не мигает и
+    // не перечитывается на каждом такте, только после действия человека.
+    _mountStages() {
+      const s = this._s;
+      const slot = this.querySelector('[data-vk-stages]');
+      if (!slot || !s.details) return;
+      if (!s.stagesEl || s.stagesEl.getAttribute('key') !== s.details.id) {
+        s.stagesEl = document.createElement('v-stages');
+        s.stagesEl.setAttribute('src', s.meta.details.stages);
+        s.stagesEl.setAttribute('key', s.details.id);
+        s.stagesEl.setAttribute('data-compact', '');
+      }
+      slot.appendChild(s.stagesEl);
     }
 
     _typeOptions(selected) {
@@ -434,6 +602,29 @@
           ${moveBtns}
         </div>`;
     }
+  }
+
+  // Поле формы (создание, вопрос колонки, действие): текст, дата или многострочное.
+  function fieldHtml(f) {
+    const req = f.required ? ' required' : '';
+    const name = escapeHtml(f.key);
+    const input = f.multiline
+      ? `<textarea name="${name}" rows="3"${req}></textarea>`
+      : `<input name="${name}" type="${f.type === 'date' ? 'date' : 'text'}"${req}>`;
+    return `<label class="vk-field"><span>${escapeHtml(f.label || f.key)}${f.required ? ' *' : ''}</span>${input}</label>`;
+  }
+
+  // Ссылки из подробностей — только веб, телефон, почта и свои страницы.
+  function safeHref(href) {
+    if (!href) return null;
+    const h = String(href);
+    return /^(https?:\/\/|tel:|mailto:|\/(?!\/))/i.test(h) ? h : null;
+  }
+
+  function fmtWhen(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
   }
 
   function relTime(iso) {

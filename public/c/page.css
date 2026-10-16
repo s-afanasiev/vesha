@@ -65,6 +65,15 @@
   --vk-accent2: var(--accent, #3d6ec9);
 }
 
+.boot-root v-stages {
+  --vs-card: var(--surface, #fff);
+  --vs-line: var(--border, #d9dde3);
+  --vs-text: var(--text, #1c2430);
+  --vs-faint: var(--text-faint, #8b95a3);
+  --vs-accent: var(--accent, #3d6ec9);
+  --vs-ok: var(--ok, #2f9e60);
+}
+
 /* доска в спеке: колонки рядом; узкий экран — сами перестроятся переносом */
 .boot-root v-kanban {
   display: grid;

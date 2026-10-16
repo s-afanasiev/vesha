@@ -9,6 +9,8 @@
 //   ctx.node.step(...) и не знает хранилища (П7);
 // - терминальный статус окончателен: поздние вызовы — no-op;
 // - payload уходит в UI как есть, поэтому ключи с секретами режутся на входе.
+// Поправка 17.10.2026: хранилище в памяти, но не одиноко — мост persist.js пишет
+// снимки узлов в базу и возвращает прогоны после рестарта (restore).
 // Словарный греп (П9): доменных слов нет.
 
 const crypto = require('node:crypto');
@@ -80,6 +82,45 @@ class ProcessTreeStore {
   subscribe(listener) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  // Прогоны прошлого процесса (мост в базу, persist.js) возвращаются в хранилище.
+  // Незакрытый узел закрывается исходом interrupted: его процесс умер вместе с
+  // прошлым сервером, «идёт» навсегда было бы враньём (П38). Возвращает узлы,
+  // которые закрыл, — мосту их записать. Событий на каждый узел нет: версия одна.
+  restore(nodes, { detail = 'прервано рестартом сервера' } = {}) {
+    const closed = [];
+    const now = this.clock().toISOString();
+    const roots = new Set(nodes.filter((n) => n && !n.parentNodeId).map((n) => n.nodeId));
+    const fresh = [...nodes]
+      .filter((n) => n && n.nodeId && !this.nodes.has(n.nodeId) && roots.has(n.rootId)) // сирота без корня — мимо
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    for (const n of fresh) {
+      const node = { ...n, payload: { ...(n.payload || {}) }, outcome: n.outcome ? { ...n.outcome } : null };
+      if (!TERMINAL.has(node.status)) {
+        node.status = 'failed';
+        node.outcome = { ok: false, code: 'interrupted', detail };
+        node.finishedAt = now;
+        node.updatedAt = now;
+        closed.push(snapshot(node));
+      }
+      this.nodes.set(node.nodeId, node);
+      if (!node.parentNodeId) {
+        this.rootOrder.push(node.nodeId);
+        this.countByRoot.set(node.nodeId, (this.countByRoot.get(node.nodeId) || 0) + 1);
+      } else {
+        this.countByRoot.set(node.rootId, (this.countByRoot.get(node.rootId) || 0) + 1);
+      }
+    }
+    // старые прогоны — перед новыми этого процесса: порядок корней по рождению
+    this.rootOrder.sort((a, b) => String(this.nodes.get(a).createdAt).localeCompare(String(this.nodes.get(b).createdAt)));
+    this._evict();
+    if (fresh.length) this.version += 1;
+    return closed.filter((n) => this.nodes.has(n.nodeId));
+  }
+
+  rootIds() {
+    return [...this.rootOrder];
   }
 
   roots() {

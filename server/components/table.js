@@ -57,7 +57,7 @@ function router(decl) {
 
   r.get('/rows', async (req, res) => {
     try {
-      const view = await viewOf(decl, limits, req.query);
+      const view = await viewOf(decl, limits, req.query, { user: req.user || null });
       res.json({ ok: true, total: view.total, rows: view.page });
     } catch (e) {
       res.status(400).json({ error: String(e.message || e) });
@@ -66,7 +66,7 @@ function router(decl) {
 
   r.get('/ids', async (req, res) => {
     try {
-      const view = await viewOf(decl, limits, req.query, { idsOnly: true });
+      const view = await viewOf(decl, limits, req.query, { idsOnly: true, user: req.user || null });
       res.json({ ok: true, ids: view.ids.slice(0, limits.maxIds) });
     } catch (e) {
       res.status(400).json({ error: String(e.message || e) });
@@ -95,8 +95,8 @@ function router(decl) {
 }
 
 // Общий конвейер /rows и /ids: выборка → поиск q → пресет → сортировка → срез.
-async function viewOf(decl, limits, query, { idsOnly = false } = {}) {
-  const all = await decl.rows();
+async function viewOf(decl, limits, query, { idsOnly = false, user = null } = {}) {
+  const all = await decl.rows({ user }); // источник владельца (воронка лидов) знает, чья выборка
   const idKey = decl.idKey || 'id';
 
   let list = Array.isArray(all) ? all : [];
