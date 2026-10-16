@@ -18,6 +18,7 @@ const painRadarRoutes = require('./server/routes/pain-radar');
 const experimentsRoutes = require('./server/routes/experiments');
 const playwrightMcpRoutes = require('./server/routes/playwright-mcp');
 const automationLeadsRoutes = require('./server/routes/automationLeads');
+const backboneRoutes = require('./server/routes/backbone');
 const experimentsService = require('./server/services/experiments');
 const { startIdeaRadarSchedule } = require('./server/services/idea-radar/schedule');
 
@@ -45,6 +46,7 @@ app.use('/api/pain-radar', painRadarRoutes);
 app.use('/api/experiments', experimentsRoutes);
 app.use('/api/playwright-mcp', playwrightMcpRoutes);
 app.use('/api/automation-leads', automationLeadsRoutes);
+app.use('/api/backbone', backboneRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/looks', looksRoutes);
 

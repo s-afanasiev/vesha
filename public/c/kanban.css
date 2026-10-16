@@ -162,3 +162,72 @@ v-kanban { display: block; }
 @media (hover: none) {
   .vk-card__move { display: flex; }
 }
+
+/* панель инструментов доски (create / configure из /meta): на всю ширину
+   сетки страницы, какой бы она ни была */
+.vk-toolbar,
+.vk-panel {
+  grid-column: 1 / -1;
+}
+
+.vk-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.vk-tool {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: var(--vk-text, #dde3ea);
+  background: var(--vk-card, #1c2027);
+  border: 1px solid var(--vk-line, #2b313b);
+  border-radius: 8px;
+}
+.vk-tool:hover { border-color: var(--vk-accent2, #5a9bd8); }
+.vk-tool.is-on { border-color: var(--vk-accent2, #5a9bd8); color: var(--vk-accent2, #5a9bd8); font-weight: 600; }
+
+.vk-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  background: var(--vk-surface, #171b21);
+  border: 1px solid var(--vk-line, #2b313b);
+  border-radius: 12px;
+}
+
+.vk-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--vk-faint, #8b95a3); }
+.vk-field input,
+.vk-field textarea,
+.vk-cfg input,
+.vk-cfg select {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--vk-text, #dde3ea);
+  background: var(--vk-card, #1c2027);
+  border: 1px solid var(--vk-line, #2b313b);
+  border-radius: 6px;
+  padding: 5px 7px;
+  min-width: 0;
+}
+.vk-field textarea { resize: vertical; }
+.vk-panel__actions { display: flex; gap: 8px; align-items: end; }
+
+/* режим «настроить колонки» */
+.vk-cfg { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 10px; }
+.vk-cfg__row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.vk-cfg__row button,
+.vk-cfg__remove button {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--vk-text, #dde3ea);
+  background: var(--vk-card, #1c2027);
+  border: 1px solid var(--vk-line, #2b313b);
+  border-radius: 6px;
+}
+.vk-cfg__row input[type="color"] { width: 30px; height: 26px; padding: 1px; }
+.vk-cfg__row input[type="number"] { width: 64px; }
+.vk-cfg__del { margin-left: auto; color: var(--vk-bad, #d86b5a) !important; }
+.vk-cfg__remove { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; color: var(--vk-warn, #d8a04a); }
+.vk-col--add { border-style: dashed; border-left-width: 1px; }

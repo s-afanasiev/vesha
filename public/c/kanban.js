@@ -7,6 +7,11 @@
 // События: v-card-click {id, card}, v-move {cardId, to, error?}.
 // Методы: refresh(), свойство selectedId (подсветка карточки).
 // Сбой перемещения — честный тост, карточка остаётся на месте.
+// Если источник объявил create — кнопка и форма новой карточки (POST /cards);
+// если configure — режим «настроить колонки» (POST /columns): название, тип,
+// порядок, цвет, лимит, удаление с переносом карточек, новая колонка. Колонки
+// тогда перечитываются из /meta на каждом такте; пока открыта форма или
+// настройка, опрос доску не перерисовывает — ввод не теряется.
 (() => {
   'use strict';
   const { escapeHtml, getJson, postJson, toast } = window.VeshaUI;
@@ -20,8 +25,11 @@
         meta: null, cards: [],
         selectedId: null,
         dragging: false, moving: false, seq: 0,
+        panel: null, config: false, pendingRemove: null, busy: false,
       };
       this.addEventListener('click', (e) => this._onClick(e));
+      this.addEventListener('change', (e) => this._onChange(e));
+      this.addEventListener('submit', (e) => this._onSubmit(e));
       this.addEventListener('dragstart', (e) => this._onDragStart(e));
       this.addEventListener('dragend', () => this._onDragEnd());
       this.addEventListener('dragover', (e) => this._onDragOver(e));
@@ -57,15 +65,27 @@
       this._schedulePoll();
     }
 
+    _editing() {
+      const s = this._s;
+      return !!(s.panel || s.config || s.busy);
+    }
+
     refresh() {
       const seq = ++this._s.seq;
-      return getJson(`${this.src}/cards`)
-        .then((data) => {
+      const s = this._s;
+      // колонки с конструктором живые — перечитываем их вместе с карточками
+      const meta = s.meta && s.meta.configure && s.meta.configure.enabled && !this._editing()
+        ? getJson(`${this.src}/meta`) : Promise.resolve(null);
+      return Promise.all([getJson(`${this.src}/cards`), meta])
+        .then(([data, fresh]) => {
           if (seq !== this._s.seq) return; // поздний ответ не мешает свежему
+          if (fresh) s.meta.columns = fresh.columns;
+          s.lastErr = null;
           this._s.cards = data.cards || [];
           // во время перетаскивания доску не перерисовываем — призрак умрёт;
-          // свежие данные лягут при dragend (или следующем такте)
-          if (!this._s.dragging && !this._s.moving) this._render();
+          // свежие данные лягут при dragend (или следующем такте); открытую
+          // форму и настройку тоже не трогаем
+          if (!this._s.dragging && !this._s.moving && !this._editing()) this._render();
         })
         .catch((e) => {
           if (seq === this._s.seq && !this._s.dragging) {
@@ -149,6 +169,16 @@
     _onClick(e) {
       const s = this._s;
       if (!s || !s.meta) return;
+      const act = e.target.closest('[data-vk-act]');
+      if (act && this.contains(act)) {
+        this._onAct(act.dataset.vkAct);
+        return;
+      }
+      const cfg = e.target.closest('button[data-vk-cfg]');
+      if (cfg && this.contains(cfg)) {
+        this._onCfgButton(cfg);
+        return;
+      }
       const btn = e.target.closest('[data-vk-move]');
       if (btn && this.contains(btn)) {
         const card = btn.closest('.vk-card');
@@ -172,6 +202,112 @@
       return j >= 0 && j < s.meta.columns.length ? s.meta.columns[j].id : null;
     }
 
+    // Ошибка загрузки: пока доски нет — сообщение на её месте; доска уже есть —
+    // один тост на одну и ту же ошибку, а не на каждый такт опроса.
+    _flash(msg) {
+      if (!this.querySelector('.vk-col')) {
+        this.innerHTML = `<div class="vk-msg vk-msg--err">${escapeHtml(msg)}</div>`;
+        return;
+      }
+      if (this._s.lastErr === msg) return;
+      this._s.lastErr = msg;
+      toast(msg, { kind: 'err' });
+    }
+
+    // ---------- новая карточка и конструктор колонок ----------
+
+    _onAct(act) {
+      const s = this._s;
+      if (act === 'create') s.panel = s.panel === 'create' ? null : 'create';
+      if (act === 'cancel') s.panel = null;
+      if (act === 'config') { s.config = !s.config; s.pendingRemove = null; }
+      this._render();
+      if (act === 'create' && s.panel) {
+        const first = this.querySelector('.vk-panel input, .vk-panel textarea');
+        if (first) first.focus();
+      }
+      if (!this._editing()) this.refresh();
+    }
+
+    _configure(body) {
+      const s = this._s;
+      s.busy = true;
+      return postJson(`${this.src}/columns`, body)
+        .then((data) => {
+          s.meta.columns = data.columns;
+          s.pendingRemove = null;
+        })
+        .catch((e) => toast(`Колонки не изменились: ${e.message}`, { kind: 'err' }))
+        .finally(() => {
+          s.busy = false;
+          this._render();
+          return this.refreshCards();
+        });
+    }
+
+    refreshCards() {
+      return getJson(`${this.src}/cards`)
+        .then((data) => { this._s.cards = data.cards || []; this._render(); })
+        .catch((e) => this._flash(e.message));
+    }
+
+    _onCfgButton(btn) {
+      const s = this._s;
+      const id = btn.closest('[data-col]').dataset.col;
+      const i = s.meta.columns.findIndex((c) => c.id === id);
+      const kind = btn.dataset.vkCfg;
+      if (kind === 'left' || kind === 'right') {
+        const to = kind === 'left' ? i - 1 : i + 1;
+        if (to >= 0 && to < s.meta.columns.length) this._configure({ op: 'move', id, to });
+      } else if (kind === 'remove') {
+        const count = s.cards.filter((c) => c[s.meta.columnKey] === id).length;
+        if (count > 0) { s.pendingRemove = id; this._render(); }
+        else if (window.confirm(`Удалить колонку «${s.meta.columns[i].name}»?`)) this._configure({ op: 'remove', id });
+      } else if (kind === 'remove-confirm') {
+        const select = btn.closest('[data-col]').querySelector('[data-vk-moveto]');
+        this._configure({ op: 'remove', id, moveTo: select && select.value });
+      } else if (kind === 'remove-cancel') {
+        s.pendingRemove = null;
+        this._render();
+      }
+    }
+
+    _onChange(e) {
+      const el = e.target.closest('[data-vk-cfg]');
+      if (!el || !this.contains(el) || el.tagName === 'BUTTON') return;
+      const id = el.closest('[data-col]').dataset.col;
+      const op = el.dataset.vkCfg;
+      const value = el.value;
+      if (op === 'rename') this._configure({ op, id, title: value });
+      else if (op === 'retype') this._configure({ op, id, type: value });
+      else if (op === 'recolor') this._configure({ op, id, color: value });
+      else if (op === 'limit') this._configure({ op, id, limit: value === '' ? null : Number(value) });
+    }
+
+    _onSubmit(e) {
+      const form = e.target.closest('form[data-vk-form]');
+      if (!form || !this.contains(form)) return;
+      e.preventDefault();
+      const s = this._s;
+      const values = Object.fromEntries(new FormData(form).entries());
+      if (form.dataset.vkForm === 'add') {
+        this._configure({ op: 'add', title: values.title, type: values.type });
+        return;
+      }
+      s.busy = true;
+      postJson(`${this.src}/cards`, values)
+        .then(() => {
+          s.panel = null;
+          toast('Карточка создана', { kind: 'ok' });
+        })
+        .catch((err) => toast(`Не создалась: ${err.message}`, { kind: 'err' }))
+        .finally(() => {
+          s.busy = false;
+          this._render();
+          this.refreshCards();
+        });
+    }
+
     // ---------- рендеры ----------
 
     _render() {
@@ -181,7 +317,17 @@
         const col = byCol.get(card[m.columnKey]);
         if (col) col.push(card);
       }
-      this.innerHTML = m.columns.map((col) => {
+      const create = m.create && m.create.enabled;
+      const configure = m.configure && m.configure.enabled;
+      const toolbar = create || configure
+        ? `<div class="vk-toolbar">
+             ${create ? `<button type="button" class="vk-tool" data-vk-act="create" aria-expanded="${s.panel === 'create'}">+ ${escapeHtml(m.create.label || 'Новая карточка')}</button>` : ''}
+             ${configure ? `<button type="button" class="vk-tool${s.config ? ' is-on' : ''}" data-vk-act="config" aria-pressed="${s.config}">${s.config ? 'Готово' : 'Настроить колонки'}</button>` : ''}
+           </div>`
+        : '';
+      const panel = s.panel === 'create' ? this._createHtml() : '';
+      const addCol = s.config ? this._addColumnHtml() : '';
+      this.innerHTML = toolbar + panel + m.columns.map((col) => {
         const list = byCol.get(col.id);
         const count = col.limit
           ? `<span class="vk-col__count${list.length > col.limit ? ' is-over' : ''}">${list.length}/${col.limit}</span>`
@@ -193,9 +339,73 @@
               <span class="vk-col__title">${escapeHtml(col.name)}${col.limit ? ` <span class="vk-col__limit">≤ ${col.limit}</span>` : ''}</span>
               ${count}
             </div>
+            ${s.config ? this._configHtml(col, list.length) : ''}
             <div class="vk-col__cards">${cards || '<div class="vk-col__empty">пусто</div>'}</div>
           </div>`;
+      }).join('') + addCol;
+    }
+
+    _createHtml() {
+      const fields = (this._s.meta.create.fields || []).map((f) => {
+        const req = f.required ? ' required' : '';
+        const input = f.multiline
+          ? `<textarea name="${escapeHtml(f.key)}" rows="3"${req}></textarea>`
+          : `<input name="${escapeHtml(f.key)}" type="text"${req}>`;
+        return `<label class="vk-field"><span>${escapeHtml(f.label || f.key)}${f.required ? ' *' : ''}</span>${input}</label>`;
       }).join('');
+      return `
+        <form class="vk-panel" data-vk-form="create">
+          ${fields}
+          <div class="vk-panel__actions">
+            <button type="submit" class="vk-tool is-on">Создать</button>
+            <button type="button" class="vk-tool" data-vk-act="cancel">Отмена</button>
+          </div>
+        </form>`;
+    }
+
+    _typeOptions(selected) {
+      return (this._s.meta.configure.types || [])
+        .map((t) => `<option value="${escapeHtml(t.id)}"${t.id === selected ? ' selected' : ''}>${escapeHtml(t.name)}</option>`)
+        .join('');
+    }
+
+    _configHtml(col, cards) {
+      const s = this._s;
+      const others = s.meta.columns.filter((c) => c.id !== col.id)
+        .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+      const removing = s.pendingRemove === col.id
+        ? `<div class="vk-cfg__remove">
+             <span>${cards} карт. перенести в</span>
+             <select data-vk-moveto aria-label="Куда перенести карточки">${others}</select>
+             <button type="button" data-vk-cfg="remove-confirm">Перенести и удалить</button>
+             <button type="button" data-vk-cfg="remove-cancel">Отмена</button>
+           </div>`
+        : '';
+      return `
+        <div class="vk-cfg">
+          <input class="vk-cfg__title" type="text" value="${escapeHtml(col.name)}" data-vk-cfg="rename" aria-label="Название колонки" maxlength="40">
+          <select data-vk-cfg="retype" aria-label="Тип колонки">${this._typeOptions(col.type)}</select>
+          <div class="vk-cfg__row">
+            <button type="button" data-vk-cfg="left" aria-label="Переставить левее" title="левее">←</button>
+            <button type="button" data-vk-cfg="right" aria-label="Переставить правее" title="правее">→</button>
+            <input type="color" value="${escapeHtml(col.color || '#d9dde3')}" data-vk-cfg="recolor" aria-label="Цвет колонки">
+            <input type="number" min="0" max="999" placeholder="лимит" value="${col.limit || ''}" data-vk-cfg="limit" aria-label="Лимит карточек">
+            <button type="button" data-vk-cfg="remove" class="vk-cfg__del">Удалить</button>
+          </div>
+          ${removing}
+        </div>`;
+    }
+
+    _addColumnHtml() {
+      return `
+        <form class="vk-col vk-col--add" data-vk-form="add">
+          <div class="vk-col__head"><span class="vk-col__title">Новая колонка</span></div>
+          <div class="vk-cfg">
+            <input class="vk-cfg__title" name="title" type="text" placeholder="название" required maxlength="40" aria-label="Название новой колонки">
+            <select name="type" aria-label="Тип новой колонки">${this._typeOptions('working')}</select>
+            <button type="submit" class="vk-tool is-on">Добавить</button>
+          </div>
+        </form>`;
     }
 
     _cardHtml(card) {

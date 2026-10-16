@@ -184,6 +184,18 @@
         "2гис"
       ],
       "admin": true
+    },
+    {
+      "id": "backbone",
+      "title": "Костяк: доска заявок",
+      "description": "Заявка → колонки со смысловыми типами → журнал событий; конструктор колонок под нишу магазина",
+      "href": "/experiments/backbone/",
+      "status": "wip",
+      "tech": [
+        "kanban@1",
+        "журнал"
+      ],
+      "admin": true
     }
   ]
 }
