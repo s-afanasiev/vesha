@@ -211,7 +211,7 @@ test('kanban@1 serves live columns with types and the constructor and create doo
   }
 });
 
-test('backbone API is admin-only: a guest gets 403 before any data is touched', async () => {
+test('backbone API needs sign-in: a guest gets 401 before any data is touched', async () => {
   const app = express();
   app.use(express.json());
   app.use('/api/backbone', require('../server/routes/backbone'));
@@ -219,12 +219,12 @@ test('backbone API is admin-only: a guest gets 403 before any data is touched', 
   try {
     const base = `http://127.0.0.1:${server.address().port}/api/backbone`;
     for (const path of ['/c/board/meta', '/c/board/cards', '/c/journal/rows', '/c/pages/main']) {
-      assert.equal((await fetch(base + path)).status, 403, path);
+      assert.equal((await fetch(base + path)).status, 401, path);
     }
     const post = await fetch(`${base}/c/board/columns`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'remove', id: 'new' }),
     });
-    assert.equal(post.status, 403);
+    assert.equal(post.status, 401);
   } finally {
     server.close();
   }

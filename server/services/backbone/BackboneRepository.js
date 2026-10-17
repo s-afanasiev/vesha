@@ -180,6 +180,56 @@ class BackboneRepository {
     });
   }
 
+  // ---------- сотрудники магазина (025): почта × магазин ----------
+
+  async staff() {
+    const { rows } = await this.db.query(
+      `SELECT st.shop_id, s.slug, s.name, st.email, st.added_by, st.added_at
+       FROM backbone_shop_staff st JOIN backbone_shops s ON s.id = st.shop_id
+       ORDER BY s.created_at, s.slug, st.added_at, st.email`
+    );
+    return rows;
+  }
+
+  async isStaff(shopId, email) {
+    const { rows } = await this.db.query(
+      'SELECT 1 FROM backbone_shop_staff WHERE shop_id = $1 AND email = $2', [shopId, email]
+    );
+    return rows.length > 0;
+  }
+
+  async shopsOfStaff(email) {
+    const { rows } = await this.db.query(
+      `SELECT s.* FROM backbone_shops s JOIN backbone_shop_staff st ON st.shop_id = s.id
+       WHERE st.email = $1 ORDER BY s.created_at, s.slug`,
+      [email]
+    );
+    return rows;
+  }
+
+  async addStaff(shopId, { email, addedBy }, events) {
+    return this.tx(async (client) => {
+      const { rows: [row] } = await client.query(
+        `INSERT INTO backbone_shop_staff (shop_id, email, added_by) VALUES ($1, $2, $3)
+         ON CONFLICT (shop_id, email) DO NOTHING RETURNING *`,
+        [shopId, email, addedBy]
+      );
+      if (!row) throw conflict(`${email} уже сотрудник этого магазина`);
+      await this.journal.appendIn(client, events);
+      return row;
+    });
+  }
+
+  async removeStaff(shopId, email, events) {
+    return this.tx(async (client) => {
+      const { rowCount } = await client.query(
+        'DELETE FROM backbone_shop_staff WHERE shop_id = $1 AND email = $2', [shopId, email]
+      );
+      if (!rowCount) throw conflict(`У магазина нет сотрудника ${email} — обновите список`);
+      await this.journal.appendIn(client, events);
+    });
+  }
+
   // ---------- каталог магазина (шаг 6): выгрузка целиком или ничего ----------
 
   async catalogItems(shopId) {

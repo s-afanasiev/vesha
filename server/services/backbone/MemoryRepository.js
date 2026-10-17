@@ -23,6 +23,7 @@ class MemoryRepository {
     this.items = new Map();   // shopId → позиции каталога
     this.loads = [];          // загрузки выгрузок каталога
     this.loadSeq = 0;
+    this.staffRows = [];      // сотрудники магазинов: почта × магазин
   }
 
   async shopBySlug(slug) {
@@ -102,6 +103,38 @@ class MemoryRepository {
     Object.assign(shop, { name, hours, reply_to: replyTo });
     await this.journal.appendIn(null, events);
     return { ...shop };
+  }
+
+  // ---------- сотрудники магазина (025) ----------
+
+  async staff() {
+    return this.staffRows.map((r) => {
+      const shop = this.shopRows.find((s) => s.id === r.shop_id);
+      return { ...r, slug: shop.slug, name: shop.name };
+    });
+  }
+
+  async isStaff(shopId, email) {
+    return this.staffRows.some((r) => r.shop_id === shopId && r.email === email);
+  }
+
+  async shopsOfStaff(email) {
+    const ids = new Set(this.staffRows.filter((r) => r.email === email).map((r) => r.shop_id));
+    return this.shopRows.filter((s) => ids.has(s.id)).map((s) => ({ ...s }));
+  }
+
+  async addStaff(shopId, { email, addedBy }, events) {
+    if (await this.isStaff(shopId, email)) throw conflict(`${email} уже сотрудник этого магазина`);
+    const row = { shop_id: shopId, email, added_by: addedBy, added_at: this.journal.now() };
+    this.staffRows.push(row);
+    await this.journal.appendIn(null, events);
+    return { ...row };
+  }
+
+  async removeStaff(shopId, email, events) {
+    if (!(await this.isStaff(shopId, email))) throw conflict(`У магазина нет сотрудника ${email} — обновите список`);
+    this.staffRows = this.staffRows.filter((r) => !(r.shop_id === shopId && r.email === email));
+    await this.journal.appendIn(null, events);
   }
 
   // ---------- каталог магазина (шаг 6) ----------

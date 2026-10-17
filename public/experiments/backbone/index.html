@@ -25,6 +25,7 @@
     .boot-shop { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; color: var(--text-muted); font-size: 0.95rem; max-width: 100%; }
     .boot-shop select { font: inherit; padding: 0.25rem 0.5rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface); color: var(--text-heading); max-width: min(16rem, 55vw); }
     .boot-shop a { color: var(--text-muted); }
+    .experiments__nav [hidden] { display: none; }
   </style>
 </head>
 <body class="page-experiments">
@@ -32,11 +33,11 @@
     <div class="experiments__nav">
       <a class="back-link" href="/experiments/">← Эксперименты</a>
       <div class="experiments__nav-end">
-        <label class="boot-shop">Магазин
+        <label class="boot-shop" hidden>Магазин
           <select id="boot-shop" aria-label="Магазин"></select>
           <a id="boot-site" href="/backbone/" target="_blank" rel="noopener">витрина</a>
         </label>
-        <nav class="boot-pages" aria-label="Экраны костяка">
+        <nav class="boot-pages" aria-label="Экраны костяка" hidden>
           <a data-page="main">Доска</a>
           <a data-page="draft">Черновики счетов</a>
           <a data-page="measures">Замеры</a>
@@ -59,25 +60,44 @@
   <script src="/c/kanban.js"></script>
   <script src="/c/boot.js"></script>
   <script>
-    // экран — из ?page=, магазин — из ?shop=; спеки — server/services/backbone/pages.js
+    // экран — из ?page=, магазин — из ?shop=; спеки — server/services/backbone/pages.js.
+    // Какие магазины и вкладки показать — /api/backbone/me: админу — все магазины и
+    // «Магазины», сотруднику — его магазины. Скрытие — удобство, граница — на сервере.
     const params = new URLSearchParams(location.search);
     const asked = params.get('page');
-    const page = ['draft', 'measures', 'catalog', 'shops'].includes(asked) ? asked : 'main';
-    const shop = params.get('shop') || 'demo-krepezh';
-    const link = (p, s = shop) => `?${new URLSearchParams({ shop: s, page: p })}`;
-    for (const a of document.querySelectorAll('.boot-pages a')) a.href = link(a.dataset.page);
-    document.querySelector(`.boot-pages [data-page="${page}"]`).setAttribute('aria-current', 'page');
-    document.getElementById('boot-site').href = `/backbone/?shop=${encodeURIComponent(shop)}`;
     const picker = document.getElementById('boot-shop');
-    picker.addEventListener('change', () => { location.search = link(page === 'shops' ? 'main' : page, picker.value); });
-    // список магазинов — из той же таблицы кабинета; заведённый магазин появится в нём сразу
-    VeshaUI.getJson('/api/backbone/c/shops/rows?limit=200').then(({ rows }) => {
-      if (!rows.some((r) => r.slug === shop)) rows.unshift({ slug: shop, name: shop });
-      picker.innerHTML = rows.map((r) => `<option value="${VeshaUI.escapeHtml(r.slug)}"${r.slug === shop ? ' selected' : ''}>${VeshaUI.escapeHtml(r.name)}</option>`).join('');
-    }).catch(() => { picker.innerHTML = `<option>${VeshaUI.escapeHtml(shop)}</option>`; });
-    VeshaBoot.boot(page === 'shops'
-      ? '/api/backbone/c/pages/shops'
-      : `/api/backbone/s/${encodeURIComponent(shop)}/c/pages/${page}`);
+    const say = (text) => {
+      document.getElementById('boot-root').innerHTML = `<div class="boot-error">${VeshaUI.escapeHtml(text)}</div>`;
+    };
+    // вошёл другой человек — другие магазины: страница собирается заново
+    window.addEventListener('auth:change', () => location.reload());
+
+    fetch('/api/backbone/me', { credentials: 'same-origin' })
+      .then(async (res) => ({ status: res.status, body: await res.json().catch(() => ({})) }))
+      .then(({ status, body }) => {
+        if (status === 401) return say('Войдите: кабинет открыт админу и сотрудникам магазина.');
+        if (status !== 200) return say(body.error || `HTTP ${status}`);
+        const { admin, shops } = body;
+        document.querySelector('.boot-pages [data-page="shops"]').hidden = !admin;
+        const page = ['draft', 'measures', 'catalog', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
+        const shop = params.get('shop') || (admin ? 'demo-krepezh' : shops[0] && shops[0].slug);
+        if (!shop) return say('Вашей почте пока не открыт ни один магазин — попросите админа добавить её на экране «Магазины».');
+        // выбор магазина и вкладки — только тому, кому есть что открыть
+        document.querySelector('.boot-shop').hidden = false;
+        document.querySelector('.boot-pages').hidden = false;
+        const link = (p, s = shop) => `?${new URLSearchParams({ shop: s, page: p })}`;
+        for (const a of document.querySelectorAll('.boot-pages a')) a.href = link(a.dataset.page);
+        document.querySelector(`.boot-pages [data-page="${page}"]`).setAttribute('aria-current', 'page');
+        document.getElementById('boot-site').href = `/backbone/?shop=${encodeURIComponent(shop)}`;
+        // адрес не из списка остаётся в выборе — его экраны ответят отказом сервера
+        const list = shops.some((s) => s.slug === shop) ? shops : [{ slug: shop, name: shop }, ...shops];
+        picker.innerHTML = list.map((s) => `<option value="${VeshaUI.escapeHtml(s.slug)}"${s.slug === shop ? ' selected' : ''}>${VeshaUI.escapeHtml(s.name)}</option>`).join('');
+        picker.addEventListener('change', () => { location.search = link(page === 'shops' ? 'main' : page, picker.value); });
+        VeshaBoot.boot(page === 'shops'
+          ? '/api/backbone/c/pages/shops'
+          : `/api/backbone/s/${encodeURIComponent(shop)}/c/pages/${page}`);
+      })
+      .catch((e) => say(String(e.message || e)));
   </script>
 </body>
 </html>

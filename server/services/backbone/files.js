@@ -1,7 +1,7 @@
 // Файлы костяка (docs/backbone-architecture.md §6.5 п. 7): xlsx черновика для 1С.
 // Тонкий транспорт (П9): решение «выгрузить» — действие таблицы и событие
 // invoice_exported, здесь — только чтение файла по текущим строкам черновика.
-// Монтируется в server/routes/backbone.js под /api/backbone/s/<slug>/files (за requireAdmin).
+// Монтируется в server/routes/backbone.js под /api/backbone/s/<slug>/files (админ или сотрудник магазина).
 
 const express = require('express');
 const { backboneDesk } = require('./index');

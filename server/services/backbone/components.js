@@ -12,7 +12,10 @@
 // /api/backbone/s/<slug>/c), кабинет — таблица магазинов с «Завести магазин»
 // (cabinet, /api/backbone/c); экран каталога: файл выгрузки → сопоставление колонок
 // → «Загрузить каталог» (подмена целиком только при успехе), брак — списком.
-// Монтируется в server/routes/backbone.js (за requireAdmin).
+// Сотрудники магазина: в кабинете — «Добавить сотрудника» у магазина и список
+// сотрудников с «Убрать сотрудника» (desk.addStaff, desk.removeStaff).
+// Монтируется в server/routes/backbone.js (за границей ShopAccess: кабинет — админ,
+// магазин — админ или его сотрудник).
 
 const { Components } = require('../../components');
 const { Kanban } = require('../../components/kanban');
@@ -50,6 +53,8 @@ function describe(e, titles) {
       : `счёт по заявке №${d.number} отправлен: без правки ${d.right} из ${d.base} строк`;
     case 'shop_opened': return `магазин «${d.name}» заведён: адрес ${d.slug}, ниша «${NICHE_NAMES[d.niche] || d.niche}», ${hoursText(d.hours)}, режим — ${MODES[d.mode] || d.mode}`;
     case 'shop_changed': return `магазин изменён: «${d.name}», ${hoursText(d.hours)}, почта ${d.replyTo || '—'}`;
+    case 'staff_added': return `сотрудник ${d.email} добавлен: входит в кабинет магазина`;
+    case 'staff_removed': return `сотрудник ${d.email} убран: кабинет магазина ему закрыт`;
     case 'catalog_loaded': return `каталог из «${d.file}» загружен: ${d.loaded} позиций${d.rejected ? `, не загружено строк ${d.rejected}` : ''} — версия ${d.version}`;
     case 'catalog_refused': return `каталог не подменён («${d.file}»): ${d.reason}`;
     case 'mode_changed': return `режим магазина: ${MODES[d.from]} → ${MODES[d.to]} — ${d.reason}`;
@@ -695,6 +700,49 @@ const cabinet = Components({
         run: async ({ ids, body, user }) => {
           const shop = await backboneDesk.changeShop(ids[0], body, actorOf(user));
           return { message: `«${shop.name}»: ${hoursText(shop.hours)}, почта ${shop.reply_to || '—'}` };
+        },
+      },
+      {
+        id: 'staff', name: 'Добавить сотрудника', bulk: true, max: 1,
+        fields: [{ key: 'email', label: 'Почта сотрудника — с ней он зарегистрируется сам', required: true, placeholder: 'manager@shop.ru' }],
+        run: async ({ ids, body, user }) => {
+          const { shop, email } = await backboneDesk.addStaff(ids[0], body.email, actorOf(user));
+          return {
+            message: `${email} — сотрудник «${shop.name}». Пусть зарегистрируется на сайте с этой почтой и откроет кабинет /experiments/backbone/?shop=${shop.slug}`,
+          };
+        },
+      },
+    ],
+  }),
+
+  // Сотрудники: почта входит в кабинет только своего магазина; убранный теряет вход сразу.
+  'staff': Table({
+    rows: async () => (await backboneDesk.staffList()).map((s) => ({
+      id: `${s.slug}:${s.email}`, // в адресе магазина двоеточия нет — граница пары однозначна
+      shop: `${s.slug} · ${s.name}`,
+      email: s.email,
+      by: s.added_by,
+      at: at(s.added_at),
+    })),
+    idKey: 'id',
+    columns: [
+      { key: 'shop', name: 'Магазин', sortable: true },
+      { key: 'email', name: 'Почта сотрудника', sortable: true },
+      { key: 'by', name: 'Кто добавил' },
+      { key: 'at', name: 'Когда' },
+    ],
+    search: ['shop', 'email'],
+    actions: [
+      {
+        id: 'remove', name: 'Убрать сотрудника', bulk: true, max: 20,
+        run: async ({ ids, user }) => {
+          const done = [];
+          for (const id of ids) {
+            const cut = id.indexOf(':');
+            const { email } = await backboneDesk.removeStaff(id.slice(0, cut), id.slice(cut + 1), actorOf(user));
+            done.push(email);
+          }
+          return { message: `Убраны: ${done.join(', ')} — кабинет магазина им закрыт` };
         },
       },
     ],

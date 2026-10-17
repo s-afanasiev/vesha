@@ -6,6 +6,7 @@
 // инструмент слота «разбор заявки в счёт» на каталоге магазина с выгрузкой в 1С,
 // замеры из журнала и теневой режим; витрина: заявка с сайта, окно статуса по
 // ссылке, квитанции клиенту — письмом (SMTP) или файлами .eml. Ассистент — шаг 5 §10.
+// Вход в кабинет — ShopAccess: админ экземпляра — все магазины, сотрудник — свой.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -18,6 +19,7 @@ const { Journal } = require('./orders/Journal');
 const { BackboneRepository } = require('./BackboneRepository');
 const { BackboneDesk } = require('./BackboneDesk');
 const { ShopForm } = require('./shops/ShopForm');
+const { ShopAccess } = require('./shops/ShopAccess');
 const { Catalogs, CsvFeed } = require('./catalog/Catalog');
 const { CatalogIndex } = require('./catalog/CatalogIndex');
 const { CatalogFile } = require('./catalog/CatalogFile');
@@ -137,6 +139,7 @@ const backboneDesk = new BackboneDesk({
   templateOf,
   shops: SEEDS,
   shopForm: new ShopForm({ niches: Object.keys(TEMPLATES) }),             // магазин из кабинета, без правки кода
+  access: new ShopAccess({ admins: config.adminEmails }),                 // админ — все магазины, сотрудник — свой
   catalogs,
   catalogFile,                                                            // выгрузка 1С / МойСклад / прайс → каталог (О17)
   toolOf,
