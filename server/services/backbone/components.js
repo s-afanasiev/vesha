@@ -7,7 +7,8 @@
 // Шаг 3 — счёт: выгрузка в xlsx для 1С, «счёт отправлен» (помощь), «приложить счёт
 // из 1С» (тень); экран замеров: «до / после» и недели (desk.measures, desk.switchMode).
 // Шаг 4 — квитанции клиенту: исходящие письма с кнопкой «Отправить ожидающие»
-// (desk.sendReceipts); заявки с сайта — бейдж «с сайта» на доске.
+// (desk.sendReceipts); заявки с сайта — бейдж «с сайта» на доске. В той же таблице —
+// письма менеджеру о новой заявке (адресат «магазин»).
 // Шаг 6 — магазин без правки кода: экземпляры собираются на магазин (forShop(slug),
 // /api/backbone/s/<slug>/c), кабинет — таблица магазинов с «Завести магазин»
 // (cabinet, /api/backbone/c); экран каталога: файл выгрузки → сопоставление колонок
@@ -59,6 +60,11 @@ function describe(e, titles) {
 }
 
 const VERDICTS = { accepted: 'принята', replaced: 'позиция заменена', edited: 'количество' };
+// Повод письма — по адресату: квитанция клиенту или письмо менеджеру магазина.
+const KINDS = {
+  client: { received: 'получена', waiting: 'ждём ответа', done: 'готово', refused: 'закрыта' },
+  shop: { received: 'новая заявка', again: 'тот же список ещё раз' },
+};
 const MODES = { shadow: 'тень', help: 'помощь' };
 const STREAMS = { order: 'заявка', board: 'доска', shop: 'магазин' };
 const ratio = (x) => (x == null ? '—' : String(Math.round(x * 100) / 100).replace('.', ','));
@@ -138,7 +144,8 @@ function shopComponents(slug) {
       rows: async () => (await backboneDesk.receiptsOf(slug)).map((r) => ({
         id: r.id,
         number: r.number,
-        kind: { received: 'получена', waiting: 'ждём ответа', done: 'готово', refused: 'закрыта' }[r.kind] || r.kind,
+        who: r.audience === 'shop' ? 'менеджер' : 'клиент',
+        kind: (KINDS[r.audience] || KINDS.client)[r.kind] || r.kind,
         to: r.address || '—',
         subject: r.subject,
         status: { pending: 'ждёт', sent: 'отправлена', failed: `сбой ×${r.attempts}`, skipped: 'пропущена' }[r.status] || r.status,
@@ -148,18 +155,19 @@ function shopComponents(slug) {
       idKey: 'id',
       columns: [
         { key: 'number', name: 'Заявка', type: 'num', sortable: true },
+        { key: 'who', name: 'Кому', sortable: true },
         { key: 'kind', name: 'Повод', sortable: true },
-        { key: 'to', name: 'Кому' },
+        { key: 'to', name: 'Адрес' },
         { key: 'subject', name: 'Тема' },
         { key: 'status', name: 'Статус', sortable: true },
         { key: 'why', name: 'Почему не ушла' },
         { key: 'at', name: 'Когда' },
       ],
-      search: ['subject', 'to', 'status'],
+      search: ['subject', 'to', 'status', 'who'],
       actions: [
         { id: 'send', name: 'Отправить ожидающие', run: async () => {
           const r = await backboneDesk.sendReceipts(slug);
-          return { message: `новых квитанций ${r.made}, к отправке ${r.pending}, ушло ${r.sent}` };
+          return { message: `новых писем ${r.made}, к отправке ${r.pending}, ушло ${r.sent}` };
         } },
       ],
     }),

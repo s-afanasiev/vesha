@@ -44,7 +44,7 @@ class BackboneDesk {
   constructor({
     repository, journal, board, path, templateOf, shops = {}, tool = null, toolOf = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
-    intake = null, statusPage = null, receipts = null,
+    intake = null, statusPage = null, receipts = null, privacy = null,
     shopForm = null, catalogs = null, catalogFile = null,
   }) {
     this.repository = repository;
@@ -64,6 +64,7 @@ class BackboneDesk {
     this.intake = intake;         // приём заявки с витрины
     this.statusPage = statusPage; // окно статуса клиента
     this.receipts = receipts;     // квитанции: проекция журнала и доставка
+    this.privacy = privacy;       // политика ПДн витрины: { keepYears, withdrawDays }
   }
 
   // Магазин по slug — из таблицы; посев из кода (демо) заводится при первом обращении.
@@ -253,7 +254,8 @@ class BackboneDesk {
   // ---------- шаг 4: витрина, окно статуса, квитанции ----------
 
   // Заявка с сайта: форма → заявка во «входящих» с ссылкой на окно статуса.
-  // Тот же список с того же контакта ещё раз — та же заявка и событие received_again.
+  // Тот же список с того же контакта ещё раз — та же заявка и событие received_again
+  // (клиенту — без второй квитанции, менеджеру — письмо: клиент ждёт или заказывает снова).
   async receiveFromSite(slug, form, file = null) {
     const read = await this.intake.read(form, file); // форма проверяется до базы: отказ — сразу
     const { shop, columns } = await this.board(slug);
@@ -262,6 +264,7 @@ class BackboneDesk {
         stream: 'order', scope: shop.id, subjectId: order.id, type: 'received_again',
         data: { number: order.number, channel: 'site' }, actor: 'site', cause: 'site',
       }]);
+      await this.afterChange(shop);
       return { order, duplicate: true };
     };
     const known = await this.repository.orderByContentKey(shop.id, read.contentKey);
@@ -302,6 +305,13 @@ class BackboneDesk {
       events: await this.journal.forSubject('order', order.id),
       shopName: shop.name,
     });
+  }
+
+  // Политика обработки персональных данных витрины (152-ФЗ): кто обрабатывает, сроки,
+  // почта для отзыва согласия — из таблицы магазинов; контактов клиентов здесь нет.
+  async privacyOf(slug) {
+    const shop = await this.shop(slug);
+    return { name: shop.name, email: shop.reply_to || null, ...this.privacy };
   }
 
   async receiptsOf(slug) {

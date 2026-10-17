@@ -19,7 +19,7 @@ class MemoryRepository {
     this.rows = [];           // заявки
     this.draftLines = [];     // строки черновиков
     this.synonymRows = [];    // синонимы магазинов
-    this.receiptRows = [];    // исходящие квитанции
+    this.receiptRows = [];    // исходящие: квитанции клиенту и письма менеджеру
     this.items = new Map();   // shopId → позиции каталога
     this.loads = [];          // загрузки выгрузок каталога
     this.loadSeq = 0;
@@ -195,10 +195,10 @@ class MemoryRepository {
     if (!shop || shop.receipts_cursor !== fromCursor) return false;
     const now = this.journal.now();
     for (const r of rows) {
-      if (this.receiptRows.some((x) => x.event_id === r.eventId)) continue;
+      if (this.receiptRows.some((x) => x.event_id === r.eventId && x.audience === r.audience)) continue;
       this.receiptRows.push({
-        id: crypto.randomUUID(), shop_id: shopId, order_id: r.orderId, event_id: r.eventId, kind: r.kind,
-        channel: r.channel, address: r.address, subject: r.subject, body: r.body, status: r.status,
+        id: crypto.randomUUID(), shop_id: shopId, order_id: r.orderId, event_id: r.eventId, kind: r.kind, audience: r.audience,
+        channel: r.channel, address: r.address, reply_to: r.replyTo, subject: r.subject, body: r.body, status: r.status,
         attempts: 0, last_error: r.lastError, created_at: now, sent_at: null,
       });
     }

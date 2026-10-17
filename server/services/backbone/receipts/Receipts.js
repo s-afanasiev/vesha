@@ -9,16 +9,20 @@
 //   переход в тип refused             — «заявка закрыта».
 // Переходы внутри одного типа и переносы при удалении колонки клиенту не пишем.
 // Нет почты (только телефон) — квитанция «пропущена» с причиной, а не тишина.
+//
+// Той же проекцией — письмо менеджеру о новой заявке (ShopNotice): одно событие
+// даёт до двух писем, ключ против дублей — «событие + адресат» (audience).
 
 const KIND_BY_TYPE = { waiting_client: 'waiting', done: 'done', refused: 'refused' };
 
 class Receipts {
-  constructor({ repository, journal, mailbox, statusUrl, deadlineOf, maxAttempts = 5, batch = 20 }) {
+  constructor({ repository, journal, mailbox, statusUrl, deadlineOf, notice = null, maxAttempts = 5, batch = 20 }) {
     this.repository = repository;
     this.journal = journal;
-    this.mailbox = mailbox;       // send({ to, subject, body, shop }) → Promise
+    this.mailbox = mailbox;       // send({ to, subject, body, shop, replyTo }) → Promise
     this.statusUrl = statusUrl;   // token → абсолютная ссылка на окно статуса
     this.deadlineOf = deadlineOf; // (магазин, момент) → «17.10 в 15:00» | null
+    this.notice = notice;         // письмо менеджеру магазина: kindOf(e), letter(...)
     this.maxAttempts = maxAttempts;
     this.batch = batch;
   }
@@ -40,10 +44,14 @@ class Receipts {
     const rows = [];
     for (const e of events) {
       const kind = this.kindOf(e);
-      if (!kind) continue;
+      const notice = this.notice ? this.notice.kindOf(e) : null;
+      if (!kind && !notice) continue;
       const order = await this.repository.orderById(e.subject_id);
-      if (!order || order.channel !== 'site' || !order.status_token) continue;
-      rows.push(this.letter({ shop, order, event: e, kind, column: titles.get(e.data.to) || '' }));
+      if (!order) continue;
+      if (kind && order.channel === 'site' && order.status_token) {
+        rows.push(this.letter({ shop, order, event: e, kind, column: titles.get(e.data.to) || '' }));
+      }
+      if (notice) rows.push(this.notice.letter({ shop, order, event: e, kind: notice, column: titles.get(order.column_id) || '' }));
     }
     await this.repository.saveReceipts(shop.id, cursor, events[events.length - 1].id, rows);
     return rows.length;
@@ -77,9 +85,10 @@ class Receipts {
       body = `Заявка №${n} закрыта. Если это ошибка — ответьте на это письмо.\n\nПуть заявки: ${link}`;
     }
     return {
-      orderId: order.id, eventId: event.id, kind,
+      orderId: order.id, eventId: event.id, kind, audience: 'client',
       channel: email ? 'email' : 'none',
       address: email ? order.contact : '',
+      replyTo: null,                // ответ клиента — на почту магазина (letter.js)
       subject, body: `${body}\n\n— ${shop.name}`,
       status: email ? 'pending' : 'skipped',
       lastError: email ? null : 'нет почты: квитанции по телефону — после MVP',
@@ -92,7 +101,7 @@ class Receipts {
     let sent = 0;
     for (const r of pending) {
       try {
-        await this.mailbox.send({ to: r.address, subject: r.subject, body: r.body, shop: await shopOf(r.shop_id) });
+        await this.mailbox.send({ to: r.address, subject: r.subject, body: r.body, shop: await shopOf(r.shop_id), replyTo: r.reply_to || null });
         await this.repository.markReceipt(r.id, { status: 'sent' });
         sent++;
       } catch (err) {
