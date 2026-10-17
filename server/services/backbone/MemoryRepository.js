@@ -62,6 +62,11 @@ class MemoryRepository {
     return order ? { ...order } : null;
   }
 
+  async ordersOfClient(shopId, clientKey) {
+    return this.rows.filter((o) => o.shop_id === shopId && o.client_key === clientKey)
+      .sort((a, b) => b.number - a.number).map((o) => ({ ...o }));
+  }
+
   async createOrder(shopId, columnId, draft, makeEvents) {
     const now = this.journal.now();
     const number = this.rows.filter((o) => o.shop_id === shopId).reduce((m, o) => Math.max(m, o.number), 0) + 1;
@@ -72,7 +77,7 @@ class MemoryRepository {
       id: crypto.randomUUID(), shop_id: shopId, number, column_id: columnId,
       client: draft.client, contact: draft.contact, text: draft.text, channel: draft.channel || 'manual',
       status_token: draft.statusToken || null, content_key: draft.contentKey || null, consent_at: draft.consentAt || null,
-      created_at: now, updated_at: now,
+      client_key: draft.clientKey || null, created_at: now, updated_at: now,
     };
     this.rows.push(order);
     await this.journal.appendIn(null, makeEvents({ ...order }));

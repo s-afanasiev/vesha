@@ -41,6 +41,7 @@
           <a data-page="draft">Черновики счетов</a>
           <a data-page="measures">Замеры</a>
           <a data-page="catalog">Каталог</a>
+          <a data-page="assistant">Ассистент</a>
           <a data-page="shops">Магазины</a>
         </nav>
         <div data-vesha-auth-widget></div>
@@ -62,7 +63,7 @@
     // экран — из ?page=, магазин — из ?shop=; спеки — server/services/backbone/pages.js
     const params = new URLSearchParams(location.search);
     const asked = params.get('page');
-    const page = ['draft', 'measures', 'catalog', 'shops'].includes(asked) ? asked : 'main';
+    const page = ['draft', 'measures', 'catalog', 'assistant', 'shops'].includes(asked) ? asked : 'main';
     const shop = params.get('shop') || 'demo-krepezh';
     const link = (p, s = shop) => `?${new URLSearchParams({ shop: s, page: p })}`;
     for (const a of document.querySelectorAll('.boot-pages a')) a.href = link(a.dataset.page);

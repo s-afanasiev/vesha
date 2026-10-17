@@ -3,7 +3,7 @@
 // превращаются в письма исходящих; доставка — отдельно от перехода (П35), с повтором.
 //
 // Когда пишем:
-//   received (с сайта)                — «получено, номер, ответим до …, ссылка на путь»;
+//   received (с сайта или из чата)    — «получено, номер, ответим до …, ссылка на путь»;
 //   переход в тип waiting_client      — «ждём вашего ответа: <колонка>»;
 //   переход в тип done                — «готово: <колонка>»;
 //   переход в тип refused             — «заявка закрыта».
@@ -11,6 +11,7 @@
 // Нет почты (только телефон) — квитанция «пропущена» с причиной, а не тишина.
 
 const KIND_BY_TYPE = { waiting_client: 'waiting', done: 'done', refused: 'refused' };
+const CHANNELS = new Set(['site', 'chat']); // заявки с витрины и из разговора с ассистентом — у них есть окно статуса
 
 class Receipts {
   constructor({ repository, journal, mailbox, statusUrl, deadlineOf, maxAttempts = 5, batch = 20 }) {
@@ -25,7 +26,7 @@ class Receipts {
 
   kindOf(e) {
     if (e.stream !== 'order') return null;
-    if (e.type === 'received') return e.data.channel === 'site' ? 'received' : null;
+    if (e.type === 'received') return CHANNELS.has(e.data.channel) ? 'received' : null;
     if (e.type !== 'moved' || e.cause === 'column_removed') return null;
     if (e.data.fromType === e.data.toType) return null;
     return KIND_BY_TYPE[e.data.toType] || null;
@@ -42,7 +43,7 @@ class Receipts {
       const kind = this.kindOf(e);
       if (!kind) continue;
       const order = await this.repository.orderById(e.subject_id);
-      if (!order || order.channel !== 'site' || !order.status_token) continue;
+      if (!order || !CHANNELS.has(order.channel) || !order.status_token) continue;
       rows.push(this.letter({ shop, order, event: e, kind, column: titles.get(e.data.to) || '' }));
     }
     await this.repository.saveReceipts(shop.id, cursor, events[events.length - 1].id, rows);

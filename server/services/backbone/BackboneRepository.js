@@ -93,6 +93,15 @@ class BackboneRepository {
     return rows[0] || null;
   }
 
+  // Заявки одного клиента магазина (шаг 5, О20): по ключу гостя витрины, новые первыми.
+  async ordersOfClient(shopId, clientKey) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM backbone_orders WHERE shop_id = $1 AND client_key = $2 ORDER BY number DESC',
+      [shopId, clientKey]
+    );
+    return rows;
+  }
+
   async createOrder(shopId, columnId, draft, makeEvents) {
     return this.tx(async (client) => {
       await client.query('SELECT 1 FROM backbone_shops WHERE id = $1 FOR UPDATE', [shopId]);
@@ -101,10 +110,10 @@ class BackboneRepository {
         [shopId]
       );
       const { rows: [order] } = await client.query(
-        `INSERT INTO backbone_orders (shop_id, number, column_id, client, contact, text, channel, status_token, content_key, consent_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        `INSERT INTO backbone_orders (shop_id, number, column_id, client, contact, text, channel, status_token, content_key, consent_at, client_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
         [shopId, next, columnId, draft.client, draft.contact, draft.text, draft.channel || 'manual',
-          draft.statusToken || null, draft.contentKey || null, draft.consentAt || null]
+          draft.statusToken || null, draft.contentKey || null, draft.consentAt || null, draft.clientKey || null]
       );
       await this.journal.appendIn(client, makeEvents(order));
       return order;

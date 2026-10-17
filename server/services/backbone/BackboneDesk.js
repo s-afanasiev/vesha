@@ -13,6 +13,8 @@
 // Шаг 4: витрина — заявка с сайта (SiteIntake: контакт, согласие, тот же список
 // дважды — одна заявка), окно статуса по ссылке (StatusPage, stages@1), квитанции
 // клиенту — проекция журнала в исходящие (Receipts) после каждого перехода.
+// Шаг 5: ассистент — заявка из разговора (receiveFromChat: тот же ключ «контакт +
+// содержимое», что у сайта) и заявки собеседника по ключу клиента (clientOrders, О20).
 // Шаг 6 (то, что решается кодом): магазины — таблица, а не код; админ заводит
 // магазин из кабинета (ShopForm), новый — в тени. Каталог магазина — его выгрузка
 // xlsx (CatalogFile): файл → сопоставление колонок → подмена целиком только при
@@ -253,14 +255,25 @@ class BackboneDesk {
   // ---------- шаг 4: витрина, окно статуса, квитанции ----------
 
   // Заявка с сайта: форма → заявка во «входящих» с ссылкой на окно статуса.
-  // Тот же список с того же контакта ещё раз — та же заявка и событие received_again.
-  async receiveFromSite(slug, form, file = null) {
+  // clientKey — гость витрины: по нему ассистент узнаёт заявки собеседника (шаг 5).
+  async receiveFromSite(slug, form, file = null, { clientKey = null } = {}) {
     const read = await this.intake.read(form, file); // форма проверяется до базы: отказ — сразу
+    return this.receive(slug, read, { channel: 'site', clientKey });
+  }
+
+  // Заявка из разговора с ассистентом (шаг 5): список, согласие и контакт прочитал ChatIntake.
+  async receiveFromChat(slug, read, { clientKey, dialogueId }) {
+    return this.receive(slug, read, { channel: 'chat', clientKey, data: { dialogue: dialogueId } });
+  }
+
+  // Приём из канала: заявка во «входящих» со ссылкой на окно статуса. Тот же список
+  // с того же контакта ещё раз — из любого канала — та же заявка и событие received_again (П36).
+  async receive(slug, read, { channel, clientKey = null, data = {} }) {
     const { shop, columns } = await this.board(slug);
     const again = async (order) => {
       await this.repository.appendEvents([{
         stream: 'order', scope: shop.id, subjectId: order.id, type: 'received_again',
-        data: { number: order.number, channel: 'site' }, actor: 'site', cause: 'site',
+        data: { number: order.number, channel, ...data }, actor: channel, cause: channel,
       }]);
       return { order, duplicate: true };
     };
@@ -274,14 +287,16 @@ class BackboneDesk {
         statusToken: crypto.randomBytes(18).toString('base64url'),
         contentKey: read.contentKey,
         consentAt: this.clock().toISOString(),
+        clientKey,
       }, (o) => [{
         stream: 'order', scope: shop.id, subjectId: o.id, type: 'received',
         data: {
-          number: o.number, column: inbox.id, columnType: inbox.type, channel: 'site',
+          number: o.number, column: inbox.id, columnType: inbox.type, channel,
           contact: read.contact.kind, org: Order.fromOrganization(o.client),
           ...(read.refusal ? { refusal: read.refusal.code, file: read.refusal.file } : {}),
+          ...data,
         },
-        actor: 'site', cause: 'site',
+        actor: channel, cause: channel,
       }]);
     } catch (err) {
       if (err.code !== '23505') throw err;
@@ -289,6 +304,23 @@ class BackboneDesk {
     }
     await this.afterChange(shop);
     return { order, duplicate: false, refusal: read.refusal };
+  }
+
+  // Заявки собеседника (О20) — дверь, а не фильтр в промпте: только по ключу клиента,
+  // каждая — с шагом окна статуса и ссылкой на него. Чужой номер сюда не попадает.
+  async clientOrders(slug, clientKey) {
+    if (!clientKey) return [];
+    const shop = await this.shop(slug);
+    const orders = await this.repository.ordersOfClient(shop.id, String(clientKey));
+    if (!orders.length) return [];
+    const columns = await this.repository.columns(shop.id);
+    const out = [];
+    for (const order of orders) {
+      const view = this.statusPage.view({ order, columns, events: await this.journal.forSubject('order', order.id), shopName: shop.name });
+      const step = view.exit || view.steps.find((s) => s.state === 'current') || view.steps[0];
+      out.push({ number: order.number, step: step.name, note: step.note || null, at: step.at || null, token: order.status_token });
+    }
+    return out;
   }
 
   // Окно статуса по токену ссылки: шаги, даты, номер — без контактов и текста.
