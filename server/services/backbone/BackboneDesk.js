@@ -10,9 +10,13 @@
 // Шаг 3: режим магазина — тень (черновик скрыт, итоговый счёт из 1С прикладывают
 // для сверки) или помощь (черновик → xlsx для 1С → «счёт отправлен»); смена
 // режима — решение с мерой (Baseline); замеры читаются из журнала (Measures).
+// Шаг 4: витрина — заявка с сайта (SiteIntake: контакт, согласие, тот же список
+// дважды — одна заявка), окно статуса по ссылке (StatusPage, stages@1), квитанции
+// клиенту — проекция журнала в исходящие (Receipts) после каждого перехода.
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
+const crypto = require('node:crypto');
 
 function notFound(message) {
   const err = new Error(message);
@@ -30,6 +34,7 @@ class BackboneDesk {
   constructor({
     repository, journal, board, path, templateOf, shops, tool = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
+    intake = null, statusPage = null, receipts = null,
   }) {
     this.repository = repository;
     this.journal = journal;
@@ -42,6 +47,9 @@ class BackboneDesk {
     this.measuresOf = measuresOf; // (магазин, его описание) → Measures в часах работы магазина
     this.baseline = baseline;     // правило тени и включения помощи
     this.clock = clock;
+    this.intake = intake;         // приём заявки с витрины
+    this.statusPage = statusPage; // окно статуса клиента
+    this.receipts = receipts;     // квитанции: проекция журнала и доставка
   }
 
   // Магазин по slug; при первом обращении — с доской из шаблона ниши.
@@ -88,10 +96,90 @@ class BackboneDesk {
     if (!order || order.shop_id !== shop.id) throw notFound('Заявка не найдена');
     const from = columns.find((c) => c.id === order.column_id);
     const move = this.path.transition(from, columns.find((c) => c.id === to));
-    return this.repository.moveOrder(order.id, order.column_id, to, [{
+    const moved = await this.repository.moveOrder(order.id, order.column_id, to, [{
       stream: 'order', scope: shop.id, subjectId: order.id, type: move.type,
       data: { number: order.number, ...move.data }, actor, cause,
     }]);
+    await this.afterChange(shop);
+    return moved;
+  }
+
+  // ---------- шаг 4: витрина, окно статуса, квитанции ----------
+
+  // Заявка с сайта: форма → заявка во «входящих» с ссылкой на окно статуса.
+  // Тот же список с того же контакта ещё раз — та же заявка и событие received_again.
+  async receiveFromSite(slug, form, file = null) {
+    const read = await this.intake.read(form, file); // форма проверяется до базы: отказ — сразу
+    const { shop, columns } = await this.board(slug);
+    const again = async (order) => {
+      await this.repository.appendEvents([{
+        stream: 'order', scope: shop.id, subjectId: order.id, type: 'received_again',
+        data: { number: order.number, channel: 'site' }, actor: 'site', cause: 'site',
+      }]);
+      return { order, duplicate: true };
+    };
+    const known = await this.repository.orderByContentKey(shop.id, read.contentKey);
+    if (known) return again(known);
+    const inbox = columns.find((c) => c.type === 'inbox');
+    let order;
+    try {
+      order = await this.repository.createOrder(shop.id, inbox.id, {
+        ...read.draft,
+        statusToken: crypto.randomBytes(18).toString('base64url'),
+        contentKey: read.contentKey,
+        consentAt: this.clock().toISOString(),
+      }, (o) => [{
+        stream: 'order', scope: shop.id, subjectId: o.id, type: 'received',
+        data: {
+          number: o.number, column: inbox.id, columnType: inbox.type, channel: 'site',
+          contact: read.contact.kind, org: Order.fromOrganization(o.client),
+          ...(read.refusal ? { refusal: read.refusal.code, file: read.refusal.file } : {}),
+        },
+        actor: 'site', cause: 'site',
+      }]);
+    } catch (err) {
+      if (err.code !== '23505') throw err;
+      return again(await this.repository.orderByContentKey(shop.id, read.contentKey)); // гонка двух одинаковых отправок
+    }
+    await this.afterChange(shop);
+    return { order, duplicate: false, refusal: read.refusal };
+  }
+
+  // Окно статуса по токену ссылки: шаги, даты, номер — без контактов и текста.
+  async statusOf(token) {
+    const order = token ? await this.repository.orderByToken(String(token)) : null;
+    if (!order) throw notFound('Заявка не найдена — проверьте ссылку');
+    const shop = await this.repository.shopById(order.shop_id);
+    return this.statusPage.view({
+      order,
+      columns: await this.repository.columns(shop.id),
+      events: await this.journal.forSubject('order', order.id),
+      shopName: shop.name,
+    });
+  }
+
+  async receiptsOf(slug) {
+    const shop = await this.shop(slug);
+    return this.repository.receipts(shop.id);
+  }
+
+  // Проекция журнала в квитанции и доставка ожидающих; кнопка в кабинете — то же самое.
+  async sendReceipts(slug) {
+    const shop = await this.shop(slug);
+    const made = await this.receipts.project(shop, await this.repository.columns(shop.id));
+    const delivery = await this.receipts.deliver((id) => this.repository.shopById(id));
+    return { made, ...delivery };
+  }
+
+  // После перехода: квитанции не должны ронять сам переход (П35) — сбой только в лог.
+  async afterChange(shop) {
+    if (!this.receipts) return;
+    try {
+      await this.receipts.project(shop, await this.repository.columns(shop.id));
+      await this.receipts.deliver((id) => this.repository.shopById(id));
+    } catch (err) {
+      console.error('backbone: квитанции не обработаны', err);
+    }
   }
 
   // Операция конструктора: правило — Board, атомарность и версия — репозиторий.

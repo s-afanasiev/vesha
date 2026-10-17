@@ -2,8 +2,8 @@
 // видна система шагов 1–3 — доска с типами колонок (Board), путь заявки (Path),
 // журнал (Journal), истина (BackboneRepository), дверь сценариев (BackboneDesk),
 // каталог-фикстура с индексом атрибутов, инструмент слота «разбор заявки в счёт»
-// с выгрузкой в 1С, замеры из журнала и теневой режим.
-// Сайт и ассистент — шаги 4–5 §10.
+// с выгрузкой в 1С, замеры из журнала и теневой режим; витрина: заявка с сайта,
+// окно статуса по ссылке, квитанции клиенту. Ассистент — шаг 5 §10.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -30,6 +30,10 @@ const { FinalInvoice } = require('./invoice/FinalInvoice');
 const { Measures } = require('./measures/Measures');
 const { WorkingHours } = require('./measures/WorkingHours');
 const { Baseline } = require('./measures/Baseline');
+const { SiteIntake } = require('./site/SiteIntake');
+const { StatusPage } = require('./site/StatusPage');
+const { Receipts } = require('./receipts/Receipts');
+const { FileMailbox } = require('./receipts/FileMailbox');
 
 // Магазины, которые знает костяк. Один демо-магазин ниши крепежа;
 // заведение магазинов владельцами — вместе с витриной (шаг 4).
@@ -47,6 +51,7 @@ const FIXTURES = path.join(__dirname, 'invoice', 'fixtures');
 
 const board = new Board({ types: STAGE_TYPES, required: ['inbox', 'done', 'refused'], maxColumns: 12 });
 const journal = new Journal(db);
+const repository = new BackboneRepository(db, journal);                  // истина: заявки, доска, черновики, квитанции
 
 const catalog = new Catalog(                                              // общее — один раз (П5)
   new CsvFeed(path.join(__dirname, 'catalog', 'fixtures', 'hardware-300.csv')), // до шага 6 — фикстура (О6)
@@ -74,12 +79,32 @@ const orderToInvoice = new OrderToInvoice(
   },
 );
 
+// Витрина: тот же разбор файлов, что у инструмента, — форматы и отказы одни (§6.3).
+const siteIntake = new SiteIntake(
+  new RequestText({ text: new PlainText(), xlsx: new SheetRows(), pdf: new PdfTextLayer() }, { maxBytes: 5 * 1024 * 1024 }),
+);
+
+// Квитанции: проекция журнала в исходящие, почта до SMTP — файлы .eml (О6).
+const hoursOf = (shop) => new WorkingHours({ tz: shop.tz, ...((SHOPS[shop.slug] || {}).hours || {}) });
+const receipts = new Receipts({
+  repository,
+  journal,
+  mailbox: new FileMailbox({ dir: config.backboneMailDir, from: config.backboneMailFrom }),
+  statusUrl: (token) => `${config.backbonePublicUrl}/backbone/status.html?t=${encodeURIComponent(token)}`,
+  deadlineOf: (shop, ms) => {                                             // «ответим в течение часа» — рабочего часа
+    const until = hoursOf(shop).deadline(ms, 60);
+    return until && new Intl.DateTimeFormat('ru-RU', {
+      timeZone: shop.tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    }).format(new Date(until)).replace(', ', ' в ');
+  },
+});
+
 const llm = config.backboneModel === 'recorded'
   ? new RecordedLlm(JSON.parse(fs.readFileSync(path.join(FIXTURES, 'recorded-llm.json'), 'utf8')))
   : new GuardedLlm({ selection: { provider: 'openai' }, timeoutMs: 20_000 }); // серверный пресет шлюза, квота инициатора
 
 const backboneDesk = new BackboneDesk({
-  repository: new BackboneRepository(db, journal),
+  repository,
   journal,
   board,
   path: new Path(STAGE_TYPES),
@@ -92,8 +117,11 @@ const backboneDesk = new BackboneDesk({
     { replyWithin: 60, silence: { inbox: 60, waitingClientDays: 2 }, sessionGap: 10, b2bLines: 5 },
   ),
   baseline: new Baseline({ shadowDays: 14, accuracy: 0.8, minLines: 20 }), // помощь — решением с мерой (О19)
+  intake: siteIntake,                                                     // заявка с витрины (§6.3)
+  statusPage: new StatusPage(),                                           // окно статуса клиента (stages@1)
+  receipts,                                                               // квитанции после переходов (§6.1)
 });
 
 const demoRequest = () => fs.readFileSync(path.join(FIXTURES, 'request-20.txt'), 'utf8');
 
-module.exports = { backboneDesk, board, catalog, orderToInvoice, demoRequest, DEMO_SHOP };
+module.exports = { backboneDesk, board, catalog, orderToInvoice, demoRequest, DEMO_SHOP, SHOPS };

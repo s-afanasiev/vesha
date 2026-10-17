@@ -45,6 +45,15 @@ class Journal {
     );
     return rows;
   }
+
+  // События магазина после курсора — вход проекций (квитанции, шаг 4).
+  async after(scope, afterId, { limit = 500 } = {}) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM journal_events WHERE scope = $1 AND id > $2 ORDER BY id LIMIT $3',
+      [String(scope), afterId, limit]
+    );
+    return rows.map((r) => ({ ...r, id: Number(r.id) }));
+  }
 }
 
 // Честный простой узел (О6): тот же контракт в памяти — для тестов и прогона без базы.
@@ -85,6 +94,10 @@ class MemoryJournal {
 
   async history(scope) {
     return this.events.filter((e) => e.scope === String(scope));
+  }
+
+  async after(scope, afterId, { limit = 500 } = {}) {
+    return this.events.filter((e) => e.scope === String(scope) && e.id > afterId).slice(0, limit);
   }
 }
 

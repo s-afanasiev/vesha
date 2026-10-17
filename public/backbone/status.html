@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Путь заявки</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/c/ui.css" />
+  <link rel="stylesheet" href="/c/stages.css" />
+  <style>
+    /* Окно статуса заявки (docs/backbone-architecture.md §6.3): stages@1 по токену
+       ссылки — номер, шаги и даты; ни контактов, ни текста заявки. */
+    body { display: block; background: var(--bg); color: var(--text); }
+    .status { box-sizing: border-box; width: 100%; max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; text-align: left; }
+    .status__card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .status__foot { margin-top: 14px; color: var(--text-faint); font-size: 0.85rem; }
+    v-stages { --vs-card: var(--input-bg); --vs-line: var(--border); --vs-text: var(--text); --vs-faint: var(--text-faint); --vs-accent: var(--accent); }
+  </style>
+</head>
+<body>
+  <main class="status">
+    <div class="status__card" id="status-root"></div>
+    <p class="status__foot">Страница обновляется сама. Вопрос по заявке — ответьте на письмо магазина.</p>
+  </main>
+  <script src="/c/ui.js"></script>
+  <script src="/c/stages.js"></script>
+  <script>
+    (() => {
+      const token = new URLSearchParams(location.search).get('t') || '';
+      const root = document.getElementById('status-root');
+      if (!token) { root.textContent = 'Ссылка неполная — откройте её из письма магазина.'; return; }
+      const el = document.createElement('v-stages');
+      el.setAttribute('src', '/api/backbone-public/c/status');
+      el.setAttribute('key', token);
+      el.setAttribute('data-poll', '30000');
+      root.appendChild(el);
+    })();
+  </script>
+</body>
+</html>

@@ -6,6 +6,8 @@
 // черновиков с правкой менеджера (desk.review) и синонимы магазина.
 // Шаг 3 — счёт: выгрузка в xlsx для 1С, «счёт отправлен» (помощь), «приложить счёт
 // из 1С» (тень); экран замеров: «до / после» и недели (desk.measures, desk.switchMode).
+// Шаг 4 — квитанции клиенту: исходящие письма с кнопкой «Отправить ожидающие»
+// (desk.sendReceipts); заявки с сайта — бейдж «с сайта» на доске.
 // Монтируется в server/routes/backbone.js под /api/backbone/c (за requireAdmin).
 
 const { Components } = require('../../components');
@@ -23,7 +25,8 @@ function describe(e, titles) {
   const col = (id) => (id ? `«${titles.get(id) || id}»` : '—');
   switch (e.type) {
     case 'board_created': return `доска создана из шаблона «${d.niche}»: ${(d.columns || []).length} колонок`;
-    case 'received': return `заявка №${d.number} принята в ${col(d.column)}`;
+    case 'received': return `заявка №${d.number} принята в ${col(d.column)}${d.channel === 'site' ? ' — с сайта' : ''}${d.refusal === 'scan' ? `, файл «${d.file}» — скан, нужен текст` : ''}`;
+    case 'received_again': return `заявка №${d.number}: тот же список пришёл ещё раз — не дубль`;
     case 'moved': return `заявка №${d.number}: ${col(d.from)} → ${col(d.to)}${e.cause === 'column_removed' ? ' (колонку удалили)' : ''}`;
     case 'column_added': return `колонка ${col(d.column)} добавлена, тип «${TYPE_NAMES[d.columnType] || d.columnType}»`;
     case 'column_renamed': return `колонка «${d.from}» переименована в «${d.to}»`;
@@ -94,6 +97,7 @@ module.exports = Components({
         const d = drafts.get(o.id);
         const seen = d && d.lines && (shop.mode !== 'shadow' || d.sent); // в тени черновик скрыт до счёта
         const badges = o.contact && o.text ? [{ text: o.contact }] : [];
+        if (o.channel === 'site') badges.unshift({ text: 'с сайта', kind: 'waiting' });
         if (seen) badges.push({ text: `черновик ${d.accepted}/${d.lines}`, kind: 'draft' });
         if (seen && d.questions) badges.push({ text: `вопросов ${d.questions}`, kind: 'waiting' });
         if (d && d.sent) badges.push({ text: 'счёт отправлен' });
@@ -114,6 +118,36 @@ module.exports = Components({
       types: board.typeNames(),
       run: ({ op, user }) => backboneDesk.configure(DEMO_SHOP, op, actorOf(user)),
     },
+  }),
+
+  'receipts': Table({
+    rows: async () => (await backboneDesk.receiptsOf(DEMO_SHOP)).map((r) => ({
+      id: r.id,
+      number: r.number,
+      kind: { received: 'получена', waiting: 'ждём ответа', done: 'готово', refused: 'закрыта' }[r.kind] || r.kind,
+      to: r.address || '—',
+      subject: r.subject,
+      status: { pending: 'ждёт', sent: 'отправлена', failed: `сбой ×${r.attempts}`, skipped: 'пропущена' }[r.status] || r.status,
+      why: r.last_error || '',
+      at: new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }),
+    })),
+    idKey: 'id',
+    columns: [
+      { key: 'number', name: 'Заявка', type: 'num', sortable: true },
+      { key: 'kind', name: 'Повод', sortable: true },
+      { key: 'to', name: 'Кому' },
+      { key: 'subject', name: 'Тема' },
+      { key: 'status', name: 'Статус', sortable: true },
+      { key: 'why', name: 'Почему не ушла' },
+      { key: 'at', name: 'Когда' },
+    ],
+    search: ['subject', 'to', 'status'],
+    actions: [
+      { id: 'send', name: 'Отправить ожидающие', run: async () => {
+        const r = await backboneDesk.sendReceipts(DEMO_SHOP);
+        return { message: `новых квитанций ${r.made}, к отправке ${r.pending}, ушло ${r.sent}` };
+      } },
+    ],
   }),
 
   'journal': Table({

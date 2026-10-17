@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Магазин — заявка списком</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/c/ui.css" />
+  <style>
+    /* Витрина костяка (docs/backbone-architecture.md §6.3): каталог, «заявка списком»,
+       ссылка на окно статуса. Корзины нет: целевой клиент присылает список. */
+    body { display: block; background: var(--bg); color: var(--text); }
+    .shop { box-sizing: border-box; width: 100%; max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; text-align: left; }
+    .shop__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; margin-bottom: 20px; }
+    .shop__name { margin: 0; font-size: 1.6rem; color: var(--text-heading); }
+    .shop__hours { color: var(--text-muted); font-size: 0.95rem; }
+    .shop__grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: start; }
+    @media (max-width: 860px) { .shop__grid { grid-template-columns: 1fr; } }
+    .card { min-width: 0; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .card h2 { margin: 0 0 4px; font-size: 1.15rem; color: var(--text-heading); }
+    .card .lead { margin: 0 0 14px; color: var(--text-muted); font-size: 0.92rem; }
+    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 0.9rem; color: var(--text-muted); }
+    .field input, .field textarea, .field select, .search input, .search select {
+      font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 10px; min-width: 0;
+    }
+    .field textarea { resize: vertical; min-height: 150px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88rem; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 520px) { .row2 { grid-template-columns: 1fr; } }
+    .consent { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; color: var(--text-muted); margin: 4px 0 14px; }
+    .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .btn { font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px; padding: 10px 18px;
+      background: var(--btn-primary-bg); color: var(--btn-primary-text); }
+    .btn:hover { background: var(--btn-primary-hover); }
+    .btn[disabled] { opacity: 0.6; cursor: progress; }
+    .done { border-color: var(--ok-border); background: var(--ok-bg); }
+    .done h2 { color: var(--ok-text); }
+    .done a { font-weight: 600; }
+    .note { margin-top: 10px; color: var(--danger-text); font-size: 0.9rem; }
+    .search { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 10px; }
+    .items-wrap { overflow-x: auto; }
+    .items { width: 100%; min-width: 440px; border-collapse: collapse; font-size: 0.9rem; }
+    .items th { text-align: left; font-weight: 600; color: var(--text-muted); font-size: 0.8rem; padding: 6px 6px; border-bottom: 1px solid var(--border); }
+    .items td { padding: 7px 6px; border-bottom: 1px solid var(--surface-inset); vertical-align: top; }
+    .items td.num { text-align: right; white-space: nowrap; }
+    .items .sku { color: var(--text-faint); font-size: 0.78rem; }
+    .stock { font-size: 0.8rem; white-space: nowrap; }
+    .stock--yes { color: var(--ok-text); }
+    .stock--no { color: var(--text-faint); }
+    .items__more { color: var(--text-faint); font-size: 0.85rem; margin-top: 8px; }
+    .add { white-space: nowrap; font: inherit; font-size: 0.8rem; cursor: pointer; border: 1px solid var(--border); background: var(--input-bg); border-radius: 6px; padding: 2px 8px; color: var(--text); }
+    .add:hover { border-color: var(--border-strong); }
+  </style>
+</head>
+<body>
+  <main class="shop">
+    <header class="shop__head">
+      <h1 class="shop__name" id="shop-name">Магазин</h1>
+      <span class="shop__hours" id="shop-hours"></span>
+    </header>
+
+    <div class="shop__grid">
+      <section class="card" id="order-card" aria-labelledby="order-title">
+        <h2 id="order-title">Отправить заявку списком</h2>
+        <p class="lead">Вставьте список или приложите таблицу — посчитаем, проверим наличие и упаковку, пришлём счёт. Ответим в течение часа в рабочее время.</p>
+        <form id="order-form" novalidate>
+          <label class="field">Список: наименование и количество, по строке на позицию
+            <textarea name="text" placeholder="Болт М10×50 оцинк. — 200 шт&#10;Гайка М10 — 200 шт&#10;Саморез 4,2×19 со сверлом — 3 упаковки"></textarea>
+          </label>
+          <label class="field">или файл: xlsx или pdf с текстом, до 5 МБ
+            <input type="file" name="file" accept=".xlsx,.pdf,.txt">
+          </label>
+          <div class="row2">
+            <label class="field">Как к вам обращаться
+              <input name="name" type="text" maxlength="120" autocomplete="organization" placeholder="ООО «Стройка» или Иван">
+            </label>
+            <label class="field">Почта или телефон для ответа *
+              <input name="contact" type="text" maxlength="120" required autocomplete="email" placeholder="you@company.ru">
+            </label>
+          </div>
+          <label class="trap" aria-hidden="true">Сайт <input name="website" type="text" tabindex="-1" autocomplete="off"></label>
+          <label class="consent">
+            <input type="checkbox" name="consent" value="on" required>
+            <span>Согласен на обработку персональных данных (контакт и текст заявки), чтобы магазин ответил на заявку. Данные хранятся в России.</span>
+          </label>
+          <button class="btn" type="submit" id="order-send">Отправить заявку</button>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="catalog-title">
+        <h2 id="catalog-title">Каталог</h2>
+        <p class="lead">Поиск по наименованию и размеру: «болт м10х50», «кран 1/2». Кнопка «в список» добавляет позицию в заявку.</p>
+        <div class="search">
+          <input id="q" type="search" placeholder="что ищете?" aria-label="Поиск по каталогу">
+          <select id="group" aria-label="Группа"><option value="">все группы</option></select>
+        </div>
+        <div class="items-wrap"><table class="items" aria-live="polite">
+          <thead><tr><th>Наименование</th><th>Упак.</th><th class="num">Цена, ₽</th><th>Наличие</th><th></th></tr></thead>
+          <tbody id="items"><tr><td colspan="5">загрузка…</td></tr></tbody>
+        </table></div>
+        <div class="items__more" id="more"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/c/ui.js"></script>
+  <script>
+  (() => {
+    'use strict';
+    const { escapeHtml, getJson, debounce, toast } = window.VeshaUI;
+    const slug = new URLSearchParams(location.search).get('shop') || 'demo-krepezh';
+    const api = `/api/backbone-public/shops/${encodeURIComponent(slug)}`;
+    const DAYS = ['', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+
+    getJson(api).then((s) => {
+      document.title = `${s.name} — заявка списком`;
+      document.getElementById('shop-name').textContent = s.name;
+      if (s.hours) {
+        const d = s.hours.days || [];
+        const span = d.length ? `${DAYS[d[0]]}–${DAYS[d[d.length - 1]]}` : '';
+        document.getElementById('shop-hours').textContent = `${span} ${s.hours.from}–${s.hours.to}`;
+      }
+      const sel = document.getElementById('group');
+      for (const g of s.groups || []) sel.insertAdjacentHTML('beforeend', `<option>${escapeHtml(g)}</option>`);
+    }).catch((e) => toast(e.message, { kind: 'err' }));
+
+    // ---------- каталог ----------
+    const fmt = (n) => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let seq = 0;
+    function search() {
+      const q = document.getElementById('q').value;
+      const group = document.getElementById('group').value;
+      const my = ++seq;
+      getJson(`${api}/catalog?q=${encodeURIComponent(q)}&group=${encodeURIComponent(group)}`).then((r) => {
+        if (my !== seq) return;
+        const body = document.getElementById('items');
+        body.innerHTML = r.items.length ? r.items.map((i) => `
+          <tr>
+            <td>${escapeHtml(i.name)}<div class="sku">${escapeHtml(i.sku)}</div></td>
+            <td>${i.pack > 1 ? `по ${i.pack} ${escapeHtml(i.unit)}` : escapeHtml(i.unit)}</td>
+            <td class="num">${fmt(i.price)}</td>
+            <td class="stock ${i.inStock ? 'stock--yes' : 'stock--no'}">${i.inStock ? 'в наличии' : 'под заказ'}</td>
+            <td><button type="button" class="add" data-name="${escapeHtml(i.name)}" data-pack="${i.pack}" data-unit="${escapeHtml(i.unit)}">в список</button></td>
+          </tr>`).join('') : '<tr><td colspan="5">ничего не нашлось — напишите позицию в заявке своими словами</td></tr>';
+        document.getElementById('more').textContent = r.total > r.items.length ? `показаны ${r.items.length} из ${r.total} — уточните запрос` : '';
+      }).catch((e) => toast(e.message, { kind: 'err' }));
+    }
+    document.getElementById('q').addEventListener('input', debounce(search, 250));
+    document.getElementById('group').addEventListener('change', search);
+    document.getElementById('items').addEventListener('click', (e) => {
+      const btn = e.target.closest('.add');
+      if (!btn) return;
+      const area = document.querySelector('#order-form textarea[name="text"]');
+      const qty = btn.dataset.pack > 1 ? btn.dataset.pack : 1;
+      area.value = `${area.value.replace(/\s+$/, '')}${area.value.trim() ? '\n' : ''}${btn.dataset.name} — ${qty} ${btn.dataset.unit}`;
+      toast('Добавлено в список — поправьте количество', { kind: 'ok' });
+    });
+    search();
+
+    // ---------- заявка списком ----------
+    const form = document.getElementById('order-form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new FormData(form);
+      if (!String(data.get('text') || '').trim() && !(data.get('file') && data.get('file').size)) {
+        toast('Вставьте список или приложите файл', { kind: 'err' });
+        return;
+      }
+      if (!String(data.get('contact') || '').trim()) { toast('Укажите почту или телефон для ответа', { kind: 'err' }); return; }
+      if (!data.get('consent')) { toast('Нужно согласие на обработку персональных данных', { kind: 'err' }); return; }
+      const btn = document.getElementById('order-send');
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${api}/orders`, { method: 'POST', body: data });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || j.error) throw new Error(j.error || `HTTP ${res.status}`);
+        const card = document.getElementById('order-card');
+        card.classList.add('done');
+        card.innerHTML = `
+          <h2>Заявка №${j.number} ${j.duplicate ? 'уже у нас' : 'получена'}</h2>
+          <p class="lead">${j.duplicate ? 'Этот список с этого контакта уже пришёл раньше — второй раз мы его не заводим.' : 'Ответим в течение часа в рабочее время. Квитанция придёт на почту, если вы её указали.'}</p>
+          <p>Путь заявки — по ссылке, сохраните её: <a href="${escapeHtml(j.status)}">${escapeHtml(location.origin + j.status)}</a></p>
+          ${j.notice ? `<p class="note">${escapeHtml(j.notice)}</p>` : ''}`;
+      } catch (err) {
+        toast(`Заявка не отправлена: ${err.message}`, { kind: 'err' });
+        btn.disabled = false;
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

@@ -19,6 +19,7 @@ class MemoryRepository {
     this.rows = [];           // заявки
     this.draftLines = [];     // строки черновиков
     this.synonymRows = [];    // синонимы магазинов
+    this.receiptRows = [];    // исходящие квитанции
   }
 
   async shopBySlug(slug) {
@@ -30,7 +31,7 @@ class MemoryRepository {
     const existing = await this.shopBySlug(slug);
     if (existing) return existing;
     const now = this.journal.now();
-    const shop = { id: crypto.randomUUID(), slug, name, niche, tz: 'Europe/Moscow', board_version: 1, mode, mode_since: now, created_at: now };
+    const shop = { id: crypto.randomUUID(), slug, name, niche, tz: 'Europe/Moscow', board_version: 1, mode, mode_since: now, receipts_cursor: 0, created_at: now };
     this.shops.push(shop);
     this.boards.set(shop.id, columns.map((c, position) => ({ ...c, position })));
     await this.journal.appendIn(null, makeEvents(shop));
@@ -53,9 +54,13 @@ class MemoryRepository {
   async createOrder(shopId, columnId, draft, makeEvents) {
     const now = this.journal.now();
     const number = this.rows.filter((o) => o.shop_id === shopId).reduce((m, o) => Math.max(m, o.number), 0) + 1;
+    if (draft.contentKey && this.rows.some((o) => o.shop_id === shopId && o.content_key === draft.contentKey)) {
+      throw Object.assign(new Error('duplicate content_key'), { code: '23505' }); // как уникальный индекс Postgres
+    }
     const order = {
       id: crypto.randomUUID(), shop_id: shopId, number, column_id: columnId,
       client: draft.client, contact: draft.contact, text: draft.text, channel: draft.channel || 'manual',
+      status_token: draft.statusToken || null, content_key: draft.contentKey || null, consent_at: draft.consentAt || null,
       created_at: now, updated_at: now,
     };
     this.rows.push(order);
@@ -78,6 +83,62 @@ class MemoryRepository {
     Object.assign(shop, { mode: to, mode_since: this.journal.now() });
     await this.journal.appendIn(null, events);
     return { ...shop };
+  }
+
+  // ---------- витрина и квитанции (шаг 4) ----------
+
+  async shopById(id) {
+    const shop = this.shops.find((s) => s.id === id);
+    return shop ? { ...shop } : null;
+  }
+
+  async orderByToken(token) {
+    const order = this.rows.find((o) => o.status_token === token);
+    return order ? { ...order } : null;
+  }
+
+  async orderByContentKey(shopId, key) {
+    const order = this.rows.find((o) => o.shop_id === shopId && o.content_key === key);
+    return order ? { ...order } : null;
+  }
+
+  async receiptsCursor(shopId) {
+    const shop = this.shops.find((s) => s.id === shopId);
+    return shop ? shop.receipts_cursor : 0;
+  }
+
+  async saveReceipts(shopId, fromCursor, toCursor, rows) {
+    const shop = this.shops.find((s) => s.id === shopId);
+    if (!shop || shop.receipts_cursor !== fromCursor) return false;
+    const now = this.journal.now();
+    for (const r of rows) {
+      if (this.receiptRows.some((x) => x.event_id === r.eventId)) continue;
+      this.receiptRows.push({
+        id: crypto.randomUUID(), shop_id: shopId, order_id: r.orderId, event_id: r.eventId, kind: r.kind,
+        channel: r.channel, address: r.address, subject: r.subject, body: r.body, status: r.status,
+        attempts: 0, last_error: r.lastError, created_at: now, sent_at: null,
+      });
+    }
+    shop.receipts_cursor = toCursor;
+    return true;
+  }
+
+  async pendingReceipts(maxAttempts, limit) {
+    return this.receiptRows
+      .filter((r) => r.status === 'pending' || (r.status === 'failed' && r.attempts < maxAttempts))
+      .slice(0, limit).map((r) => ({ ...r }));
+  }
+
+  async markReceipt(id, { status, error = null }) {
+    const r = this.receiptRows.find((x) => x.id === id);
+    if (!r) return;
+    Object.assign(r, { status, attempts: r.attempts + 1, last_error: error, sent_at: status === 'sent' ? this.journal.now() : r.sent_at });
+  }
+
+  async receipts(shopId) {
+    return this.receiptRows.filter((r) => r.shop_id === shopId)
+      .map((r) => ({ ...r, number: (this.rows.find((o) => o.id === r.order_id) || {}).number }))
+      .reverse();
   }
 
   // ---------- черновик счёта (шаг 2): те же отказы, что у Postgres ----------

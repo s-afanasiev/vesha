@@ -152,6 +152,13 @@ const config = {
   // Костяк, разбор заявки: модель для строк вне правил — шлюз (gateway, квота инициатора)
   // или записанные ответы демо-заявки (recorded, без сети и ключа).
   backboneModel: process.env.BACKBONE_MODEL === 'recorded' ? 'recorded' : 'gateway',
+  // Костяк, витрина: адрес сайта для ссылок в квитанциях; почта квитанций до SMTP —
+  // файлы .eml в папке (data/ вне git); адрес отправителя.
+  backbonePublicUrl: (envStr('BACKBONE_PUBLIC_URL') || 'http://localhost:3000').replace(/\/$/, ''),
+  backboneMailDir: envStr('BACKBONE_MAIL_DIR') || require('path').join(__dirname, '..', 'data', 'backbone-mail'),
+  backboneMailFrom: envStr('BACKBONE_MAIL_FROM') || 'noreply@vesha.local',
+  backboneSitePerIp: intEnv('BACKBONE_SITE_PER_IP', 5),       // заявок с одного адреса за окно
+  backboneSiteWindowMin: intEnv('BACKBONE_SITE_WINDOW_MIN', 10),
   // Путь для замера свободного места: на сервере данные могут жить на другом томе.
   diskInfoPath: process.env.DISK_INFO_PATH || process.cwd(),
   // Плитки с visibility='admin' видят только залогиненные с этими email (listEnv уже в lower-case).

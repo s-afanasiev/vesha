@@ -56,6 +56,26 @@ class WorkingHours {
     return total / 60000;
   }
 
+  // Момент, когда истекут minutes рабочих минут от fromMs: обещание «ответим до …»
+  // в квитанции. Заявка в 22:00 при сроке в час — «до 10:00» следующего рабочего дня.
+  deadline(fromMs, minutes) {
+    const from = Number(fromMs);
+    let left = minutes * 60000;
+    let day = this.localDate(from);
+    for (let i = 0; i < 60; i++) {
+      if (this.days.has(WorkingHours.weekday(day))) {
+        const start = Math.max(from, this.at(day, this.from));
+        const close = this.at(day, this.to);
+        if (close > start) {
+          if (close - start >= left) return start + left;
+          left -= close - start;
+        }
+      }
+      day = WorkingHours.nextDay(day);
+    }
+    return null;
+  }
+
   // Понедельник недели момента — ключ недельной таблицы «гггг-мм-дд».
   weekOf(ms) {
     let day = this.localDate(ms);

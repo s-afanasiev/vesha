@@ -93,9 +93,10 @@ class BackboneRepository {
         [shopId]
       );
       const { rows: [order] } = await client.query(
-        `INSERT INTO backbone_orders (shop_id, number, column_id, client, contact, text, channel)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [shopId, next, columnId, draft.client, draft.contact, draft.text, draft.channel || 'manual']
+        `INSERT INTO backbone_orders (shop_id, number, column_id, client, contact, text, channel, status_token, content_key, consent_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [shopId, next, columnId, draft.client, draft.contact, draft.text, draft.channel || 'manual',
+          draft.statusToken || null, draft.contentKey || null, draft.consentAt || null]
       );
       await this.journal.appendIn(client, makeEvents(order));
       return order;
@@ -156,6 +157,79 @@ class BackboneRepository {
       await this.journal.appendIn(client, events);
       return shop;
     });
+  }
+
+  // ---------- витрина и квитанции (шаг 4) ----------
+
+  async shopById(id) {
+    const { rows } = await this.db.query('SELECT * FROM backbone_shops WHERE id = $1', [id]);
+    return rows[0] || null;
+  }
+
+  async orderByToken(token) {
+    const { rows } = await this.db.query('SELECT * FROM backbone_orders WHERE status_token = $1', [token]);
+    return rows[0] || null;
+  }
+
+  async orderByContentKey(shopId, key) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM backbone_orders WHERE shop_id = $1 AND content_key = $2', [shopId, key]
+    );
+    return rows[0] || null;
+  }
+
+  async receiptsCursor(shopId) {
+    const { rows } = await this.db.query('SELECT receipts_cursor FROM backbone_shops WHERE id = $1', [shopId]);
+    return rows[0] ? Number(rows[0].receipts_cursor) : 0;
+  }
+
+  // Квитанции проекции и новый курсор — одной транзакцией; другой проектор успел
+  // раньше (курсор уже не тот) — ничего не пишем, повтор безопасен (event_id уникален).
+  async saveReceipts(shopId, fromCursor, toCursor, rows) {
+    return this.tx(async (client) => {
+      const { rows: [shop] } = await client.query(
+        'SELECT receipts_cursor FROM backbone_shops WHERE id = $1 FOR UPDATE', [shopId]
+      );
+      if (!shop || Number(shop.receipts_cursor) !== fromCursor) return false;
+      for (const r of rows) {
+        await client.query(
+          `INSERT INTO backbone_receipts (shop_id, order_id, event_id, kind, channel, address, subject, body, status, last_error)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (event_id) DO NOTHING`,
+          [shopId, r.orderId, r.eventId, r.kind, r.channel, r.address, r.subject, r.body, r.status, r.lastError]
+        );
+      }
+      await client.query('UPDATE backbone_shops SET receipts_cursor = $2 WHERE id = $1', [shopId, toCursor]);
+      return true;
+    });
+  }
+
+  async pendingReceipts(maxAttempts, limit) {
+    const { rows } = await this.db.query(
+      `SELECT * FROM backbone_receipts
+       WHERE status = 'pending' OR (status = 'failed' AND attempts < $1)
+       ORDER BY created_at LIMIT $2`,
+      [maxAttempts, limit]
+    );
+    return rows;
+  }
+
+  async markReceipt(id, { status, error = null }) {
+    await this.db.query(
+      `UPDATE backbone_receipts
+       SET status = $2, attempts = attempts + 1, last_error = $3,
+           sent_at = CASE WHEN $2 = 'sent' THEN now() ELSE sent_at END
+       WHERE id = $1`,
+      [id, status, error]
+    );
+  }
+
+  async receipts(shopId, { limit = 200 } = {}) {
+    const { rows } = await this.db.query(
+      `SELECT r.*, o.number FROM backbone_receipts r JOIN backbone_orders o ON o.id = r.order_id
+       WHERE r.shop_id = $1 ORDER BY r.created_at DESC LIMIT $2`,
+      [shopId, limit]
+    );
+    return rows;
   }
 
   // ---------- черновик счёта: строки заявки и синонимы (шаг 2) ----------

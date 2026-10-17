@@ -8,6 +8,7 @@ module.exports = Pages({
     subtitle: 'Шаг 1 MVP: заявка вручную, перенос по колонкам, конструктор колонок со смысловыми типами — и каждое действие в журнале',
     blocks: [
       { kind: 'kanban@1', src: '/api/backbone/c/board', poll: 4000, title: 'Доска демо-магазина' },
+      { kind: 'table@1', src: '/api/backbone/c/receipts', poll: 6000, title: 'Квитанции клиентам — витрина: /backbone/' },
       { kind: 'table@1', src: '/api/backbone/c/journal', poll: 4000, title: 'Журнал событий' },
       { kind: 'table@1', src: '/api/backbone/c/catalog', title: 'Каталог — фикстура на 300 позиций' },
     ],

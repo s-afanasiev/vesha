@@ -67,6 +67,32 @@ class Catalog {
   bySku(sku) {
     return this.items().find((i) => i.sku === sku) || null;
   }
+
+  // Поиск витрины (§6.3): слова запроса — все в наименовании или артикуле; размер
+  // пишут как угодно — «м10х50», «M10x50», «10*50» находят «М10×50».
+  search({ q = '', group = '', limit = 60 } = {}) {
+    const words = norm(q).split(' ').filter(Boolean);
+    const found = this.items().filter((i) => {
+      if (group && i.group !== group) return false;
+      const hay = norm(`${i.name} ${i.sku}`);
+      return words.every((w) => hay.includes(w));
+    });
+    return { total: found.length, items: found.slice(0, limit) };
+  }
+
+  groups() {
+    return [...new Set(this.items().map((i) => i.group))];
+  }
+}
+
+function norm(s) {
+  return String(s).toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/(\d)\s*[x×х*]\s*(?=\d)/g, '$1x')   // 10х50, 10 × 50 → 10x50
+    .replace(/(^|[^a-zа-я])[мm](?=\d)/g, '$1m')  // м10 → m10
+    .replace(/[,.](?=\d)/g, '.')
+    .replace(/[^\p{L}\p{N}.x]+/gu, ' ')
+    .trim();
 }
 
 module.exports = { Catalog, CsvFeed };
