@@ -65,10 +65,18 @@ class SiteIntake {
     if (text.length > this.maxText) throw bad(`Список длиннее ${this.maxText} символов — пришлите его файлом`);
     const name = String(form.name ?? '').trim().slice(0, LIMITS.client);
     const draft = { client: name || contact.value, contact: contact.value, text, channel: 'site' };
-    const normal = text.toLowerCase().replace(/\s+/g, ' ').trim();
-    const contentKey = crypto.createHash('sha256').update(`${contact.value}\n${normal}`).digest('hex').slice(0, 40);
-    return { draft, contentKey, contact, refusal };
+    return { draft, contentKey: contentKey(contact.value, text), contact, refusal };
   }
 }
 
-module.exports = { SiteIntake, contactOf };
+// Вступление перед списком — «Мне нужно:», «Здравствуйте! Заявка:» — не содержимое.
+const CUE = /^\s*(?:(?:здравствуйте|добрый день|добрый вечер|привет)[\s,.!]*)?(?:(?:мне|нам)\s+)?(?:нужн[оаы]|надо|требуется|прошу[^:\n]{0,30}|заявка|список|заказ)\s*:\s*/i;
+
+// Ключ «контакт + содержимое» (П36): тот же список с того же контакта — одна заявка,
+// из какого бы канала он ни пришёл (сайт, чат). Регистр, пробелы и вступление не в счёт.
+function contentKey(contact, text) {
+  const normal = String(text).replace(CUE, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return crypto.createHash('sha256').update(`${contact}\n${normal}`).digest('hex').slice(0, 40);
+}
+
+module.exports = { SiteIntake, contactOf, contentKey };

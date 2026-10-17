@@ -5,6 +5,9 @@
 //   GET  /shops/:slug                 витрина: название, часы, группы каталога
 //   GET  /shops/:slug/catalog?q=&group=  поиск по каталогу: цена, упаковка, наличие
 //   POST /shops/:slug/orders          «заявка списком»: текст или файл, контакт, согласие
+//   GET  /shops/:slug/assistant       виджет ассистента: разговор посетителя и предложение заявки
+//   POST /shops/:slug/assistant/messages  сообщение посетителя → ответ ассистента
+//   POST /shops/:slug/assistant/orders    список из разговора → заявка (контакт, согласие)
 //   /c/status                         stages@1: окно статуса по токену ссылки
 //
 // Наружу не уходят ни остатки числом, ни контакты, ни текст заявки: окно статуса
@@ -15,12 +18,16 @@ const multer = require('multer');
 const config = require('../config');
 const { Components } = require('../components');
 const { Stages } = require('../components/stages');
-const { backboneDesk } = require('../services/backbone');
+const { backboneDesk, assistant } = require('../services/backbone');
 
 const router = express.Router();
 const DEFAULT_HOURS = { days: [1, 2, 3, 4, 5, 6], from: '09:00', to: '19:00' }; // как у WorkingHours
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+
+// Клиент витрины — гость платформы (подписанная cookie): тот же браузер, что прислал
+// заявку с сайта, видит её статус в чате ассистента (шаг 5, О20).
+const guestOf = (req) => (req.guest ? String(req.guest.id) : null);
 
 // Не больше N заявок с одного адреса за окно: форма открыта всем (честный простой узел).
 const windowMs = config.backboneSiteWindowMin * 60 * 1000;
@@ -71,7 +78,7 @@ router.post('/shops/:slug/orders', (req, res, next) => {
         throw Object.assign(new Error(tooBig ? 'Файл больше 5 МБ' : 'Файл не принят'), { status: 400 });
       }
       const file = req.file ? { name: Buffer.from(req.file.originalname, 'latin1').toString('utf8'), data: req.file.buffer } : null;
-      const { order, duplicate, refusal } = await backboneDesk.receiveFromSite(req.params.slug, req.body || {}, file);
+      const { order, duplicate, refusal } = await backboneDesk.receiveFromSite(req.params.slug, req.body || {}, file, { clientKey: guestOf(req) });
       res.json({
         ok: true,
         number: order.number,
@@ -81,6 +88,28 @@ router.post('/shops/:slug/orders', (req, res, next) => {
       });
     } catch (err) { next(err); }
   });
+});
+
+// Ассистент магазина (шаг 5): ответы — сразу, правилами по фактам магазина, без модели.
+
+router.get('/shops/:slug/assistant', async (req, res, next) => {
+  try {
+    res.json({ ok: true, ...(await assistant.conversation(req.params.slug, guestOf(req))) });
+  } catch (err) { next(err); }
+});
+
+router.post('/shops/:slug/assistant/messages', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    res.json({ ok: true, ...(await assistant.hear(req.params.slug, guestOf(req), { text: body.text, externalId: body.externalId })) });
+  } catch (err) { next(err); }
+});
+
+router.post('/shops/:slug/assistant/orders', async (req, res, next) => {
+  if (tooMany(req.ip)) return res.status(429).json({ error: 'Слишком много заявок подряд — попробуйте через несколько минут' }); // тот же счёт заявок с адреса, что у формы
+  try {
+    res.json({ ok: true, ...(await assistant.sendList(req.params.slug, guestOf(req), req.body || {})) });
+  } catch (err) { next(err); }
 });
 
 router.use('/c', Components({

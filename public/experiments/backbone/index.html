@@ -42,6 +42,7 @@
           <a data-page="draft">Черновики счетов</a>
           <a data-page="measures">Замеры</a>
           <a data-page="catalog">Каталог</a>
+          <a data-page="assistant">Ассистент</a>
           <a data-page="shops">Магазины</a>
         </nav>
         <div data-vesha-auth-widget></div>
@@ -79,7 +80,7 @@
         if (status !== 200) return say(body.error || `HTTP ${status}`);
         const { admin, shops } = body;
         document.querySelector('.boot-pages [data-page="shops"]').hidden = !admin;
-        const page = ['draft', 'measures', 'catalog', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
+        const page = ['draft', 'measures', 'catalog', 'assistant', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
         const shop = params.get('shop') || (admin ? 'demo-krepezh' : shops[0] && shops[0].slug);
         if (!shop) return say('Вашей почте пока не открыт ни один магазин — попросите админа добавить её на экране «Магазины».');
         // выбор магазина и вкладки — только тому, кому есть что открыть

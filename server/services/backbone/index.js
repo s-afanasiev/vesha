@@ -5,7 +5,9 @@
 // магазина из его выгрузки xlsx (CatalogFile, Catalogs) с индексом атрибутов,
 // инструмент слота «разбор заявки в счёт» на каталоге магазина с выгрузкой в 1С,
 // замеры из журнала и теневой режим; витрина: заявка с сайта, окно статуса по
-// ссылке, квитанции клиенту — письмом (SMTP) или файлами .eml. Ассистент — шаг 5 §10.
+// ссылке, квитанции клиенту — письмом (SMTP) или файлами .eml. Ассистент (шаг 5) —
+// виджет витрины на ядре chat-engine: наличие и цена, статус своей заявки, часы — сам;
+// список из разговора — заявка тем же ключом, что с сайта; остальное — менеджеру.
 // Вход в кабинет — ShopAccess: админ экземпляра — все магазины, сотрудник — свой.
 
 const fs = require('node:fs');
@@ -41,6 +43,15 @@ const { StatusPage } = require('./site/StatusPage');
 const { Receipts } = require('./receipts/Receipts');
 const { FileMailbox } = require('./receipts/FileMailbox');
 const { SmtpMailbox } = require('./receipts/SmtpMailbox');
+const { ChatDesk } = require('../chat-engine/ChatDesk');
+const { DialogueRepository } = require('../chat-engine/DialogueRepository');
+const { ReplySuggester } = require('../chat-engine/ReplySuggester');
+const { Funnel } = require('../chat-engine/Funnel');
+const { Assistant } = require('./assistant/Assistant');
+const { ShopFacts } = require('./assistant/ShopFacts');
+const { AutoAnswers, StatusAnswer, HoursAnswer, StockAnswer } = require('./assistant/AutoAnswers');
+const { ChatIntake } = require('./assistant/ChatIntake');
+const { ShopPersona, replyModel } = require('./assistant/ShopPersona');
 
 // Посев: магазины, которые костяк знает из кода, — только демо. Остальные админ
 // заводит в кабинете (backbone_shops, шаг 6); новый начинает с тени (14 дней базы
@@ -156,4 +167,44 @@ const backboneDesk = new BackboneDesk({
 
 const demoRequest = () => fs.readFileSync(path.join(FIXTURES, 'request-20.txt'), 'utf8');
 
-module.exports = { backboneDesk, board, catalogFile, invoiceTool, demoRequest, DEMO_SHOP, SEEDS, TEMPLATES };
+// Ассистент магазина (шаг 5, §6.4): разговор — ядро chat-engine без правки (ChatDesk,
+// DialogueRepository, ReplySuggester, Funnel — единственная зависимость костяка от
+// chat-engine); ответы — только из фактов магазина (О18); заявки — только собеседника (О20).
+const dialogues = new DialogueRepository(db);
+const chatFunnel = new Funnel();
+const statusPath = (token) => `/backbone/status.html?t=${encodeURIComponent(token)}`;
+const assistant = new Assistant({
+  desk: backboneDesk,
+  chatDesk: new ChatDesk({ repository: dialogues, suggester: null, funnel: chatFunnel }),
+  replyDeskOf: (shop, user) => new ChatDesk({                            // черновик менеджеру по кнопке
+    repository: dialogues,
+    suggester: new ReplySuggester({
+      repository: new ShopPersona(dialogues, shop),                      // персона магазина: название, часы, «цены — не черновику»
+      completeChat: replyModel(llm, user),                               // модель разбора: квота нажавшего (П37), контакты вырезаны
+      funnel: chatFunnel,
+    }),
+    funnel: chatFunnel,
+  }),
+  factsOf: async (shop, clientKey) => {
+    const catalog = await catalogs.of(shop);                             // каталог по версии выгрузки — тот же, что у витрины и разбора
+    return new ShopFacts({
+      shop,
+      catalog,
+      match: new Match(catalog.index, { defaultCoating: attributesOf(shop.niche).defaultCoating }), // правило разбора: позиция не противоречит вопросу
+      orders: () => backboneDesk.clientOrders(shop.slug, clientKey),      // дверь byClient: только заявки собеседника
+      hours: hoursOf(shop),
+    });
+  },
+  answers: new AutoAnswers([                                             // три вопроса — сам, по порядку; остальное — менеджеру
+    new StatusAnswer({ statusPath, shown: 3 }),
+    new HoursAnswer(),
+    new StockAnswer({ limit: 5 }),
+  ]),
+  intake: new ChatIntake(new RuleLines()),                               // список — теми же правилами, что разбор заявки
+  repository,
+  journal,
+  statusPath,
+  limits: { messages: 30, windowMin: 10 },                               // сообщений посетителя за окно минут
+});
+
+module.exports = { backboneDesk, assistant, board, catalogFile, invoiceTool, demoRequest, DEMO_SHOP, SEEDS, TEMPLATES };

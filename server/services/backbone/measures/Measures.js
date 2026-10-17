@@ -7,6 +7,7 @@
 // Минуты менеджера — активное время над черновиком: правки, выгрузка, отправка
 // счёта; паузы длиннее sessionGap не считаются (событие «открыл черновик» — с витриной).
 // Режим заявки — тот, что был у магазина в момент приёма (тень — база «до»).
+// Ассистент (шаг 5) — вопросы в чате: ответил сам или ждали менеджера (поток chat).
 
 const { DAY_MS } = require('./WorkingHours');
 
@@ -123,6 +124,21 @@ class Measures {
     };
   }
 
+  // Ассистент без менеджера (шаг 5): вопросы в чате, на которые ассистент ответил сам,
+  // против ждавших менеджера; режим — тот, что был у магазина в момент вопроса.
+  assistant(events, { mode }) {
+    const changes = events.filter((e) => e.type === 'mode_changed');
+    const out = { shadow: { auto: 0, manager: 0 }, help: { auto: 0, manager: 0 } };
+    for (const e of events) {
+      if (e.stream !== 'chat') continue;
+      const kind = { assistant_answered: 'auto', assistant_deferred: 'manager' }[e.type];
+      if (!kind) continue;
+      (out[Measures.modeAt(changes, ms(e.at), mode)] || out.help)[kind] += 1;
+    }
+    for (const v of Object.values(out)) v.share = share(v.auto, v.auto + v.manager);
+    return out;
+  }
+
   // Тишина сейчас: заявки дольше срока в своём типе колонки.
   silent(cards, now) {
     const inbox = cards.filter((c) => c.type === 'inbox' && this.hours.minutes(c.typeSince, now) > this.silence.inbox);
@@ -149,6 +165,7 @@ class Measures {
         ...this.metrics(list, now),
       })),
       silence: this.silent(cards, now),
+      assistant: this.assistant(events, { mode }),
     };
   }
 }

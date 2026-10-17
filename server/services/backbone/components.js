@@ -14,13 +14,15 @@
 // → «Загрузить каталог» (подмена целиком только при успехе), брак — списком.
 // Сотрудники магазина: в кабинете — «Добавить сотрудника» у магазина и список
 // сотрудников с «Убрать сотрудника» (desk.addStaff, desk.removeStaff).
+// Шаг 5 — экран ассистента: разговоры магазина и сообщения; черновик менеджеру по
+// кнопке (assistant.proposeReply), отправить, править, отклонить; свой ответ.
 // Монтируется в server/routes/backbone.js (за границей ShopAccess: кабинет — админ,
 // магазин — админ или его сотрудник).
 
 const { Components } = require('../../components');
 const { Kanban } = require('../../components/kanban');
 const { Table } = require('../../components/table');
-const { backboneDesk, board, catalogFile, demoRequest, TEMPLATES } = require('./index');
+const { backboneDesk, assistant, board, catalogFile, demoRequest, TEMPLATES } = require('./index');
 const { TYPE_NAMES } = require('./board/Board');
 const { NICHE_NAMES } = require('./board/templates');
 const { hoursText } = require('./shops/ShopForm');
@@ -34,8 +36,13 @@ function describe(e, titles) {
   const col = (id) => (id ? `«${titles.get(id) || id}»` : '—');
   switch (e.type) {
     case 'board_created': return `доска создана из шаблона «${d.niche}»: ${(d.columns || []).length} колонок`;
-    case 'received': return `заявка №${d.number} принята в ${col(d.column)}${d.channel === 'site' ? ' — с сайта' : ''}${d.refusal === 'scan' ? `, файл «${d.file}» — скан, нужен текст` : ''}`;
-    case 'received_again': return `заявка №${d.number}: тот же список пришёл ещё раз — не дубль`;
+    case 'received': return `заявка №${d.number} принята в ${col(d.column)}${d.channel === 'site' ? ' — с сайта' : ''}${d.channel === 'chat' ? ' — из чата ассистента' : ''}${d.refusal === 'scan' ? `, файл «${d.file}» — скан, нужен текст` : ''}`;
+    case 'received_again': return `заявка №${d.number}: тот же список пришёл ещё раз${d.channel === 'chat' ? ' из чата' : d.channel === 'site' ? ' с сайта' : ''} — не дубль`;
+    case 'assistant_answered': return `ассистент ответил сам: ${ASKS[d.kind] || d.kind}${(d.refs || []).length ? ` — ${d.refs.map((r) => (r.sku ? r.sku : `№${r.order}`)).join(', ')}` : ''}`;
+    case 'assistant_deferred': return `вопрос в чате ждёт менеджера${d.reason === 'not_in_catalog' ? ': позиции нет в каталоге' : ''}`;
+    case 'list_offered': return `в чате список из ${d.lines} поз. — предложено отправить заявкой`;
+    case 'list_sent': return `список из чата → заявка №${d.number}${d.duplicate ? ' (уже была — не дубль)' : ''}`;
+    case 'manager_replied': return `менеджер ответил в чате${{ draft: ' черновиком', edited: ' черновиком с правкой', own: '' }[d.how] || ''}`;
     case 'moved': return `заявка №${d.number}: ${col(d.from)} → ${col(d.to)}${e.cause === 'column_removed' ? ' (колонку удалили)' : ''}`;
     case 'column_added': return `колонка ${col(d.column)} добавлена, тип «${TYPE_NAMES[d.columnType] || d.columnType}»`;
     case 'column_renamed': return `колонка «${d.from}» переименована в «${d.to}»`;
@@ -65,12 +72,16 @@ function describe(e, titles) {
 
 const VERDICTS = { accepted: 'принята', replaced: 'позиция заменена', edited: 'количество' };
 const MODES = { shadow: 'тень', help: 'помощь' };
-const STREAMS = { order: 'заявка', board: 'доска', shop: 'магазин' };
+const STREAMS = { order: 'заявка', board: 'доска', shop: 'магазин', chat: 'разговор' };
+const ASKS = { stock: 'наличие и цена', status: 'статус заявки', hours: 'часы работы' };
+const AUTO_NAMES = { list_offered: 'список', list_sent: 'заявка', assistant_deferred: 'менеджеру' };
+const DRAFT_STATES = { open: 'черновик', approved: 'черновик · отправлен', edited: 'черновик · отправлен с правкой', rejected: 'черновик · отклонён', superseded: 'черновик · устарел' };
 const ratio = (x) => (x == null ? '—' : String(Math.round(x * 100) / 100).replace('.', ','));
 const pct = (x) => (x == null ? null : `${Math.round(x * 100)} %`);
 const mins = (x) => (x == null ? null : `${String(Math.round(x * 10) / 10).replace('.', ',')} мин`);
 const day = (at) => new Date(at).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
 const accuracyText = (a) => (a.value == null ? null : `${ratio(a.value)} (${a.base} стр.)`);
+const assistantText = (x) => (x.share == null ? null : `${pct(x.share)} (${x.auto} из ${x.auto + x.manager})`);
 const conversionText = (c) => (c.value == null ? null : `${pct(c.value)} (${c.won} из ${c.won + c.lost})`);
 function delta(before, after, kind) {
   if (before == null || after == null) return null;
@@ -117,6 +128,7 @@ function shopComponents(slug) {
           const seen = d && d.lines && (shop.mode !== 'shadow' || d.sent); // в тени черновик скрыт до счёта
           const badges = o.contact && o.text ? [{ text: o.contact }] : [];
           if (o.channel === 'site') badges.unshift({ text: 'с сайта', kind: 'waiting' });
+          if (o.channel === 'chat') badges.unshift({ text: 'из чата', kind: 'waiting' });
           if (seen) badges.push({ text: `черновик ${d.accepted}/${d.lines}`, kind: 'draft' });
           if (seen && d.questions) badges.push({ text: `вопросов ${d.questions}`, kind: 'waiting' });
           if (d && d.sent) badges.push({ text: 'счёт отправлен' });
@@ -397,7 +409,8 @@ function shopComponents(slug) {
           row('silence', 'Тишина сейчас', null, null, null,
             [silent.inbox.length ? `входящие дольше часа: №${silent.inbox.join(', №')}` : '', silent.waitingClient.length ? `ждём клиента дольше 2 дн.: №${silent.waitingClient.join(', №')}` : '']
               .filter(Boolean).join('; ') || 'нет'),
-          row('assistant', 'Ответы ассистента без менеджера', null, null, null, 'ассистент — шаг 5'),
+          row('assistant', 'Ассистент ответил сам, доля вопросов в чате', assistantText(report.assistant.shadow), assistantText(report.assistant.help),
+            delta(report.assistant.shadow.share, report.assistant.help.share, 'pct'), 'сам — наличие и цена, статус своей заявки, часы; остальное ждало менеджера'),
         ];
       },
       idKey: 'id',
@@ -619,6 +632,90 @@ function shopComponents(slug) {
         { key: 'rejected', name: 'Не загружено', type: 'num' },
         { key: 'reason', name: 'Причина отказа' },
         { key: 'actor', name: 'Кто' },
+      ],
+    }),
+
+    // ---------- шаг 5: ассистент ----------
+
+    'chats': Table({
+      rows: async () => (await assistant.dialogues(slug)).map((d) => ({
+        id: d.id,
+        who: d.visitor_name,
+        last: d.last_text,
+        ball: d.last_role === 'visitor' ? 'ждёт ответа' : 'ответ отправлен',
+        answered: d.answered,
+        deferred: d.deferred,
+        drafts: Number(d.open_drafts) || null,
+        orders: d.orders.length ? d.orders.map((n) => `№${n}`).join(', ') : null,
+        at: at(d.last_incoming_at),
+      })),
+      idKey: 'id',
+      columns: [
+        { key: 'who', name: 'Собеседник', sortable: true },
+        { key: 'last', name: 'Последнее сообщение' },
+        { key: 'ball', name: 'Чей ход', sortable: true },
+        { key: 'answered', name: 'Ответил сам', type: 'num' },
+        { key: 'deferred', name: 'Ждали менеджера', type: 'num' },
+        { key: 'drafts', name: 'Черновик', type: 'num' },
+        { key: 'orders', name: 'Заявки из чата' },
+        { key: 'at', name: 'Последнее входящее' },
+      ],
+      search: ['who', 'last'],
+      actions: [
+        {
+          id: 'propose', name: 'Предложить ответ', bulk: true, max: 1,
+          run: async ({ ids, user }) => {
+            const r = await assistant.proposeReply(slug, ids[0], user);
+            return { ...r, message: r.ok ? 'Черновик готов — строка «черновик» в сообщениях: отправить, править или отклонить' : `Черновик не получен: ${r.message}` };
+          },
+        },
+        {
+          id: 'reply', name: 'Ответить своим текстом', bulk: true, max: 1,
+          fields: [{ key: 'text', label: 'Ответ клиенту', required: true, multiline: true }],
+          run: async ({ ids, body, user }) => {
+            await assistant.reply(slug, ids[0], body.text, actorOf(user));
+            return { message: 'Ответ отправлен — клиент увидит его в виджете' };
+          },
+        },
+      ],
+    }),
+
+    'chat-messages': Table({
+      rows: async () => (await assistant.messages(slug)).map(({ dialogue, message: m, auto }) => ({
+        id: `${dialogue.id}/${m.id}`,
+        chat: `${dialogue.visitor_name} · ${dialogue.id.slice(0, 4)}`,
+        who: m.role === 'visitor' ? 'клиент'
+          : m.role === 'draft' ? DRAFT_STATES[m.state] || m.state
+            : auto ? `ассистент · ${ASKS[auto.data.kind] || AUTO_NAMES[auto.type] || 'сам'}` : 'менеджер',
+        text: m.text,
+        at: at(m.created_at),
+      })),
+      idKey: 'id',
+      columns: [
+        { key: 'at', name: 'Когда' },
+        { key: 'chat', name: 'Разговор', sortable: true },
+        { key: 'who', name: 'Кто', sortable: true },
+        { key: 'text', name: 'Текст' },
+      ],
+      search: ['chat', 'who', 'text'],
+      actions: [
+        {
+          id: 'approve', name: 'Отправить черновик', bulk: true, max: 1,
+          fields: [{ key: 'text', label: 'Правка — пусто: отправить как есть', multiline: true }],
+          run: async ({ ids, body, user }) => {
+            const [dialogueId, draftId] = String(ids[0]).split('/');
+            const draft = await assistant.approveDraft(slug, dialogueId, draftId, { text: body.text, actor: actorOf(user) });
+            return { message: draft.state === 'edited' ? 'Отправлено с правкой' : 'Черновик отправлен клиенту' };
+          },
+        },
+        {
+          id: 'reject', name: 'Отклонить черновик', bulk: true, max: 1,
+          run: async ({ ids, user }) => {
+            const [dialogueId, draftId] = String(ids[0]).split('/');
+            await assistant.rejectDraft(slug, dialogueId, draftId, actorOf(user));
+            return { message: 'Черновик отклонён' };
+          },
+        },
       ],
     }),
   });
