@@ -20,6 +20,7 @@
 // Монтируется в server/routes/backbone.js (за границей ShopAccess: кабинет — админ,
 // магазин — админ или его сотрудник).
 
+const config = require('../../config');
 const { Components } = require('../../components');
 const { Kanban } = require('../../components/kanban');
 const { Table } = require('../../components/table');
@@ -29,6 +30,8 @@ const { NICHE_NAMES } = require('./board/templates');
 const { hoursText } = require('./shops/ShopForm');
 
 const actorOf = (user) => (user && (user.email || user.id)) || 'admin';
+// Кабинет магазина — там, где его открыла точка входа (Vesha или сборка магазина).
+const cabinetOf = (slug) => `${config.backboneCabinetPath}?shop=${encodeURIComponent(slug)}`;
 
 // Событие журнала — строкой для человека; колонки — по текущим названиям,
 // удалённая колонка остаётся своим id.
@@ -762,7 +765,7 @@ const cabinet = Components({
           email: shop.reply_to,
           catalog: shop.catalog_version ? `выгрузка, ${catalog.items().length} поз.` : catalog.items().length ? `фикстура, ${catalog.items().length} поз.` : 'не загружен',
           site: `/backbone/?shop=${encodeURIComponent(shop.slug)}`,
-          cabinet: `/experiments/backbone/?shop=${encodeURIComponent(shop.slug)}`,
+          cabinet: cabinetOf(shop.slug),
           created: at(shop.created_at),
         });
       }
@@ -795,7 +798,7 @@ const cabinet = Components({
           const shop = await backboneDesk.openShop(body, actorOf(user));
           return {
             slug: shop.slug,
-            message: `Магазин «${shop.name}» заведён в тени: витрина /backbone/?shop=${shop.slug}, кабинет /experiments/backbone/?shop=${shop.slug}. Дальше — экран «Каталог»: загрузите выгрузку.`,
+            message: `Магазин «${shop.name}» заведён в тени: витрина /backbone/?shop=${shop.slug}, кабинет ${cabinetOf(shop.slug)}. Дальше — экран «Каталог»: загрузите выгрузку.`,
           };
         },
       },
@@ -813,7 +816,7 @@ const cabinet = Components({
         run: async ({ ids, body, user }) => {
           const { shop, email } = await backboneDesk.addStaff(ids[0], body.email, actorOf(user));
           return {
-            message: `${email} — сотрудник «${shop.name}». Пусть зарегистрируется на сайте с этой почтой и откроет кабинет /experiments/backbone/?shop=${shop.slug}`,
+            message: `${email} — сотрудник «${shop.name}». Пусть зарегистрируется на сайте с этой почтой и откроет кабинет ${cabinetOf(shop.slug)}`,
           };
         },
       },

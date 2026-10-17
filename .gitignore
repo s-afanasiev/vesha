@@ -4,5 +4,6 @@ node_modules/
 uploads/
 bin/
 data/
+dist/
 !docs/economic-strength/data/
 .playwright-mcp/

@@ -56,6 +56,7 @@ const llmOpenaiEnv = ['LLM_OPENAI_API_KEY', 'LLM_OPENAI_BASE_URL', 'LLM_OPENAI_M
 const config = {
   isProduction: process.env.NODE_ENV === 'production',
   port: intEnv('PORT', 3000),
+  host: envStr('HOST') || undefined,     // пусто — все адреса; за nginx — 127.0.0.1 (сборка магазина)
   trustProxy: boolEnv('TRUST_PROXY', false),
   dbMode,
   databaseUrl: databaseUrl || `postgres://${dbConfig.user}:${dbConfig.password}@${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`,
@@ -168,6 +169,13 @@ const config = {
   } : null,
   backboneSitePerIp: intEnv('BACKBONE_SITE_PER_IP', 5),       // заявок с одного адреса за окно
   backboneSiteWindowMin: intEnv('BACKBONE_SITE_WINDOW_MIN', 10),
+  // Адреса, которые задаёт точка входа: кабинет костяка (ссылки в письмах и сообщениях
+  // кабинета) и куда вернуть после входа через Google. Vesha (main.js) — плитка и
+  // каталог экспериментов, сборка магазина (shop.js) — /cabinet/.
+  backboneCabinetPath: envStr('BACKBONE_CABINET_PATH') || '/experiments/backbone/',
+  loginReturnPath: envStr('LOGIN_RETURN_PATH') || '/experiments/',
+  // Сборка магазина: корень сайта — витрина этого магазина (адрес из кабинета).
+  shopHome: envStr('SHOP_HOME') || 'demo-krepezh',
   // Путь для замера свободного места: на сервере данные могут жить на другом томе.
   diskInfoPath: process.env.DISK_INFO_PATH || process.cwd(),
   // Плитки с visibility='admin' видят только залогиненные с этими email (listEnv уже в lower-case).

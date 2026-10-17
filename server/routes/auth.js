@@ -129,7 +129,7 @@ router.get('/google', (req, res) => {
   }
   const returnTo = typeof req.query.returnTo === 'string' && req.query.returnTo.startsWith('/') && !req.query.returnTo.startsWith('//')
     ? req.query.returnTo
-    : '/experiments/';
+    : config.loginReturnPath;
   const url = googleClient.generateAuthUrl({
     access_type: 'online',
     scope: ['openid', 'email', 'profile'],
@@ -208,7 +208,7 @@ router.get('/google/callback', async (req, res, next) => {
     const state = req.query.state;
     const returnTo = typeof state === 'string' && state.startsWith('/') && !state.startsWith('//')
       ? state
-      : '/experiments/';
+      : config.loginReturnPath;
     res.redirect(returnTo);
   } catch (err) {
     next(err);

@@ -8,6 +8,7 @@
     "dev": "node --watch main.js",
     "test": "node --test",
     "migrate": "node scripts/migrate.js",
+    "build:shop": "node scripts/build-shop.mjs",
     "media-bins": "node scripts/install-media-bins.js"
   },
   "keywords": [],

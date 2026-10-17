@@ -140,7 +140,7 @@ const receipts = new Receipts({
   statusUrl: (token) => `${config.backbonePublicUrl}/backbone/status.html?t=${encodeURIComponent(token)}`,
   deadlineOf,
   notice: new ShopNotice({                                                // менеджеру — на почту магазина
-    cabinetUrl: (slug) => `${config.backbonePublicUrl}/experiments/backbone/?shop=${encodeURIComponent(slug)}`,
+    cabinetUrl: (slug) => `${config.backbonePublicUrl}${config.backboneCabinetPath}?shop=${encodeURIComponent(slug)}`,
     deadlineOf,                                                           // тот же срок, что обещан клиенту
     lines: 5,                                                             // начало списка в письме
   }),
