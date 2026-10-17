@@ -430,7 +430,7 @@ test('table@1 file field: multipart upload with a utf-8 name, size limit, requir
   }
 });
 
-test('cabinet and shop screens are admin-only, by path of the shop', async () => {
+test('cabinet and shop screens need sign-in, by path of the shop', async () => {
   const app = express();
   app.use(express.json());
   app.use('/api/backbone', require('../server/routes/backbone'));
@@ -438,10 +438,10 @@ test('cabinet and shop screens are admin-only, by path of the shop', async () =>
   try {
     const base = `http://127.0.0.1:${server.address().port}/api/backbone`;
     for (const p of ['/c/shops/rows', '/c/pages/shops', '/s/demo-krepezh/c/catalog-fields/meta', '/s/demo-krepezh/c/pages/catalog', '/s/demo-krepezh/files/invoice/x.xlsx']) {
-      assert.equal((await fetch(base + p)).status, 403, p);
+      assert.equal((await fetch(base + p)).status, 401, p);
     }
     const upload = await fetch(`${base}/s/demo-krepezh/c/catalog-fields/actions/upload`, { method: 'POST', body: new FormData() });
-    assert.equal(upload.status, 403);
+    assert.equal(upload.status, 401);
   } finally {
     server.close();
   }

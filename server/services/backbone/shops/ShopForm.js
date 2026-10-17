@@ -100,6 +100,13 @@ class ShopForm {
       replyTo: blank(fields.email) ? shop.reply_to : String(fields.email).trim() === '-' ? null : replyToOf(fields.email),
     };
   }
+
+  // Почта сотрудника магазина — как её хранит регистрация: без пробелов, строчными.
+  staffEmail(raw) {
+    const email = String(raw ?? '').trim().toLowerCase();
+    if (!EMAIL.test(email) || email.length > 200) throw bad(`Почта сотрудника: «${String(raw ?? '').trim()}» не похоже на адрес`);
+    return email;
+  }
 }
 
 module.exports = { ShopForm, parseDays, parseTime, hoursText };

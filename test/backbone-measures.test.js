@@ -276,8 +276,8 @@ test('table@1 passes multiline fields to /meta; backbone files are admin-only', 
     const base = `http://127.0.0.1:${server.address().port}`;
     const meta = await (await fetch(`${base}/c/t/meta`)).json();
     assert.deepEqual(meta.actions[0].fields, [{ key: 'invoice', label: 'Строки', required: true, multiline: true }]);
-    assert.equal((await fetch(`${base}/api/backbone/files/invoice/x.xlsx`)).status, 403);
-    assert.equal((await fetch(`${base}/api/backbone/c/summary/rows`)).status, 403);
+    assert.equal((await fetch(`${base}/api/backbone/files/invoice/x.xlsx`)).status, 401, 'без входа');
+    assert.equal((await fetch(`${base}/api/backbone/c/summary/rows`)).status, 401);
   } finally {
     server.close();
   }

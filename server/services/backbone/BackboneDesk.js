@@ -17,6 +17,8 @@
 // магазин из кабинета (ShopForm), новый — в тени. Каталог магазина — его выгрузка
 // xlsx (CatalogFile): файл → сопоставление колонок → подмена целиком только при
 // успешном чтении (О17). Инструмент разбора строится на каталоге магазина (toolOf).
+// Сотрудники магазина: админ добавляет почту магазину, сотрудник входит обычной
+// регистрацией и видит только свой магазин; кто куда входит — правило ShopAccess.
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
@@ -40,12 +42,19 @@ function conflict(message) {
   return err;
 }
 
+// Отказ во входе — вердикт ShopAccess: 401 без входа, 403 — не ваш магазин.
+function refused({ status, reason }) {
+  const err = new Error(reason);
+  err.status = status;
+  return err;
+}
+
 class BackboneDesk {
   constructor({
     repository, journal, board, path, templateOf, shops = {}, tool = null, toolOf = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
     intake = null, statusPage = null, receipts = null,
-    shopForm = null, catalogs = null, catalogFile = null,
+    shopForm = null, catalogs = null, catalogFile = null, access = null,
   }) {
     this.repository = repository;
     this.journal = journal;
@@ -58,6 +67,7 @@ class BackboneDesk {
     this.shopForm = shopForm;       // форма магазина из кабинета
     this.catalogs = catalogs;       // каталоги магазинов по версии выгрузки
     this.catalogFile = catalogFile; // чтение выгрузки xlsx
+    this.access = access;           // кто входит: админ — все магазины, сотрудник — свой
     this.measuresOf = measuresOf; // (магазин, его описание) → Measures в часах работы магазина
     this.baseline = baseline;     // правило тени и включения помощи
     this.clock = clock;
@@ -117,6 +127,73 @@ class BackboneDesk {
       stream: 'shop', scope: shop.id, subjectId: shop.id, type: 'shop_changed',
       data: { name: next.name, hours: next.hours, replyTo: next.replyTo }, actor, cause: 'cabinet',
     }]);
+  }
+
+  // ---------- сотрудники магазина: кабинет только своего магазина ----------
+
+  isSeed(slug) {
+    return Object.hasOwn(this.shops, slug);
+  }
+
+  // Вход в магазин — вердикт ShopAccess до чтения данных магазина: без входа — 401,
+  // чужой магазин и демо не админу — 403 (существование адреса не выдаём); админу
+  // неизвестный адрес — 404, посев заводится здесь же.
+  async enter(slug, user) {
+    const email = this.access.emailOf(user);
+    const known = email && !this.access.isAdmin(user) ? await this.repository.shopBySlug(String(slug)) : null;
+    const verdict = this.access.shop(user, {
+      seed: this.isSeed(slug),
+      staff: Boolean(known && await this.repository.isStaff(known.id, email)),
+    });
+    if (!verdict.ok) throw refused(verdict);
+    return this.shop(slug);
+  }
+
+  // Любой адрес кабинета — только после входа.
+  signedIn(user) {
+    const verdict = this.access.signedIn(user);
+    if (!verdict.ok) throw refused(verdict);
+    return verdict;
+  }
+
+  // Экран «Магазины» — только админ.
+  enterCabinet(user) {
+    const verdict = this.access.cabinet(user);
+    if (!verdict.ok) throw refused(verdict);
+    return verdict;
+  }
+
+  // Магазины в шапке кабинета: админу — все, сотруднику — его магазины без посева.
+  async shopsFor(user) {
+    const verdict = this.signedIn(user);
+    if (verdict.role === 'admin') return { admin: true, shops: await this.shopList() };
+    const own = await this.repository.shopsOfStaff(this.access.emailOf(user));
+    return { admin: false, shops: own.filter((s) => !this.isSeed(s.slug)) };
+  }
+
+  async staffList() {
+    return this.repository.staff();
+  }
+
+  staffEvent(shop, type, email, actor) {
+    return { stream: 'shop', scope: shop.id, subjectId: shop.id, type, data: { email }, actor, cause: 'cabinet' };
+  }
+
+  // Админ добавляет почту сотрудника магазину; сотрудник регистрируется с ней сам.
+  async addStaff(slug, rawEmail, actor) {
+    const shop = await this.shop(slug);
+    if (this.isSeed(shop.slug)) throw bad('Демо-магазин — только для админа: сотрудников у него нет');
+    const email = this.shopForm.staffEmail(rawEmail);
+    await this.repository.addStaff(shop.id, { email, addedBy: actor }, [this.staffEvent(shop, 'staff_added', email, actor)]);
+    return { shop, email };
+  }
+
+  // Убранный сотрудник теряет вход сразу: доступ проверяется на каждом запросе.
+  async removeStaff(slug, rawEmail, actor) {
+    const shop = await this.shop(slug);
+    const email = String(rawEmail ?? '').trim().toLowerCase();
+    await this.repository.removeStaff(shop.id, email, [this.staffEvent(shop, 'staff_removed', email, actor)]);
+    return { shop, email };
   }
 
   // Описание магазина для замеров: часы и срок тени — из таблицы.
