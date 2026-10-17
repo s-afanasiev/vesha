@@ -10,7 +10,7 @@ const shopPages = (c) => ({
     subtitle: 'Шаг 1 MVP: заявка вручную, перенос по колонкам, конструктор колонок со смысловыми типами — и каждое действие в журнале',
     blocks: [
       { kind: 'kanban@1', src: `${c}/board`, poll: 4000, title: 'Доска магазина' },
-      { kind: 'table@1', src: `${c}/receipts`, poll: 6000, title: 'Квитанции клиентам — с витрины /backbone/' },
+      { kind: 'table@1', src: `${c}/receipts`, poll: 6000, title: 'Письма: квитанции клиентам и менеджеру о новой заявке — с витрины /backbone/' },
       { kind: 'table@1', src: `${c}/journal`, poll: 4000, title: 'Журнал событий' },
     ],
   },

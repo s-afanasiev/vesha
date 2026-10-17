@@ -374,8 +374,8 @@ class BackboneRepository {
     return rows[0] ? Number(rows[0].receipts_cursor) : 0;
   }
 
-  // Квитанции проекции и новый курсор — одной транзакцией; другой проектор успел
-  // раньше (курсор уже не тот) — ничего не пишем, повтор безопасен (event_id уникален).
+  // Письма проекции и новый курсор — одной транзакцией; другой проектор успел
+  // раньше (курсор уже не тот) — ничего не пишем, повтор безопасен (событие + адресат уникальны).
   async saveReceipts(shopId, fromCursor, toCursor, rows) {
     return this.tx(async (client) => {
       const { rows: [shop] } = await client.query(
@@ -384,9 +384,9 @@ class BackboneRepository {
       if (!shop || Number(shop.receipts_cursor) !== fromCursor) return false;
       for (const r of rows) {
         await client.query(
-          `INSERT INTO backbone_receipts (shop_id, order_id, event_id, kind, channel, address, subject, body, status, last_error)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (event_id) DO NOTHING`,
-          [shopId, r.orderId, r.eventId, r.kind, r.channel, r.address, r.subject, r.body, r.status, r.lastError]
+          `INSERT INTO backbone_receipts (shop_id, order_id, event_id, kind, audience, channel, address, reply_to, subject, body, status, last_error)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (event_id, audience) DO NOTHING`,
+          [shopId, r.orderId, r.eventId, r.kind, r.audience, r.channel, r.address, r.replyTo, r.subject, r.body, r.status, r.lastError]
         );
       }
       await client.query('UPDATE backbone_shops SET receipts_cursor = $2 WHERE id = $1', [shopId, toCursor]);

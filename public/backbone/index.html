@@ -28,6 +28,7 @@
     .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     @media (max-width: 520px) { .row2 { grid-template-columns: 1fr; } }
     .consent { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; color: var(--text-muted); margin: 4px 0 14px; }
+    .consent a { color: var(--accent); text-decoration: underline; }
     .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
     .btn { font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px; padding: 10px 18px;
       background: var(--btn-primary-bg); color: var(--btn-primary-text); }
@@ -81,7 +82,7 @@
           <label class="trap" aria-hidden="true">Сайт <input name="website" type="text" tabindex="-1" autocomplete="off"></label>
           <label class="consent">
             <input type="checkbox" name="consent" value="on" required>
-            <span>Согласен на обработку персональных данных (контакт и текст заявки), чтобы магазин ответил на заявку. Данные хранятся в России.</span>
+            <span>Согласен на обработку персональных данных (контакт и текст заявки) по <a id="privacy-link" href="/backbone/privacy.html" target="_blank" rel="noopener">политике магазина</a>, чтобы магазин ответил на заявку. Данные хранятся в России.</span>
           </label>
           <button class="btn" type="submit" id="order-send">Отправить заявку</button>
         </form>
@@ -111,6 +112,7 @@
     const slug = new URLSearchParams(location.search).get('shop') || 'demo-krepezh';
     const api = `/api/backbone-public/shops/${encodeURIComponent(slug)}`;
     const DAYS = ['', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    document.getElementById('privacy-link').href = `/backbone/privacy.html?shop=${encodeURIComponent(slug)}`;
 
     getJson(api).then((s) => {
       document.title = `${s.name} — заявка списком`;

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Политика обработки персональных данных</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/c/ui.css" />
+  <style>
+    /* Политика обработки персональных данных магазина (152-ФЗ), ссылка — из галочки
+       согласия в форме витрины. Магазин, почта и сроки — из публичного API витрины
+       (/api/backbone-public/shops/<slug>/privacy); контактов клиентов там нет. */
+    body { display: block; background: var(--bg); color: var(--text); }
+    .policy { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 28px 16px 48px; text-align: left; overflow-wrap: anywhere; }
+    .policy__card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; }
+    .policy h1 { margin: 0 0 4px; font-size: 1.45rem; color: var(--text-heading); }
+    .policy__shop { margin: 0 0 18px; color: var(--text-muted); }
+    .policy h2 { margin: 22px 0 6px; font-size: 1.05rem; color: var(--text-heading); }
+    .policy p, .policy li { line-height: 1.55; }
+    .policy p { margin: 6px 0; color: var(--text); }
+    .policy .policy__shop { color: var(--text-muted); }
+    .policy ul { margin: 6px 0; padding-left: 22px; }
+    .policy__foot { margin-top: 14px; color: var(--text-faint); font-size: 0.85rem; }
+    .policy__none { color: var(--danger-text); }
+    .policy a { color: var(--accent); text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main class="policy">
+    <article class="policy__card" id="policy" aria-live="polite">загрузка…</article>
+    <p class="policy__foot" id="foot"></p>
+  </main>
+  <script src="/c/ui.js"></script>
+  <script>
+  (() => {
+    'use strict';
+    const { escapeHtml, getJson } = window.VeshaUI;
+    const slug = new URLSearchParams(location.search).get('shop') || '';
+    const root = document.getElementById('policy');
+    // Магазин не угадываем: политика чужого магазина — неверный оператор.
+    if (!slug) { root.textContent = 'Ссылка неполная — откройте политику по ссылке из формы заявки магазина.'; return; }
+
+    const plural = (n, one, few, many) => {
+      const d = n % 10;
+      const h = n % 100;
+      return d === 1 && h !== 11 ? one : d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many;
+    };
+
+    getJson(`/api/backbone-public/shops/${encodeURIComponent(slug)}/privacy`).then((p) => {
+      const name = escapeHtml(p.name);
+      const mail = p.email ? `<a href="mailto:${escapeHtml(p.email)}">${escapeHtml(p.email)}</a>` : null;
+      const keep = `${p.keepYears} ${plural(p.keepYears, 'год', 'года', 'лет')}`;
+      const withdraw = `${p.withdrawDays} ${plural(p.withdrawDays, 'дня', 'дней', 'дней')}`;
+      const write = mail
+        ? `Напишите на ${mail} с темой «Персональные данные» и укажите контакт, с которого отправляли заявку.`
+        : '<span class="policy__none">Магазин ещё не указал почту для обращений</span> — пока напишите в форме заявки: ответ придёт на ваш контакт.';
+      document.title = `Политика обработки персональных данных — ${p.name}`;
+      root.innerHTML = `
+        <h1>Политика обработки персональных данных</h1>
+        <p class="policy__shop">${name}</p>
+        <p>Магазин «${name}» обрабатывает персональные данные тех, кто отправляет заявку с сайта. Здесь — что мы собираем, зачем, сколько храним и как отозвать согласие. Основание — ваше согласие: вы даёте его галочкой в форме заявки (Федеральный закон от 27.07.2006 № 152-ФЗ «О персональных данных»).</p>
+
+        <h2>Кто обрабатывает</h2>
+        <p>Оператор — магазин «${name}».${mail ? ` Почта для вопросов о персональных данных и отзыва согласия: ${mail}.` : ''}</p>
+
+        <h2>Зачем</h2>
+        <ul>
+          <li>ответить на вашу заявку: подобрать позиции, проверить наличие и упаковку, выставить счёт;</li>
+          <li>присылать на вашу почту квитанции о ходе заявки — «получена», «ждём вашего ответа», «готово», «закрыта»;</li>
+          <li>показывать путь заявки по ссылке — без ваших контактов и текста заявки.</li>
+        </ul>
+        <p>Рекламных рассылок по этим данным магазин не делает.</p>
+
+        <h2>Какие данные</h2>
+        <ul>
+          <li>контакт для ответа — почта или телефон;</li>
+          <li>как к вам обращаться — имя или название организации, если вы его указали;</li>
+          <li>текст заявки и приложенный файл (xlsx, pdf) — наименования и количества;</li>
+          <li>время заявки и время согласия.</li>
+        </ul>
+        <p>Сайт ставит технический файл cookie — случайный номер посетителя без имени и контакта; он нужен, чтобы ограничивать частоту запросов. Счётчиков аналитики и рекламы на сайте нет.</p>
+
+        <h2>Что с ними происходит</h2>
+        <ul>
+          <li>данные хранятся в базе магазина на сервере в России;</li>
+          <li>о новой заявке менеджер магазина получает письмо — с вашим контактом и началом списка;</li>
+          <li>письма уходят через почтовый сервер магазина;</li>
+          <li>чтобы разобрать список в черновик счёта, текст заявки без вашего контакта может обрабатываться программой распознавания строк;</li>
+          <li>другим лицам данные не передаются и не продаются.</li>
+        </ul>
+
+        <h2>Сколько хранятся</h2>
+        <p>${keep} с даты заявки, затем удаляются. Если вы отзовёте согласие — раньше: не позже ${withdraw} с вашего письма.</p>
+
+        <h2>Ваши права</h2>
+        <p>Вы можете узнать, какие ваши данные хранятся, попросить исправить или удалить их и отозвать согласие. ${write} Если считаете, что данные обрабатываются с нарушением, — можно обратиться в Роскомнадзор.</p>`;
+      document.getElementById('foot').innerHTML = `<a href="/backbone/?shop=${encodeURIComponent(slug)}">← К заявке в магазин «${name}»</a>`;
+    }).catch((e) => { root.textContent = e.message; });
+  })();
+  </script>
+</body>
+</html>

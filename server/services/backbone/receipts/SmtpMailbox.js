@@ -1,5 +1,5 @@
 // Квитанции настоящим письмом (§10, шаг 6): тот же контракт send({ to, subject,
-// body, shop }), что у FileMailbox, — точка сборки берёт его, когда в .env задан
+// body, shop, replyTo }), что у FileMailbox, — точка сборки берёт его, когда в .env задан
 // BACKBONE_SMTP_HOST. SMTP без библиотек — столько, сколько нужно одному письму
 // (как zip у xlsx): EHLO, STARTTLS (587) или TLS сразу (465), AUTH PLAIN / LOGIN,
 // MAIL FROM, RCPT TO, DATA. Тело — base64: ни 8BITMIME, ни длинные строки не нужны.
@@ -105,10 +105,10 @@ class SmtpMailbox {
     });
   }
 
-  async send({ to, subject, body, shop }) {
+  async send({ to, subject, body, shop, replyTo = null }) {
     if (!to) throw new Error('нет адреса');
     const rcpt = address(to);
-    const letter = letterOf({ from: this.from, to: rcpt, subject, body, shop, transfer: 'base64' });
+    const letter = letterOf({ from: this.from, to: rcpt, subject, body, shop, replyTo, transfer: 'base64' });
     const socket = await this.connect();
     const session = new Session(socket, this.timeoutMs);
     try {

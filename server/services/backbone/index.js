@@ -5,8 +5,9 @@
 // магазина из его выгрузки xlsx (CatalogFile, Catalogs) с индексом атрибутов,
 // инструмент слота «разбор заявки в счёт» на каталоге магазина с выгрузкой в 1С,
 // замеры из журнала и теневой режим; витрина: заявка с сайта, окно статуса по
-// ссылке, квитанции клиенту — письмом (SMTP) или файлами .eml. Ассистент (шаг 5) —
-// виджет витрины на ядре chat-engine: наличие и цена, статус своей заявки, часы — сам;
+// ссылке, квитанции клиенту и письмо менеджеру о новой заявке — письмом (SMTP) или
+// файлами .eml, политика обработки персональных данных. Ассистент (шаг 5) — виджет
+// витрины на ядре chat-engine: наличие и цена, статус своей заявки, часы — сам;
 // список из разговора — заявка тем же ключом, что с сайта; остальное — менеджеру.
 // Вход в кабинет — ShopAccess: админ экземпляра — все магазины, сотрудник — свой.
 
@@ -52,6 +53,7 @@ const { ShopFacts } = require('./assistant/ShopFacts');
 const { AutoAnswers, StatusAnswer, HoursAnswer, StockAnswer } = require('./assistant/AutoAnswers');
 const { ChatIntake } = require('./assistant/ChatIntake');
 const { ShopPersona, replyModel } = require('./assistant/ShopPersona');
+const { ShopNotice } = require('./receipts/ShopNotice');
 
 // Посев: магазины, которые костяк знает из кода, — только демо. Остальные админ
 // заводит в кабинете (backbone_shops, шаг 6); новый начинает с тени (14 дней базы
@@ -119,23 +121,29 @@ const siteIntake = new SiteIntake(
   new RequestText({ text: new PlainText(), xlsx: new SheetRows(), pdf: new PdfTextLayer() }, { maxBytes: 5 * 1024 * 1024 }),
 );
 
-// Квитанции: проекция журнала в исходящие. Почта — SMTP, если он задан в .env,
-// иначе файлы .eml (О6); контракт send один.
+// Квитанции клиенту и письмо менеджеру о новой заявке: одна проекция журнала в
+// исходящие. Почта — SMTP, если он задан в .env, иначе файлы .eml (О6); контракт send один.
 const mailbox = config.backboneSmtp
   ? new SmtpMailbox({ ...config.backboneSmtp, from: config.backboneMailFrom })
   : new FileMailbox({ dir: config.backboneMailDir, from: config.backboneMailFrom });
 const hoursOf = (shop) => new WorkingHours({ tz: shop.tz, ...(shop.hours || {}) });
+const deadlineOf = (shop, ms) => {                                        // «ответим в течение часа» — рабочего часа
+  const until = hoursOf(shop).deadline(ms, 60);
+  return until && new Intl.DateTimeFormat('ru-RU', {
+    timeZone: shop.tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(until)).replace(', ', ' в ');
+};
 const receipts = new Receipts({
   repository,
   journal,
   mailbox,
   statusUrl: (token) => `${config.backbonePublicUrl}/backbone/status.html?t=${encodeURIComponent(token)}`,
-  deadlineOf: (shop, ms) => {                                             // «ответим в течение часа» — рабочего часа
-    const until = hoursOf(shop).deadline(ms, 60);
-    return until && new Intl.DateTimeFormat('ru-RU', {
-      timeZone: shop.tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-    }).format(new Date(until)).replace(', ', ' в ');
-  },
+  deadlineOf,
+  notice: new ShopNotice({                                                // менеджеру — на почту магазина
+    cabinetUrl: (slug) => `${config.backbonePublicUrl}/experiments/backbone/?shop=${encodeURIComponent(slug)}`,
+    deadlineOf,                                                           // тот же срок, что обещан клиенту
+    lines: 5,                                                             // начало списка в письме
+  }),
 });
 
 const llm = config.backboneModel === 'recorded'
@@ -162,7 +170,8 @@ const backboneDesk = new BackboneDesk({
   baseline: new Baseline({ shadowDays: 14, accuracy: 0.8, minLines: 20 }), // помощь — решением с мерой (О19)
   intake: siteIntake,                                                     // заявка с витрины (§6.3)
   statusPage: new StatusPage(),                                           // окно статуса клиента (stages@1)
-  receipts,                                                               // квитанции после переходов (§6.1)
+  receipts,                                                               // квитанции и письмо менеджеру после переходов (§6.1)
+  privacy: { keepYears: 3, withdrawDays: 30 },                            // политика ПДн витрины: срок хранения; отзыв согласия — 152-ФЗ ст. 21
 });
 
 const demoRequest = () => fs.readFileSync(path.join(FIXTURES, 'request-20.txt'), 'utf8');

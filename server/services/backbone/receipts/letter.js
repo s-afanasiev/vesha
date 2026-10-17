@@ -1,5 +1,6 @@
 // Письмо квитанции — одно на оба почтальона (файл .eml и SMTP): заголовки в
 // encoded-word, ответ клиента — на почту магазина (Reply-To), тело — текст.
+// Письмо менеджеру о заявке задаёт свой Reply-To — почту клиента (replyTo).
 
 const crypto = require('node:crypto');
 
@@ -23,9 +24,9 @@ function address(value) {
 }
 
 // transfer: '8bit' — тело как есть (файл), 'base64' — строками по 76 (SMTP без 8BITMIME).
-function letterOf({ from, to, subject, body, shop, transfer = '8bit', date = new Date() }) {
+function letterOf({ from, to, subject, body, shop, replyTo: own = null, transfer = '8bit', date = new Date() }) {
   const domain = from.split('@')[1] || 'localhost';
-  const replyTo = shop && shop.reply_to ? address(shop.reply_to) : null;
+  const replyTo = own ? address(own) : shop && shop.reply_to ? address(shop.reply_to) : null;
   const text = String(body ?? '').replace(/\r?\n/g, '\r\n');
   const encoded = transfer === 'base64'
     ? Buffer.from(text, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n')

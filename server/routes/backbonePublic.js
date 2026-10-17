@@ -4,6 +4,7 @@
 //
 //   GET  /shops/:slug                 витрина: название, часы, группы каталога
 //   GET  /shops/:slug/catalog?q=&group=  поиск по каталогу: цена, упаковка, наличие
+//   GET  /shops/:slug/privacy         политика ПДн: магазин, сроки, почта для отзыва согласия
 //   POST /shops/:slug/orders          «заявка списком»: текст или файл, контакт, согласие
 //   GET  /shops/:slug/assistant       виджет ассистента: разговор посетителя и предложение заявки
 //   POST /shops/:slug/assistant/messages  сообщение посетителя → ответ ассистента
@@ -66,6 +67,13 @@ router.get('/shops/:slug/catalog', async (req, res, next) => {
         inStock: i.stock == null ? null : i.stock > 0, // остатка в выгрузке нет — «уточняйте»
       })),
     });
+  } catch (err) { next(err); }
+});
+
+// Для страницы политики (152-ФЗ): почта магазина публична, контактов клиентов здесь нет.
+router.get('/shops/:slug/privacy', async (req, res, next) => {
+  try {
+    res.json({ ok: true, ...(await backboneDesk.privacyOf(req.params.slug)) });
   } catch (err) { next(err); }
 });
 
