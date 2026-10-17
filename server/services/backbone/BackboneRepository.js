@@ -14,6 +14,7 @@ function conflict(message) {
 }
 
 const COLUMN_SQL = 'SELECT id, title, type, color, wip_limit AS "limit", position FROM backbone_board_columns';
+const LOAD_COLUMNS = 'id, shop_id, status, file_name, header_row, columns, mapping, rows, loaded, rejected, rejects, reason, actor, created_at, decided_at';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // NUMERIC приходит из pg строкой — строка черновика наружу уходит с числами.
@@ -48,15 +49,22 @@ class BackboneRepository {
     return rows[0] || null;
   }
 
-  // Магазин с доской из шаблона; если магазин уже есть — вернуть его как есть.
-  async createShop({ slug, name, niche, mode = 'shadow' }, columns, makeEvents) {
+  async shops() {
+    const { rows } = await this.db.query('SELECT * FROM backbone_shops ORDER BY created_at, slug');
+    return rows;
+  }
+
+  // Магазин с доской из шаблона. Магазин уже есть: посев из кода получает его как
+  // есть (exists = 'return'), заведение из кабинета — отказ «адрес занят».
+  async createShop({ slug, name, niche, mode = 'shadow', hours = null, replyTo = null, shadowDays = null }, columns, makeEvents, { exists = 'return' } = {}) {
     return this.tx(async (client) => {
       const inserted = await client.query(
-        `INSERT INTO backbone_shops (slug, name, niche, mode) VALUES ($1, $2, $3, $4)
+        `INSERT INTO backbone_shops (slug, name, niche, mode, hours, reply_to, shadow_days) VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (slug) DO NOTHING RETURNING *`,
-        [slug, name, niche, mode]
+        [slug, name, niche, mode, hours && JSON.stringify(hours), replyTo, shadowDays]
       );
       if (!inserted.rows[0]) {
+        if (exists !== 'return') throw conflict(`Адрес магазина «${slug}» уже занят`);
         const { rows } = await client.query('SELECT * FROM backbone_shops WHERE slug = $1', [slug]);
         return rows[0];
       }
@@ -156,6 +164,130 @@ class BackboneRepository {
       if (!shop) throw conflict('Режим магазина уже изменился — обновите страницу');
       await this.journal.appendIn(client, events);
       return shop;
+    });
+  }
+
+  // Описание магазина из кабинета: название, часы, почта; слаг, ниша и режим — не здесь.
+  async updateShop(shopId, { name, hours, replyTo }, events) {
+    return this.tx(async (client) => {
+      const { rows: [shop] } = await client.query(
+        'UPDATE backbone_shops SET name = $2, hours = $3, reply_to = $4 WHERE id = $1 RETURNING *',
+        [shopId, name, hours && JSON.stringify(hours), replyTo]
+      );
+      if (!shop) throw conflict('Магазин не найден');
+      await this.journal.appendIn(client, events);
+      return shop;
+    });
+  }
+
+  // ---------- каталог магазина (шаг 6): выгрузка целиком или ничего ----------
+
+  async catalogItems(shopId) {
+    const { rows } = await this.db.query(
+      `SELECT sku, name, item_group AS "group", unit, pack, price, stock FROM backbone_catalog_items
+       WHERE shop_id = $1 ORDER BY position`,
+      [shopId]
+    );
+    return rows.map((r) => ({ ...r, pack: num(r.pack), price: num(r.price), stock: num(r.stock) }));
+  }
+
+  async catalogLoads(shopId, { limit = 50 } = {}) {
+    const { rows } = await this.db.query(
+      `SELECT ${LOAD_COLUMNS} FROM backbone_catalog_loads WHERE shop_id = $1 ORDER BY id DESC LIMIT $2`,
+      [shopId, limit]
+    );
+    return rows.map((r) => ({ ...r, id: String(r.id) }));
+  }
+
+  // Ожидающая загрузка; сам файл — только для решения (withFile), опросу экрана он не нужен.
+  async pendingLoad(shopId, { withFile = false } = {}) {
+    const { rows } = await this.db.query(
+      `SELECT ${LOAD_COLUMNS}${withFile ? ', file' : ''} FROM backbone_catalog_loads
+       WHERE shop_id = $1 AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+      [shopId]
+    );
+    return rows[0] ? { ...rows[0], id: String(rows[0].id) } : null;
+  }
+
+  // Новый файл вытесняет прежний, не дождавшийся решения: ожидает всегда один.
+  async savePendingLoad(shopId, { fileName, file, headerRow, columns, mapping, rows, actor }) {
+    return this.tx(async (client) => {
+      await client.query("DELETE FROM backbone_catalog_loads WHERE shop_id = $1 AND status = 'pending'", [shopId]);
+      const { rows: [load] } = await client.query(
+        `INSERT INTO backbone_catalog_loads (shop_id, status, file_name, file, header_row, columns, mapping, rows, actor)
+         VALUES ($1, 'pending', $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [shopId, fileName, file, headerRow, JSON.stringify(columns), JSON.stringify(mapping), rows, actor]
+      );
+      return String(load.id);
+    });
+  }
+
+  async setLoadMapping(loadId, mapping) {
+    const { rowCount } = await this.db.query(
+      "UPDATE backbone_catalog_loads SET mapping = $2 WHERE id = $1 AND status = 'pending'",
+      [loadId, JSON.stringify(mapping)]
+    );
+    if (!rowCount) throw conflict('Загрузка уже решена — загрузите файл заново');
+  }
+
+  // Попытка не прошла (брака больше, чем позиций, и т. п.): каталог не тронут, файл
+  // ждёт исправленного сопоставления; брак попытки виден списком.
+  async noteLoadAttempt(shopId, loadId, { rows, loaded, rejected, rejects, reason }, events) {
+    return this.tx(async (client) => {
+      const { rowCount } = await client.query(
+        `UPDATE backbone_catalog_loads SET rows = $3, loaded = $4, rejected = $5, rejects = $6, reason = $7
+         WHERE id = $1 AND shop_id = $2 AND status = 'pending'`,
+        [loadId, shopId, rows, loaded, rejected, JSON.stringify(rejects), reason]
+      );
+      if (!rowCount) throw conflict('Загрузка уже решена — загрузите файл заново');
+      await this.journal.appendIn(client, events);
+    });
+  }
+
+  // Выгрузка прочитана целиком: позиции магазина подменяются разом, версия каталога
+  // растёт — одной транзакцией с событием (О17). Файл после решения не храним.
+  async replaceCatalog(shopId, loadId, { items, rows, rejected, rejects }, events) {
+    return this.tx(async (client) => {
+      await client.query('SELECT 1 FROM backbone_shops WHERE id = $1 FOR UPDATE', [shopId]);
+      const { rowCount } = await client.query(
+        `UPDATE backbone_catalog_loads SET status = 'loaded', file = NULL, rows = $3, loaded = $4, rejected = $5,
+           rejects = $6, reason = NULL, decided_at = now()
+         WHERE id = $1 AND shop_id = $2 AND status = 'pending'`,
+        [loadId, shopId, rows, items.length, rejected, JSON.stringify(rejects)]
+      );
+      if (!rowCount) throw conflict('Загрузка уже решена — загрузите файл заново');
+      await client.query('DELETE FROM backbone_catalog_items WHERE shop_id = $1', [shopId]);
+      for (let at = 0; at < items.length; at += 500) {
+        const values = [];
+        const params = [shopId];
+        items.slice(at, at + 500).forEach((i, k) => {
+          const p = params.length;
+          values.push(`($1, $${p + 1}, $${p + 2}, $${p + 3}, $${p + 4}, $${p + 5}, $${p + 6}, $${p + 7}, $${p + 8})`);
+          params.push(i.sku, i.name, i.group || '', i.unit, i.pack, i.price, i.stock, at + k);
+        });
+        await client.query(
+          `INSERT INTO backbone_catalog_items (shop_id, sku, name, item_group, unit, pack, price, stock, position)
+           VALUES ${values.join(', ')}`,
+          params
+        );
+      }
+      const { rows: [shop] } = await client.query(
+        'UPDATE backbone_shops SET catalog_version = catalog_version + 1 WHERE id = $1 RETURNING *', [shopId]
+      );
+      await this.journal.appendIn(client, events);
+      return shop;
+    });
+  }
+
+  // Файл не прочитан (битый zip, нет шапки): отказ в истории загрузок, каталог прежний.
+  async refusedLoad(shopId, { fileName, reason, actor }, events) {
+    return this.tx(async (client) => {
+      await client.query(
+        `INSERT INTO backbone_catalog_loads (shop_id, status, file_name, reason, actor, decided_at)
+         VALUES ($1, 'refused', $2, $3, $4, now())`,
+        [shopId, fileName, reason, actor]
+      );
+      await this.journal.appendIn(client, events);
     });
   }
 

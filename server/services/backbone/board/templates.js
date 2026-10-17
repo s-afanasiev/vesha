@@ -23,10 +23,13 @@ const TEMPLATES = {
   ],
 };
 
+// Ниша словами — для формы магазина в кабинете.
+const NICHE_NAMES = { hardware: 'Крепёж и сантехника', metalworking: 'Металлообработка' };
+
 function templateOf(niche) {
   const columns = TEMPLATES[niche];
   if (!columns) throw new Error(`Нет шаблона доски для ниши: ${niche}`);
   return columns.map((c) => ({ ...c, limit: null }));
 }
 
-module.exports = { TEMPLATES, templateOf };
+module.exports = { TEMPLATES, NICHE_NAMES, templateOf };

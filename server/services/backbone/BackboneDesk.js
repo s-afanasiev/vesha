@@ -13,6 +13,10 @@
 // Шаг 4: витрина — заявка с сайта (SiteIntake: контакт, согласие, тот же список
 // дважды — одна заявка), окно статуса по ссылке (StatusPage, stages@1), квитанции
 // клиенту — проекция журнала в исходящие (Receipts) после каждого перехода.
+// Шаг 6 (то, что решается кодом): магазины — таблица, а не код; админ заводит
+// магазин из кабинета (ShopForm), новый — в тени. Каталог магазина — его выгрузка
+// xlsx (CatalogFile): файл → сопоставление колонок → подмена целиком только при
+// успешном чтении (О17). Инструмент разбора строится на каталоге магазина (toolOf).
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
@@ -30,20 +34,30 @@ function bad(message) {
   return err;
 }
 
+function conflict(message) {
+  const err = new Error(message);
+  err.status = 409;
+  return err;
+}
+
 class BackboneDesk {
   constructor({
-    repository, journal, board, path, templateOf, shops, tool = null, llm = null,
+    repository, journal, board, path, templateOf, shops = {}, tool = null, toolOf = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
     intake = null, statusPage = null, receipts = null,
+    shopForm = null, catalogs = null, catalogFile = null,
   }) {
     this.repository = repository;
     this.journal = journal;
     this.boardRule = board;
     this.path = path;
     this.templateOf = templateOf;
-    this.shops = shops; // slug → { name, niche }: магазины, которые костяк знает
-    this.tool = tool;   // инструмент слота: разбор заявки в счёт
+    this.shops = shops; // посев: slug → { name, niche, hours, mode, shadowDays } — демо-магазин из кода
+    this.toolOf = toolOf || (async () => tool); // магазин → инструмент слота на его каталоге
     this.llm = llm;     // модель для строк, которые не разобрали правила: forActor(user)
+    this.shopForm = shopForm;       // форма магазина из кабинета
+    this.catalogs = catalogs;       // каталоги магазинов по версии выгрузки
+    this.catalogFile = catalogFile; // чтение выгрузки xlsx
     this.measuresOf = measuresOf; // (магазин, его описание) → Measures в часах работы магазина
     this.baseline = baseline;     // правило тени и включения помощи
     this.clock = clock;
@@ -52,17 +66,149 @@ class BackboneDesk {
     this.receipts = receipts;     // квитанции: проекция журнала и доставка
   }
 
-  // Магазин по slug; при первом обращении — с доской из шаблона ниши.
+  // Магазин по slug — из таблицы; посев из кода (демо) заводится при первом обращении.
   async shop(slug, actor = 'system') {
-    const known = await this.repository.shopBySlug(slug);
+    const known = await this.repository.shopBySlug(String(slug));
     if (known) return known;
     const spec = this.shops[slug];
     if (!spec) throw notFound(`Магазин не найден: ${slug}`);
-    const columns = this.boardRule.check(this.templateOf(spec.niche));
-    return this.repository.createShop({ slug, name: spec.name, niche: spec.niche, mode: spec.mode || 'shadow' }, columns, (shop) => [{
-      stream: 'board', scope: shop.id, subjectId: shop.id, type: 'board_created',
-      data: { niche: spec.niche, columns: columns.map((c) => c.id) }, actor, cause: 'template',
+    return this.open({
+      slug, name: spec.name, niche: spec.niche, mode: spec.mode || 'shadow',
+      hours: spec.hours || null, replyTo: spec.replyTo || null, shadowDays: spec.shadowDays ?? null,
+    }, actor, { exists: 'return' });
+  }
+
+  // Магазин с доской из шаблона ниши; из кабинета — ещё и событие shop_opened.
+  async open(fields, actor, { exists, cabinet = false }) {
+    const columns = this.boardRule.check(this.templateOf(fields.niche));
+    return this.repository.createShop(fields, columns, (shop) => [
+      {
+        stream: 'board', scope: shop.id, subjectId: shop.id, type: 'board_created',
+        data: { niche: fields.niche, columns: columns.map((c) => c.id) }, actor, cause: 'template',
+      },
+      ...(cabinet ? [{
+        stream: 'shop', scope: shop.id, subjectId: shop.id, type: 'shop_opened',
+        data: { slug: fields.slug, name: fields.name, niche: fields.niche, mode: fields.mode, hours: fields.hours, replyTo: fields.replyTo },
+        actor, cause: 'cabinet',
+      }] : []),
+    ], { exists });
+  }
+
+  // ---------- шаг 6: магазин из кабинета ----------
+
+  // Все магазины; посевы, которых ещё нет в таблице, заводятся тут же.
+  async shopList() {
+    for (const slug of Object.keys(this.shops)) await this.shop(slug);
+    return this.repository.shops();
+  }
+
+  // Новый магазин — без правки кода: адрес, название, ниша, часы, почта; режим — тень (база «до»).
+  async openShop(fields, actor) {
+    const form = this.shopForm.create(fields);
+    if (this.shops[form.slug]) throw conflict(`Адрес магазина «${form.slug}» уже занят`);
+    return this.open({ ...form, mode: 'shadow' }, actor, { exists: 'fail', cabinet: true });
+  }
+
+  // Правка из кабинета: название, часы, почта для квитанций. Адрес, ниша и режим — не здесь.
+  async changeShop(slug, fields, actor) {
+    const shop = await this.shop(slug);
+    const next = this.shopForm.change(fields, shop);
+    return this.repository.updateShop(shop.id, next, [{
+      stream: 'shop', scope: shop.id, subjectId: shop.id, type: 'shop_changed',
+      data: { name: next.name, hours: next.hours, replyTo: next.replyTo }, actor, cause: 'cabinet',
     }]);
+  }
+
+  // Описание магазина для замеров: часы и срок тени — из таблицы.
+  specOf(shop) {
+    return { hours: shop.hours || {}, shadowDays: shop.shadow_days ?? null };
+  }
+
+  // ---------- шаг 6: каталог магазина из выгрузки ----------
+
+  async catalogOf(slug) {
+    return this.catalogs.of(await this.shop(slug));
+  }
+
+  // Витрина: название, часы, группы каталога.
+  async storefront(slug) {
+    const shop = await this.shop(slug);
+    const catalog = await this.catalogs.of(shop);
+    return { shop, groups: catalog.groups(), items: catalog.items().length };
+  }
+
+  async catalogLoads(slug) {
+    const shop = await this.shop(slug);
+    return this.repository.catalogLoads(shop.id);
+  }
+
+  async pendingCatalog(slug) {
+    const shop = await this.shop(slug);
+    return this.repository.pendingLoad(shop.id);
+  }
+
+  catalogEvent(shop, type, data, actor) {
+    return { stream: 'shop', scope: shop.id, subjectId: shop.id, type, data, actor, cause: 'catalog' };
+  }
+
+  // Шаг 1 выгрузки: файл → шапка, колонки, догадка «поле ← колонка»; файл ждёт решения.
+  // Нечитаемый файл — отказ в истории загрузок; каталог прежний.
+  async uploadCatalog(slug, file, actor) {
+    const shop = await this.shop(slug);
+    let preview;
+    try {
+      preview = this.catalogFile.preview(await this.catalogFile.grid(file));
+    } catch (err) {
+      if (!err.refused) throw err;
+      const fileName = (file && file.name) || 'без имени';
+      await this.repository.refusedLoad(shop.id, { fileName, reason: err.message, actor },
+        [this.catalogEvent(shop, 'catalog_refused', { file: fileName, reason: err.message }, actor)]);
+      throw bad(err.message);
+    }
+    await this.repository.savePendingLoad(shop.id, {
+      fileName: file.name, file: file.data, headerRow: preview.headerRow, columns: preview.columns, mapping: preview.mapping, rows: preview.rows, actor,
+    });
+    return { ...preview, fileName: file.name };
+  }
+
+  // Шаг 2: админ поправил колонку поля; колонка достаётся одному полю.
+  async mapCatalogField(slug, field, column) {
+    const shop = await this.shop(slug);
+    const load = await this.repository.pendingLoad(shop.id);
+    if (!load) throw bad('Сначала загрузите файл выгрузки');
+    if (!this.catalogFile.fields.some((f) => f.key === field)) throw bad(`Неизвестное поле каталога: ${field}`);
+    const index = this.catalogFile.columnOf(load.columns, column);
+    const mapping = { ...load.mapping };
+    if (index != null) for (const k of Object.keys(mapping)) if (mapping[k] === index) mapping[k] = null;
+    mapping[field] = index;
+    await this.repository.setLoadMapping(load.id, mapping);
+    return { mapping, column: index == null ? null : load.columns.find((c) => c.index === index) };
+  }
+
+  // Шаг 3: выгрузка читается целиком; каталог подменяется только при успехе (О17).
+  async commitCatalog(slug, actor) {
+    const shop = await this.shop(slug);
+    const load = await this.repository.pendingLoad(shop.id, { withFile: true });
+    if (!load) throw bad('Нет файла, который ждёт загрузки, — загрузите выгрузку');
+    let read;
+    try {
+      const grid = await this.catalogFile.grid({ name: load.file_name, data: load.file });
+      read = this.catalogFile.read(grid, { headerRow: load.header_row, mapping: load.mapping });
+    } catch (err) {
+      if (err.refused) throw bad(err.message); // не сопоставлено обязательное — файл ждёт правки
+      throw err;
+    }
+    const facts = { rows: read.rows, loaded: read.items.length, rejected: read.rejected, rejects: read.rejects };
+    if (!read.ok) {
+      await this.repository.noteLoadAttempt(shop.id, load.id, { ...facts, reason: read.reason }, [this.catalogEvent(shop, 'catalog_refused', {
+        file: load.file_name, reason: read.reason, loaded: facts.loaded, rejected: facts.rejected,
+      }, actor)]);
+      return { ok: false, reason: read.reason, ...facts };
+    }
+    const next = await this.repository.replaceCatalog(shop.id, load.id, { items: read.items, ...facts }, [this.catalogEvent(shop, 'catalog_loaded', {
+      file: load.file_name, loaded: facts.loaded, rejected: facts.rejected, groups: read.groups, version: (shop.catalog_version || 0) + 1,
+    }, actor)]);
+    return { ok: true, version: next.catalog_version, ...facts };
   }
 
   async board(slug) {
@@ -235,7 +381,7 @@ class BackboneDesk {
     const synonyms = new Synonyms(await this.repository.synonyms(shop.id));
     let result;
     try {
-      result = await this.tool.run({ text: order.text }, { llm: this.llm && this.llm.forActor(user), synonyms });
+      result = await (await this.toolOf(shop)).run({ text: order.text }, { llm: this.llm && this.llm.forActor(user), synonyms });
     } catch (err) {
       if (!err.refusal) throw err;
       await this.repository.appendEvents([event('parse_failed', { code: err.code, reason: err.message })]);
@@ -309,11 +455,12 @@ class BackboneDesk {
     if (lines.length !== ids.length || lines.some((l) => l.shop_id !== shop.id)) throw notFound('Строка черновика не найдена');
     if (change.verdict !== 'accepted' && lines.length > 1) throw bad('Позицию или количество меняют у одной строки за раз');
 
+    const tool = await this.toolOf(shop);
     const patches = [];
     const synonyms = [];
     const events = [];
     for (const line of lines) {
-      const { patch, synonym, data } = this.reviewOf(line, change);
+      const { patch, synonym, data } = this.reviewOf(line, change, tool);
       patches.push({ id: line.id, review: change.verdict, reviewedBy: actor, ...patch });
       if (synonym) synonyms.push({ shopId: shop.id, phrase: Synonyms.phrase(line.name), sku: synonym, example: line.source, createdBy: actor });
       events.push({
@@ -352,7 +499,7 @@ class BackboneDesk {
     const shop = await this.shop(slug);
     if (shop.mode === 'shadow') throw bad('Тень: черновик менеджеру не показываем — счёт делается в 1С как обычно, потом «Приложить счёт из 1С»');
     const order = await this.orderOf(shop, orderId);
-    const file = this.tool.exportFile(await this.orderLines(shop, order));
+    const file = (await this.toolOf(shop)).exportFile(await this.orderLines(shop, order));
     await this.repository.appendEvents([{
       stream: 'order', scope: shop.id, subjectId: order.id, type: 'invoice_exported',
       data: { number: order.number, lines: file.included, left: file.left, sum: file.sum }, actor, cause: 'export',
@@ -364,7 +511,7 @@ class BackboneDesk {
     const shop = await this.shop(slug);
     if (shop.mode === 'shadow') throw bad('Тень: выгрузки черновика нет');
     const order = await this.orderOf(shop, orderId);
-    const file = this.tool.exportFile(await this.orderLines(shop, order));
+    const file = (await this.toolOf(shop)).exportFile(await this.orderLines(shop, order));
     return { buffer: file.buffer, filename: `schet-zayavka-${order.number}.xlsx` };
   }
 
@@ -394,7 +541,8 @@ class BackboneDesk {
     if (shop.mode !== 'shadow') throw bad('Помощь: счёт отмечают кнопкой «Счёт отправлен»');
     const order = await this.orderOf(shop, orderId);
     if (await this.sentOf(order)) throw bad(`Счёт по заявке №${order.number} уже приложен`);
-    const final = this.tool.readInvoice(text);
+    const tool = await this.toolOf(shop);
+    const final = tool.readInvoice(text);
     if (!final.lines.length) throw bad('В тексте нет строк счёта — вставьте табличную часть счёта из 1С');
     let lines = (await this.repository.lines(shop.id)).filter((l) => l.order_id === order.id);
     if (!lines.length) {
@@ -402,7 +550,7 @@ class BackboneDesk {
       if (!parsed.ok) throw bad(`Черновик не построен: ${parsed.message}`);
       lines = await this.orderLines(shop, order);
     }
-    const cmp = this.tool.compare(lines, final.lines);
+    const cmp = tool.compare(lines, final.lines);
     const data = { number: order.number, mode: 'shadow', source: 'attached', ...cmp, unknown: final.unknown.length };
     await this.repository.appendEvents([{ stream: 'order', scope: shop.id, subjectId: order.id, type: 'invoice_sent', data, actor, cause: 'invoice' }]);
     return data;
@@ -411,7 +559,7 @@ class BackboneDesk {
   // Замеры магазина: отчёт из журнала, режим и решение о помощи.
   async measures(slug) {
     const shop = await this.shop(slug);
-    const spec = this.shops[slug] || {};
+    const spec = this.specOf(shop);
     const measures = this.measuresOf(shop, spec);
     const now = this.clock().getTime();
     const report = measures.report(await this.journal.history(shop.id), { now, mode: shop.mode });
@@ -438,7 +586,7 @@ class BackboneDesk {
   }
 
   // Решение по одной строке: новые поля, синоним (артикул) или null, данные события.
-  reviewOf(line, change) {
+  reviewOf(line, change, tool) {
     const keep = {
       sku: line.sku, qty: line.qty, unit: line.unit, confidence: line.confidence, state: line.state,
       invoiceQty: line.invoice_qty, price: line.price, question: line.question,
@@ -453,9 +601,9 @@ class BackboneDesk {
       case 'replaced': {
         const raw = String(change.sku ?? '').trim();
         const pick = /^\d{1,2}$/.test(raw) ? (line.candidates[Number(raw) - 1] || {}).sku : raw;
-        if (!pick || !this.tool.item(pick)) throw bad(raw ? `Нет позиции «${raw}» в каталоге` : 'Укажите артикул или номер кандидата');
+        if (!pick || !tool.item(pick)) throw bad(raw ? `Нет позиции «${raw}» в каталоге` : 'Укажите артикул или номер кандидата');
         return {
-          patch: { ...keep, ...revised(this.tool.revise(line, { sku: pick })), confidence: 1, state: 'accepted' },
+          patch: { ...keep, ...revised(tool.revise(line, { sku: pick })), confidence: 1, state: 'accepted' },
           synonym: pick,
           data: { from: line.sku, to: pick },
         };
@@ -464,7 +612,7 @@ class BackboneDesk {
         const qty = Number(String(change.qty ?? '').replace(',', '.').replace(/\s/g, ''));
         if (!Number.isFinite(qty) || qty <= 0) throw bad('Количество — число больше нуля');
         if (!line.sku) throw bad(`Строка ${line.position}: сначала выберите позицию`);
-        return { patch: { ...keep, ...revised(this.tool.revise(line, { qty })) }, synonym: null, data: { from: line.qty, to: qty } };
+        return { patch: { ...keep, ...revised(tool.revise(line, { qty })) }, synonym: null, data: { from: line.qty, to: qty } };
       }
       default:
         throw bad(`Неизвестное решение: ${change.verdict}`);

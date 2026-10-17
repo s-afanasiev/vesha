@@ -53,24 +53,35 @@ class SheetRows {
     this.maxEntryBytes = maxEntryBytes;
   }
 
-  // Первый лист книги: строка листа → строка текста, ячейки через табуляцию.
-  async lines(data) {
+  // Первый лист книги сеткой: [{ row: номер строки листа, cells: [текст по колонкам] }].
+  // Каталог читает сетку целиком (шапка, колонки); заявка — строками текста (lines).
+  async grid(data) {
     const read = unzip(data, { maxEntryBytes: this.maxEntryBytes, bad: (message) => new Refusal('bad_file', message) });
     const shared = read('xl/sharedStrings.xml');
     const strings = shared ? list(xml.parse(shared).sst?.si).map(runs) : [];
     const sheet = read(this.firstSheet(read));
     if (!sheet) throw new Refusal('bad_file', 'В книге xlsx нет листа');
     const rows = [];
+    let n = 0;
     for (const row of list(xml.parse(sheet).worksheet?.sheetData?.row)) {
+      n = Number(row['@_r']) || n + 1;
       const cells = [];
       for (const c of list(row.c)) {
         const type = c['@_t'];
         const value = type === 's' ? strings[Number(textOf(c.v))] ?? ''
           : type === 'inlineStr' ? runs(c.is || {})
             : textOf(c.v);
-        cells[columnIndex(c['@_r'])] = String(value).trim();
+        cells[c['@_r'] ? columnIndex(c['@_r']) : cells.length] = String(value).trim(); // без адреса — следующая колонка
       }
-      const filled = Array.from(cells, (v) => v || '');
+      rows.push({ row: n, cells: Array.from(cells, (v) => v || '') });
+    }
+    return rows;
+  }
+
+  // Первый лист книги: строка листа → строка текста, ячейки через табуляцию.
+  async lines(data) {
+    const rows = [];
+    for (const { cells: filled } of await this.grid(data)) {
       if (!filled.some(Boolean)) continue;
       // шапка таблицы: слова шапки и ни одного числа
       if (filled.some((v) => HEADER.test(v)) && !filled.some((v) => /^\d+(?:[.,]\d+)?$/.test(v))) continue;

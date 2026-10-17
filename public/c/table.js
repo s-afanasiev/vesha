@@ -8,7 +8,8 @@
 // в тело рядом с ids; multiline — многострочное поле для вставки таблицы);
 // max — кнопка гаснет, если выбрано больше. После успешного действия строки
 // перечитываются, result.message — в ноге, result.download (путь на этом
-// сайте) — браузер скачивает файл.
+// сайте) — браузер скачивает файл. Поле type: 'file' — выбор файла, тело
+// уходит multipart; options — выпадающий список.
 // data-poll="3000" — тихий опрос как у v-kanban: перерисовка, только если
 // строки изменились; в фоне вкладки сервер не дёргается.
 (() => {
@@ -102,7 +103,9 @@
       const ids = [...this._s.sel];
       btn.disabled = true; btn.classList.add('loading');
       try {
-        const response = await postJson(`${this.src}/actions/${encodeURIComponent(id)}`, { ...values, ids });
+        const url = `${this.src}/actions/${encodeURIComponent(id)}`;
+        const hasFile = Object.values(values).some((v) => v instanceof File);
+        const response = hasFile ? await postForm(url, values, ids) : await postJson(url, { ...values, ids });
         this._closeForm();
         const result = response && response.result;
         if (result && typeof result.message === 'string') this._note(result.message);
@@ -187,14 +190,12 @@
         <span class="vt-form-title">${escapeHtml(action.name)}:</span>
         ${action.fields.map((f) => `
           <label class="vt-field${f.multiline ? ' vt-field--wide' : ''}">${escapeHtml(f.label)}
-            ${f.multiline
-              ? `<textarea class="vt-search" rows="5" name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}${f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : ''}></textarea>`
-              : `<input class="vt-search" name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}${f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : ''}>`}
+            ${fieldInput(f)}
           </label>`).join('')}
         <button type="submit" class="vt-btn vt-btn--act">Применить</button>
         <button type="button" class="vt-btn" data-vt="form-cancel">Отмена</button>`;
       form.hidden = false;
-      const first = form.querySelector('input');
+      const first = form.querySelector('input, select');
       if (first) first.focus();
     }
 
@@ -210,7 +211,8 @@
       const form = e.target;
       if (!this._els || form !== this._els.form) return;
       e.preventDefault();
-      const values = Object.fromEntries(new FormData(form).entries());
+      const values = Object.fromEntries([...new FormData(form).entries()]
+        .filter(([, v]) => !(v instanceof File) || v.name)); // файл не выбран — поля нет
       const btn = this.querySelector(`[data-vt-action="${CSS.escape(form.dataset.action)}"]`);
       if (btn) void this._runAction(form.dataset.action, btn, values);
     }
@@ -403,6 +405,30 @@
     a.remove();
   }
 
+  // Поле формы действия: файл, выбор из списка, многострочное или строка.
+  function fieldInput(f) {
+    const name = ` name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}`;
+    const hint = f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : '';
+    if (f.type === 'file') return `<input type="file" class="vt-file"${name}${f.accept ? ` accept="${escapeHtml(f.accept)}"` : ''}>`;
+    if (f.options) {
+      return `<select class="vt-search"${name}>${f.required ? '' : '<option value="">—</option>'}${f.options
+        .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.name)}</option>`).join('')}</select>`;
+    }
+    if (f.multiline) return `<textarea class="vt-search" rows="5"${name}${hint}></textarea>`;
+    return `<input class="vt-search"${name}${hint}>`;
+  }
+
+  // Действие с файлом — multipart: поля строками, ids — повтором ключа.
+  async function postForm(url, values, ids) {
+    const body = new FormData();
+    for (const [k, v] of Object.entries(values)) body.append(k, v);
+    for (const id of ids) body.append('ids', id);
+    const res = await fetch(url, { method: 'POST', body });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.error) throw new Error(j.error || `HTTP ${res.status}`);
+    return j;
+  }
+
   function cellHtml(row, c) {
     const v = row[c.key];
     if (c.render === 'link') {
@@ -411,6 +437,8 @@
         try { const u = new URL(String(v)); host = u.host + u.pathname.replace(/\/$/, ''); } catch {}
         return `<a href="${escapeHtml(v)}" target="_blank" rel="noopener" class="vt-link">${escapeHtml(host)}</a>`;
       }
+      // путь на этом же сайте — как есть
+      if (v && /^\/(?!\/)/.test(String(v))) return `<a href="${escapeHtml(v)}" class="vt-link">${escapeHtml(v)}</a>`;
       const note = c.note ? row[c.note] : null;
       return `<span class="vt-note">${escapeHtml(note || '—')}</span>`;
     }

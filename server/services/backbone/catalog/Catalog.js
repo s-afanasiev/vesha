@@ -1,8 +1,9 @@
 // Каталог магазина (docs/backbone-architecture.md §4): общее для сайта, ассистента
-// и инструмента — читается один раз (П5). Источник до шага 6 — файл-фикстура
-// на 300 позиций (честный простой узел, О6; пересборка — scripts/backbone-catalog-fixture.mjs).
-// Индекс атрибутов строится из тех же позиций при первом обращении; синонимы —
-// у магазина (backbone_synonyms), их читает разбор. Живая выгрузка 1С / МойСклад — шаг 6.
+// и инструмента — читается один раз (П5). Источник — последняя загруженная выгрузка
+// магазина (шаг 6: xlsx из 1С, МойСклад, прайс — CatalogFile); у демо-магазина, пока
+// выгрузки нет, — файл-фикстура на 300 позиций (О6; пересборка —
+// scripts/backbone-catalog-fixture.mjs). Индекс атрибутов строится из тех же позиций
+// при первом обращении; синонимы — у магазина (backbone_synonyms), их читает разбор.
 
 const fs = require('node:fs');
 
@@ -40,6 +41,38 @@ class CsvFeed {
       price: Number(r.price),
       stock: Number(r.stock),
     }));
+  }
+}
+
+// Позиции, уже прочитанные из базы: выгрузка магазина.
+class RowsFeed {
+  constructor(rows) {
+    this.rows = rows;
+  }
+
+  read() {
+    return this.rows;
+  }
+}
+
+// Каталоги магазинов. Каталог и его индекс живут, пока у магазина та же версия
+// каталога: успешная загрузка выгрузки поднимает версию — следующий запрос строит заново.
+class Catalogs {
+  constructor({ repository, indexOf, fixtureOf = () => null }) {
+    this.repository = repository;
+    this.indexOf = indexOf;     // ниша → пустой CatalogIndex со словарём атрибутов ниши
+    this.fixtureOf = fixtureOf; // магазин без выгрузки → фид-фикстура или null
+    this.cache = new Map();     // shopId → { version, catalog }
+  }
+
+  async of(shop) {
+    const version = shop.catalog_version || 0;
+    const hit = this.cache.get(shop.id);
+    if (hit && hit.version === version) return hit.catalog;
+    const feed = (!version && this.fixtureOf(shop)) || new RowsFeed(await this.repository.catalogItems(shop.id));
+    const catalog = new Catalog(feed, this.indexOf(shop.niche));
+    this.cache.set(shop.id, { version, catalog });
+    return catalog;
   }
 }
 
@@ -81,7 +114,7 @@ class Catalog {
   }
 
   groups() {
-    return [...new Set(this.items().map((i) => i.group))];
+    return [...new Set(this.items().map((i) => i.group).filter(Boolean))];
   }
 }
 
@@ -95,4 +128,4 @@ function norm(s) {
     .trim();
 }
 
-module.exports = { Catalog, CsvFeed };
+module.exports = { Catalog, Catalogs, CsvFeed, RowsFeed };

@@ -117,9 +117,12 @@
       document.getElementById('shop-name').textContent = s.name;
       if (s.hours) {
         const d = s.hours.days || [];
-        const span = d.length ? `${DAYS[d[0]]}–${DAYS[d[d.length - 1]]}` : '';
+        const run = d.length > 1 && d.every((x, i) => i === 0 || x === d[i - 1] + 1);
+        const span = d.length === 7 ? 'ежедневно' : run ? `${DAYS[d[0]]}–${DAYS[d[d.length - 1]]}` : d.map((x) => DAYS[x]).join(', ');
         document.getElementById('shop-hours').textContent = `${span} ${s.hours.from}–${s.hours.to}`;
       }
+      emptyCatalog = !s.items;
+      if (emptyCatalog) search();
       const sel = document.getElementById('group');
       for (const g of s.groups || []) sel.insertAdjacentHTML('beforeend', `<option>${escapeHtml(g)}</option>`);
     }).catch((e) => toast(e.message, { kind: 'err' }));
@@ -127,6 +130,7 @@
     // ---------- каталог ----------
     const fmt = (n) => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let seq = 0;
+    let emptyCatalog = false; // каталог магазина ещё не загружен — заявка списком всё равно работает
     function search() {
       const q = document.getElementById('q').value;
       const group = document.getElementById('group').value;
@@ -139,9 +143,9 @@
             <td>${escapeHtml(i.name)}<div class="sku">${escapeHtml(i.sku)}</div></td>
             <td>${i.pack > 1 ? `по ${i.pack} ${escapeHtml(i.unit)}` : escapeHtml(i.unit)}</td>
             <td class="num">${fmt(i.price)}</td>
-            <td class="stock ${i.inStock ? 'stock--yes' : 'stock--no'}">${i.inStock ? 'в наличии' : 'под заказ'}</td>
+            <td class="stock ${i.inStock ? 'stock--yes' : 'stock--no'}">${i.inStock == null ? 'уточняйте' : i.inStock ? 'в наличии' : 'под заказ'}</td>
             <td><button type="button" class="add" data-name="${escapeHtml(i.name)}" data-pack="${i.pack}" data-unit="${escapeHtml(i.unit)}">в список</button></td>
-          </tr>`).join('') : '<tr><td colspan="5">ничего не нашлось — напишите позицию в заявке своими словами</td></tr>';
+          </tr>`).join('') : `<tr><td colspan="5">${emptyCatalog ? 'каталог скоро появится — пришлите список своими словами, мы подберём позиции' : 'ничего не нашлось — напишите позицию в заявке своими словами'}</td></tr>`;
         document.getElementById('more').textContent = r.total > r.items.length ? `показаны ${r.items.length} из ${r.total} — уточните запрос` : '';
       }).catch((e) => toast(e.message, { kind: 'err' }));
     }

@@ -18,10 +18,13 @@
   <link rel="stylesheet" href="/c/kanban.css" />
   <link rel="stylesheet" href="/c/page.css" />
   <style>
-    .boot-pages { display: inline-flex; gap: 0.25rem; }
+    .boot-pages { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
     .boot-pages a { padding: 0.3rem 0.75rem; border-radius: 9999px; color: var(--text-muted); text-decoration: none; font-size: 0.95rem; }
     .boot-pages a:hover { color: var(--text-heading); }
     .boot-pages a[aria-current="page"] { background: var(--surface-inset); color: var(--text-heading); font-weight: 600; }
+    .boot-shop { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; color: var(--text-muted); font-size: 0.95rem; max-width: 100%; }
+    .boot-shop select { font: inherit; padding: 0.25rem 0.5rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface); color: var(--text-heading); max-width: min(16rem, 55vw); }
+    .boot-shop a { color: var(--text-muted); }
   </style>
 </head>
 <body class="page-experiments">
@@ -29,10 +32,16 @@
     <div class="experiments__nav">
       <a class="back-link" href="/experiments/">← Эксперименты</a>
       <div class="experiments__nav-end">
+        <label class="boot-shop">Магазин
+          <select id="boot-shop" aria-label="Магазин"></select>
+          <a id="boot-site" href="/backbone/" target="_blank" rel="noopener">витрина</a>
+        </label>
         <nav class="boot-pages" aria-label="Экраны костяка">
-          <a href="?page=main" data-page="main">Доска</a>
-          <a href="?page=draft" data-page="draft">Черновики счетов</a>
-          <a href="?page=measures" data-page="measures">Замеры</a>
+          <a data-page="main">Доска</a>
+          <a data-page="draft">Черновики счетов</a>
+          <a data-page="measures">Замеры</a>
+          <a data-page="catalog">Каталог</a>
+          <a data-page="shops">Магазины</a>
         </nav>
         <div data-vesha-auth-widget></div>
       </div>
@@ -50,11 +59,25 @@
   <script src="/c/kanban.js"></script>
   <script src="/c/boot.js"></script>
   <script>
-    // экран — из ?page=; спеки — server/services/backbone/pages.js
-    const asked = new URLSearchParams(location.search).get('page');
-    const page = ['draft', 'measures'].includes(asked) ? asked : 'main';
+    // экран — из ?page=, магазин — из ?shop=; спеки — server/services/backbone/pages.js
+    const params = new URLSearchParams(location.search);
+    const asked = params.get('page');
+    const page = ['draft', 'measures', 'catalog', 'shops'].includes(asked) ? asked : 'main';
+    const shop = params.get('shop') || 'demo-krepezh';
+    const link = (p, s = shop) => `?${new URLSearchParams({ shop: s, page: p })}`;
+    for (const a of document.querySelectorAll('.boot-pages a')) a.href = link(a.dataset.page);
     document.querySelector(`.boot-pages [data-page="${page}"]`).setAttribute('aria-current', 'page');
-    VeshaBoot.boot(`/api/backbone/c/pages/${page}`);
+    document.getElementById('boot-site').href = `/backbone/?shop=${encodeURIComponent(shop)}`;
+    const picker = document.getElementById('boot-shop');
+    picker.addEventListener('change', () => { location.search = link(page === 'shops' ? 'main' : page, picker.value); });
+    // список магазинов — из той же таблицы кабинета; заведённый магазин появится в нём сразу
+    VeshaUI.getJson('/api/backbone/c/shops/rows?limit=200').then(({ rows }) => {
+      if (!rows.some((r) => r.slug === shop)) rows.unshift({ slug: shop, name: shop });
+      picker.innerHTML = rows.map((r) => `<option value="${VeshaUI.escapeHtml(r.slug)}"${r.slug === shop ? ' selected' : ''}>${VeshaUI.escapeHtml(r.name)}</option>`).join('');
+    }).catch(() => { picker.innerHTML = `<option>${VeshaUI.escapeHtml(shop)}</option>`; });
+    VeshaBoot.boot(page === 'shops'
+      ? '/api/backbone/c/pages/shops'
+      : `/api/backbone/s/${encodeURIComponent(shop)}/c/pages/${page}`);
   </script>
 </body>
 </html>

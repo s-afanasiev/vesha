@@ -33,7 +33,7 @@ class StockCheck {
       const up = Math.ceil(qty / item.pack) * item.pack;
       questions.push(`${fmt(qty)} ${item.unit} — упаковка по ${item.pack}: отгрузить ${fmt(up)} ${item.unit} (${up / item.pack} уп.)?`);
     }
-    if (item.stock < qty) {
+    if (item.stock != null && item.stock < qty) { // остатка в выгрузке нет — не спрашиваем
       questions.push(item.stock > 0
         ? `в наличии ${fmt(item.stock)} ${item.unit} из ${fmt(qty)} — отгрузить наличие или ждать поставку?`
         : 'нет в наличии — ждать поставку или замена?');

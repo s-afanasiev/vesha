@@ -14,25 +14,36 @@ function conflict(message) {
 class MemoryRepository {
   constructor(journal) {
     this.journal = journal;
-    this.shops = [];
+    this.shopRows = [];
     this.boards = new Map(); // shopId → колонки
     this.rows = [];           // заявки
     this.draftLines = [];     // строки черновиков
     this.synonymRows = [];    // синонимы магазинов
     this.receiptRows = [];    // исходящие квитанции
+    this.items = new Map();   // shopId → позиции каталога
+    this.loads = [];          // загрузки выгрузок каталога
+    this.loadSeq = 0;
   }
 
   async shopBySlug(slug) {
-    const shop = this.shops.find((s) => s.slug === slug);
+    const shop = this.shopRows.find((s) => s.slug === slug);
     return shop ? { ...shop } : null;
   }
 
-  async createShop({ slug, name, niche, mode = 'shadow' }, columns, makeEvents) {
+  async shops() {
+    return this.shopRows.map((s) => ({ ...s }));
+  }
+
+  async createShop({ slug, name, niche, mode = 'shadow', hours = null, replyTo = null, shadowDays = null }, columns, makeEvents, { exists = 'return' } = {}) {
     const existing = await this.shopBySlug(slug);
+    if (existing && exists !== 'return') throw conflict(`Адрес магазина «${slug}» уже занят`);
     if (existing) return existing;
     const now = this.journal.now();
-    const shop = { id: crypto.randomUUID(), slug, name, niche, tz: 'Europe/Moscow', board_version: 1, mode, mode_since: now, receipts_cursor: 0, created_at: now };
-    this.shops.push(shop);
+    const shop = {
+      id: crypto.randomUUID(), slug, name, niche, tz: 'Europe/Moscow', board_version: 1, mode, mode_since: now, receipts_cursor: 0, created_at: now,
+      hours, reply_to: replyTo, shadow_days: shadowDays, catalog_version: 0,
+    };
+    this.shopRows.push(shop);
     this.boards.set(shop.id, columns.map((c, position) => ({ ...c, position })));
     await this.journal.appendIn(null, makeEvents(shop));
     return { ...shop };
@@ -78,17 +89,89 @@ class MemoryRepository {
   }
 
   async setMode(shopId, from, to, events) {
-    const shop = this.shops.find((s) => s.id === shopId && s.mode === from);
+    const shop = this.shopRows.find((s) => s.id === shopId && s.mode === from);
     if (!shop) throw conflict('Режим магазина уже изменился — обновите страницу');
     Object.assign(shop, { mode: to, mode_since: this.journal.now() });
     await this.journal.appendIn(null, events);
     return { ...shop };
   }
 
+  async updateShop(shopId, { name, hours, replyTo }, events) {
+    const shop = this.shopRows.find((s) => s.id === shopId);
+    if (!shop) throw conflict('Магазин не найден');
+    Object.assign(shop, { name, hours, reply_to: replyTo });
+    await this.journal.appendIn(null, events);
+    return { ...shop };
+  }
+
+  // ---------- каталог магазина (шаг 6) ----------
+
+  async catalogItems(shopId) {
+    return (this.items.get(shopId) || []).map((i) => ({ ...i }));
+  }
+
+  async catalogLoads(shopId, { limit = 50 } = {}) {
+    return this.loads.filter((l) => l.shop_id === shopId).reverse().slice(0, limit).map(({ file, ...l }) => ({ ...l }));
+  }
+
+  async pendingLoad(shopId, { withFile = false } = {}) {
+    const load = this.loads.filter((l) => l.shop_id === shopId && l.status === 'pending').pop();
+    if (!load) return null;
+    const { file, ...rest } = load;
+    return withFile ? { ...rest, file } : { ...rest };
+  }
+
+  async savePendingLoad(shopId, { fileName, file, headerRow, columns, mapping, rows, actor }) {
+    this.loads = this.loads.filter((l) => !(l.shop_id === shopId && l.status === 'pending'));
+    const id = String(++this.loadSeq);
+    this.loads.push({
+      id, shop_id: shopId, status: 'pending', file_name: fileName, file, header_row: headerRow, columns, mapping, rows,
+      loaded: 0, rejected: 0, rejects: [], reason: null, actor, created_at: this.journal.now(), decided_at: null,
+    });
+    return id;
+  }
+
+  async setLoadMapping(loadId, mapping) {
+    const load = this.loads.find((l) => l.id === loadId && l.status === 'pending');
+    if (!load) throw conflict('Загрузка уже решена — загрузите файл заново');
+    load.mapping = mapping;
+  }
+
+  pending(shopId, loadId) {
+    const load = this.loads.find((l) => l.id === loadId && l.shop_id === shopId && l.status === 'pending');
+    if (!load) throw conflict('Загрузка уже решена — загрузите файл заново');
+    return load;
+  }
+
+  async noteLoadAttempt(shopId, loadId, { rows, loaded, rejected, rejects, reason }, events) {
+    Object.assign(this.pending(shopId, loadId), { rows, loaded, rejected, rejects, reason });
+    await this.journal.appendIn(null, events);
+  }
+
+  async replaceCatalog(shopId, loadId, { items, rows, rejected, rejects }, events) {
+    Object.assign(this.pending(shopId, loadId), {
+      status: 'loaded', file: null, rows, loaded: items.length, rejected, rejects, reason: null, decided_at: this.journal.now(),
+    });
+    this.items.set(shopId, items.map((i) => ({ ...i, group: i.group || '' })));
+    const shop = this.shopRows.find((s) => s.id === shopId);
+    shop.catalog_version += 1;
+    await this.journal.appendIn(null, events);
+    return { ...shop };
+  }
+
+  async refusedLoad(shopId, { fileName, reason, actor }, events) {
+    const now = this.journal.now();
+    this.loads.push({
+      id: String(++this.loadSeq), shop_id: shopId, status: 'refused', file_name: fileName, file: null, header_row: null, columns: [], mapping: {},
+      rows: 0, loaded: 0, rejected: 0, rejects: [], reason, actor, created_at: now, decided_at: now,
+    });
+    await this.journal.appendIn(null, events);
+  }
+
   // ---------- витрина и квитанции (шаг 4) ----------
 
   async shopById(id) {
-    const shop = this.shops.find((s) => s.id === id);
+    const shop = this.shopRows.find((s) => s.id === id);
     return shop ? { ...shop } : null;
   }
 
@@ -103,12 +186,12 @@ class MemoryRepository {
   }
 
   async receiptsCursor(shopId) {
-    const shop = this.shops.find((s) => s.id === shopId);
+    const shop = this.shopRows.find((s) => s.id === shopId);
     return shop ? shop.receipts_cursor : 0;
   }
 
   async saveReceipts(shopId, fromCursor, toCursor, rows) {
-    const shop = this.shops.find((s) => s.id === shopId);
+    const shop = this.shopRows.find((s) => s.id === shopId);
     if (!shop || shop.receipts_cursor !== fromCursor) return false;
     const now = this.journal.now();
     for (const r of rows) {
@@ -206,7 +289,7 @@ class MemoryRepository {
   }
 
   async saveBoard(shopId, version, columns, moves, events, movedEvent) {
-    const shop = this.shops.find((s) => s.id === shopId);
+    const shop = this.shopRows.find((s) => s.id === shopId);
     if (!shop || shop.board_version !== version) throw conflict('Доска изменилась — обновите и повторите');
     const moveEvents = [];
     for (const move of moves) {

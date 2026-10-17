@@ -157,6 +157,15 @@ const config = {
   backbonePublicUrl: (envStr('BACKBONE_PUBLIC_URL') || 'http://localhost:3000').replace(/\/$/, ''),
   backboneMailDir: envStr('BACKBONE_MAIL_DIR') || require('path').join(__dirname, '..', 'data', 'backbone-mail'),
   backboneMailFrom: envStr('BACKBONE_MAIL_FROM') || 'noreply@vesha.local',
+  // Квитанции настоящим письмом: задан хост — SMTP, иначе — файлы .eml. Порт 465 —
+  // TLS сразу, иначе STARTTLS; пароль без TLS уходит только на localhost.
+  backboneSmtp: envStr('BACKBONE_SMTP_HOST') ? {
+    host: envStr('BACKBONE_SMTP_HOST'),
+    port: intEnv('BACKBONE_SMTP_PORT', 587) || 587,
+    secure: boolEnv('BACKBONE_SMTP_SECURE', intEnv('BACKBONE_SMTP_PORT', 587) === 465),
+    user: envStr('BACKBONE_SMTP_USER'),
+    pass: process.env.BACKBONE_SMTP_PASS || '',
+  } : null,
   backboneSitePerIp: intEnv('BACKBONE_SITE_PER_IP', 5),       // заявок с одного адреса за окно
   backboneSiteWindowMin: intEnv('BACKBONE_SITE_WINDOW_MIN', 10),
   // Путь для замера свободного места: на сервере данные могут жить на другом томе.

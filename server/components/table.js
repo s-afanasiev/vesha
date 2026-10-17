@@ -5,10 +5,15 @@
 //
 // Движок v1 — в памяти: rows() отдаёт всю выборку, каркас сам фильтрует,
 // сортирует и режет. SQL-источник source(params) — рост-точка.
+//
+// Поле действия type: 'file' — тело приходит multipart (в памяти, не больше
+// maxBytes), файл ложится в body[key] как { name, size, data }; options —
+// выбор из списка, чужое значение — 400.
 
 const express = require('express');
+const multer = require('multer');
 
-const DEFAULTS = { pageSize: 50, maxLimit: 500, maxIds: 1000 };
+const DEFAULTS = { pageSize: 50, maxLimit: 500, maxIds: 1000, maxFileBytes: 10 * 1024 * 1024 };
 
 // Декларация вида «таблица» — вызывается доменом в его точке сборки.
 function Table(decl) {
@@ -48,6 +53,8 @@ function router(decl) {
             key: f.key, label: f.label, required: !!f.required,
             ...(f.multiline ? { multiline: true } : {}),
             ...(f.placeholder ? { placeholder: f.placeholder } : {}),
+            ...(f.options ? { options: f.options.map((o) => (typeof o === 'string' ? { value: o, name: o } : o)) } : {}),
+            ...(f.type === 'file' ? { type: 'file', ...(f.accept ? { accept: f.accept } : {}), maxBytes: f.maxBytes || limits.maxFileBytes } : {}),
           })),
         } : {}),
       })),
@@ -73,23 +80,53 @@ function router(decl) {
     }
   });
 
-  r.post('/actions/:actionId', async (req, res) => {
+  r.post('/actions/:actionId', (req, res) => {
     const action = (decl.actions || []).find((a) => a.id === req.params.actionId);
     if (!action) return res.status(404).json({ error: `неизвестное действие: ${req.params.actionId}` });
+    const files = (action.fields || []).filter((f) => f.type === 'file');
+    if (!files.length) return void runAction(action, req, res, {});
+    // поле-файл: тело — multipart, файл — в памяти, не больше maxBytes поля
+    const maxBytes = Math.max(...files.map((f) => f.maxBytes || limits.maxFileBytes));
+    multer({ storage: multer.memoryStorage(), limits: { fileSize: maxBytes, files: files.length } })
+      .fields(files.map((f) => ({ name: f.key, maxCount: 1 })))(req, res, (err) => {
+        if (err) {
+          const big = err.code === 'LIMIT_FILE_SIZE';
+          return res.status(400).json({ error: big ? `файл больше ${Math.round(maxBytes / 1024 / 1024)} МБ` : `файл не принят: ${err.message}` });
+        }
+        const got = {};
+        for (const f of files) {
+          const file = req.files && req.files[f.key] && req.files[f.key][0];
+          if (!file) continue;
+          if (file.size > (f.maxBytes || limits.maxFileBytes)) {
+            return res.status(400).json({ error: `${f.label}: больше ${Math.round((f.maxBytes || limits.maxFileBytes) / 1024 / 1024)} МБ` });
+          }
+          // multer отдаёт имя в latin1 — браузер прислал utf-8
+          got[f.key] = { name: Buffer.from(file.originalname, 'latin1').toString('utf8'), size: file.size, data: file.buffer };
+        }
+        void runAction(action, req, res, got);
+      });
+  });
+
+  async function runAction(action, req, res, files) {
     try {
-      const ids = Array.isArray(req.body.ids) ? req.body.ids.map((v) => String(v)).filter(Boolean) : [];
+      const body = { ...(req.body || {}), ...files };
+      const ids = [].concat(body.ids ?? []).map((v) => String(v)).filter(Boolean); // multipart: одно ids — строка
       if (action.bulk && !ids.length) throw new Error('ничего не выбрано');
       if (action.max && ids.length > action.max) throw new Error(`не больше ${action.max} строк за раз`);
       for (const f of action.fields || []) {
-        if (f.required && !String(req.body[f.key] ?? '').trim()) throw new Error(`${f.label}: пусто`);
+        const empty = f.type === 'file' ? !body[f.key] : !String(body[f.key] ?? '').trim();
+        if (f.required && empty) throw new Error(`${f.label}: пусто`);
+        if (f.options && !empty && !f.options.some((o) => (typeof o === 'string' ? o : o.value) === String(body[f.key]))) {
+          throw new Error(`${f.label}: нет такого варианта`);
+        }
       }
       // user — инициатор действия, как в kanban@1 /move: от его имени вехи и квоты (П37)
-      const result = await action.run({ ids, body: req.body, user: req.user || null });
+      const result = await action.run({ ids, body, user: req.user || null });
       res.json({ ok: true, result });
     } catch (e) {
       res.status(400).json({ error: String(e.message || e) });
     }
-  });
+  }
 
   return r;
 }
