@@ -1,0 +1,55 @@
+id;group;name;unit;freq;coverage;source;level;url;subst_status
+macro_gdp_real;macro;ВВП в постоянных ценах;млрд руб. 2021;МКГ;1995-2025;Росстат;1;https://rosstat.gov.ru/statistics/accounts;—
+macro_gdp_pc_ppp;macro;ВВП на душу по ППС;межд. долл. 2021;Г;1990-2024;WDI;2;https://api.worldbank.org/v2;—
+macro_tfp;macro;Совокупная факторная производительность;индекс 2021=1;Г;1950-2019;PWT 10.01 / Russia KLEMS;3;https://www.rug.nl/ggdc/productivity/pwt/;данные не обновляются
+macro_labor_prod;macro;Производительность труда;% к 2019;Г;2019-2025;Росстат;1;https://rosstat.gov.ru/labor_market_employment;—
+macro_invest_rate;macro;Норма накопления;% ВВП;ГК;1995-2025;Росстат / WDI;1;https://rosstat.gov.ru/statistics/accounts;—
+macro_savings_rate;macro;Норма валовых сбережений;% ВВП;Г;1990-2023;WDI;2;https://api.worldbank.org/v2;—
+macro_key_rate;macro;Ключевая ставка;% годовых;М;1991-2025;ЦБ РФ;1;https://www.cbr.ru/hd_base/KeyRate/;—
+macro_reer;macro;Реальный эффективный курс;индекс 2010=100;М;1994-2025;ЦБ РФ / BIS;1;https://www.cbr.ru/statistics/macro_itm/;—
+macro_cpi;macro;Инфляция;% г/г;М;1991-2025;Росстат;1;https://rosstat.gov.ru/price;—
+macro_budget_balance;macro;Баланс федерального бюджета;% ВВП;М;2000-2025;Минфин;1;https://minfin.gov.ru/ru/statistics/fedbud/;замена действует
+macro_oil_urals;macro;Цена нефти Urals;$/барр.;М;1989-2025;Минэкономразвития / ЦБ РФ;1;https://www.economy.gov.ru;замена действует
+inst_wgi_rl;inst;Rule of Law (WGI);балл -2.5..+2.5;Г;1996-2024;Всемирный банк;2;https://www.worldbank.org/en/publication/worldwide-governance-indicators;—
+inst_ipri;inst;Индекс защиты прав собственности;балл 0-100;Г;2007-2024;Property Rights Alliance;3;https://www.internationalpropertyrightsindex.org;—
+inst_contract_time;inst;Время исполнения контракта;дней;Г;2004-2020;Всемирный банк (архив);2;https://archive.doingbusiness.org;данные закрыты
+inst_tax_amendments;inst;Поправки в НК РФ;шт./год;Г;2010-2026;собственный сбор;1;http://publication.pravo.gov.ru;—
+inst_epu_ru;inst;Индекс экономической неопределённости;индекс;М;1990-2025;Baker, Bloom, Davis;3;https://www.policyuncertainty.com/russia_monthly.html;—
+inst_procurement_single;inst;Доля закупок у единственного поставщика;% объёма;КГ;2011-2025;ЕИС / Минфин;1;https://zakupki.gov.ru;замена частичная
+inst_wacc;inst;Стоимость капитала (WACC);% годовых;Г;2010-2025;расчёт (ЦБ РФ, Damodaran);2;https://www.cbr.ru/statistics/bank_sector/interest_rates/;—
+hum_population;hum;Население;млн чел.;Г;1990-2025;Росстат / ООН WPP;1;https://rosstat.gov.ru/population;—
+hum_labor_force;hum;Рабочая сила;млн чел.;МКГ;1992-2025;Росстат (ОРС);1;https://rosstat.gov.ru/labour_force;—
+hum_lfpr;hum;Участие в рабочей силе;%;КГ;1992-2025;Росстат (ОРС);1;https://rosstat.gov.ru/labour_force;—
+hum_unemployment;hum;Безработица;%;М;1992-2025;Росстат (ОРС);1;https://rosstat.gov.ru/labour_force;—
+hum_researchers;hum;Исследователи (ФТЕ);тыс. чел.;Г;2000-2024;ИСИЭЗ ВШЭ;3;https://issek.hse.ru;—
+hum_hale;hum;Ожидаемая здоровая жизнь;лет;Г;2000-2021;ВОЗ GHO;2;https://www.who.int/data/gho;—
+hum_mortality_wap;hum;Смертность в трудоспособном возрасте;на 100 тыс.;Г;1990-2024;Росстат (ЕМИСС);1;https://fedstat.ru;—
+hum_net_migration;hum;Миграционный прирост;тыс. чел.;МГ;1990-2025;Росстат / МВД;1;https://rosstat.gov.ru/population;два ряда параллельно
+hum_ege_stem;hum;Участники ЕГЭ (физика, математика);тыс. чел.;Г;2015-2025;Рособрнадзор;1;https://obrnadzor.gov.ru;—
+hum_vpo_eng;hum;Выпуск инженерных УГСН;тыс. чел.;Г;2015-2025;Минобрнауки (ВПО-1);1;https://minobrnauki.gov.ru/opendata/;—
+infra_rail_freight;infra;Погрузка и грузооборот РЖД;млн т;МГ;1990-2025;РЖД;1;https://company.rzd.ru;замена действует
+infra_east_capacity;infra;Провозная способность Восточного полигона;млн т/год;Г;2013-2025;Минтранс / РЖД;1;https://mintrans.gov.ru;—
+infra_container;infra;Контейнерные перевозки;тыс. TEU;МГ;2010-2025;РЖД / ИПЕМ;1;https://company.rzd.ru;—
+infra_elec_price_ind;infra;Цена электроэнергии для промышленности;руб./кВт·ч;МГ;2015-2025;Совет рынка;1;https://www.np-sr.ru;—
+infra_grid_connection;infra;Срок техприсоединения;мес.;Г;2012-2025;Россети / Минэнерго;1;https://minenergo.gov.ru;—
+infra_base_stations;infra;Парк базовых станций;тыс. шт.;Г;2015-2025;Минцифры;1;https://digital.gov.ru;—
+infra_dc_capacity;infra;Стойко-места ЦОД;тыс. стоек;Г;2015-2025;iKS-Consulting;4;https://www.iksconsulting.ru;—
+tech_eci;tech;Индекс экономической сложности;безразм.;Г;1995-2022;Harvard Atlas;3;https://atlas.hks.harvard.edu;—
+tech_gerd;tech;Затраты на исследования и разработки (GERD);% ВВП;Г;1990-2024;ИСИЭЗ ВШЭ;3;https://issek.hse.ru;—
+tech_patents;tech;Патентные заявки резидентов;шт./год;Г;1990-2025;Роспатент;1;https://new.fips.ru;—
+tech_mva_share;tech;Доля обработки в ВДС;%;МГ;1995-2025;Росстат;1;https://rosstat.gov.ru/statistics/accounts;—
+tech_machine_import;tech;Импорт металлообрабатывающего оборудования;млн $;МГ;2010-2025;Comtrade (зеркально);2;https://comtradeplus.un.org;замена действует
+tech_ekb_share;tech;Доля отечественной ЭКБ;%;Г;2014-2025;Минпромторг / АРПЭ;1;https://minpromtorg.gov.ru;замена частичная
+tech_robot_density;tech;Плотность роботизации;роботов/10 тыс. занятых;Г;2010-2024;IFR / НАУРР;3;https://ifr.org;замена действует
+trade_exports;trade;Экспорт товаров;млрд $;МГ;1990-2025;ЦБ РФ / Comtrade;1;https://www.cbr.ru/statistics/macro_itm/svs/;замена действует
+trade_hhi;trade;Концентрация экспорта (HHI);0-1;Г;2000-2024;расчёт по Comtrade;2;https://comtradeplus.un.org;—
+trade_ca_balance;trade;Сальдо текущего счёта;млрд $;КГ;1994-2025;ЦБ РФ;1;https://www.cbr.ru/statistics/macro_itm/svs/;—
+trade_reserves;trade;Международные резервы;млрд $;М;1993-2025;ЦБ РФ;1;https://www.cbr.ru/hd_base/mrrf/mrrf_m/;замена действует
+trade_fnb;trade;Ликвидная часть ФНБ;млрд руб.;М;2008-2025;Минфин;1;https://minfin.gov.ru/ru/statistics/fonds/;—
+trade_ruble_share;trade;Доля рубля в расчётах;%;КГ;2013-2025;ЦБ РФ;1;https://www.cbr.ru/statistics/macro_itm/svs/;—
+trade_it_exports;trade;Экспорт компьютерных услуг и ПО;млрд $;КГ;2014-2025;ЦБ РФ / Руссофт;1;https://www.cbr.ru/statistics/macro_itm/external_sector/;два ряда параллельно
+geo_resource_rents;geo;Природная рента;% ВВП;Г;1990-2023;WDI / Минфин;2;https://api.worldbank.org/v2;—
+geo_vrp;geo;ВРП по субъектам;млрд руб.;Г;1998-2024;Росстат;1;https://rosstat.gov.ru/statistics/accounts;протокол полноты
+geo_market_distance;geo;Расстояние до рынков;км;статика;статика;CEPII (расчёт);3;http://www.cepii.fr;—
+geo_permafrost_share;geo;Доля территории в криолитозоне;%;статика;статика;ИГ РАН;3;http://igras.ru;—
+geo_smp_freight;geo;Грузопоток СМП;млн т;Г;2013-2025;Росатом;1;https://rosatom.ru;—

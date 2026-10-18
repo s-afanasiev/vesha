@@ -50,7 +50,7 @@ function mdFiles(dir) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) {
       if (name !== 'data') out.push(...mdFiles(p));
-    } else if (name.endsWith('.md') && p !== PLAN) out.push(p);
+    } else if (name.endsWith('.md') && p !== PLAN && !/^block-\d+-.*-plan\.md$/.test(name)) out.push(p);
   }
   return out;
 }
