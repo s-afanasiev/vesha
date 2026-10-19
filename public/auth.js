@@ -264,7 +264,8 @@
     regTab.classList.toggle('is-active', tabName === 'register');
     regTab.setAttribute('aria-selected', tabName === 'register' ? 'true' : 'false');
 
-    modalEl.querySelector('.vesha-auth-tabs').hidden = isPassword;
+    // без регистрации вкладка одна — ряд вкладок не нужен
+    modalEl.querySelector('.vesha-auth-tabs').hidden = isPassword || regTab.hidden;
     loginForm.hidden = !isLogin;
     regForm.hidden = tabName !== 'register';
     passForm.hidden = !isPassword;

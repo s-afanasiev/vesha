@@ -458,6 +458,11 @@ body.page-experiments {
   cursor: not-allowed;
 }
 
+/* display: inline-flex выше перебивал hidden — скрытые кнопки и ссылки-кнопки оставались видны */
+.vesha-btn[hidden] {
+  display: none;
+}
+
 /* Auth Modal */
 
 body.vesha-modal-open {

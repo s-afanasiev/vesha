@@ -225,7 +225,8 @@ body.page-experiments {
   margin-top: 0.75rem;
 }
 
-.summarize-file-chosen[hidden] {
+.summarize-file-chosen[hidden],
+.summarize-dropzone[hidden] {
   display: none !important;
 }
 
