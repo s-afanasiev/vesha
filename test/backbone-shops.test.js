@@ -473,7 +473,7 @@ test('postgres: shop opened through the cabinet table, catalog uploaded as xlsx,
     const opened = await postJson('/c/shops/actions/open', { slug, name: 'Тестовый магазин', niche: 'hardware', days: 'пн-пт', time: '9-18', email: 'zakaz@kk.test' });
     assert.equal(opened.status, 200, opened.error);
     const listed = (await json('/c/shops/rows?limit=200')).rows.find((r) => r.slug === slug);
-    assert.deepEqual([listed.mode, listed.hours, listed.email, listed.catalog], ['тень, день 0 из 14', 'пн–пт 09:00–18:00', 'zakaz@kk.test', 'не загружен']);
+    assert.deepEqual([listed.mode, listed.hours, listed.email, listed.catalog], ['сравнение, день 0 из 14', 'пн–пт 09:00–18:00', 'zakaz@kk.test', 'не загружен']);
     assert.equal((await postJson('/c/shops/actions/open', { slug, name: 'Дубль', niche: 'hardware' })).status, 409, 'адрес занят — конфликт двери, как есть');
 
     const form = new FormData();

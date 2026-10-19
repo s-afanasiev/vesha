@@ -26,6 +26,51 @@ function splitText(text) {
     .filter((l) => l.trim() && !CHATTER_LINE.test(l));
 }
 
+// Текст заявки целиком — для левой колонки карточки «как прислал покупатель» — и где
+// в нём каждая строка черновика (sources — исходные строки по порядку черновика):
+// → { lines: [строки текста как есть], anchors: [для каждой исходной строки — номера строк текста] }
+// Строку ищем от места предыдущей, потом с начала; одна и та же строка дважды встаёт на
+// своё место по порядку, а не дважды на первое.
+function anchorText(text, sources) {
+  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/\s+$/, ''));
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  const taken = new Map(); // «номер строки текста + исходная строка» → сколько раз уже занята
+  let cursor = 0;
+  const anchors = sources.map((source) => {
+    const needle = String(source ?? '').trim();
+    if (!needle) return [];
+    const free = (l, i) => l.split(needle).length - 1 > (taken.get(`${i}:${needle}`) || 0);
+    const find = (from) => lines.findIndex((l, i) => i >= from && free(l, i));
+    let at = find(cursor);
+    if (at < 0) at = find(0);
+    if (at < 0) return [];
+    const key = `${at}:${needle}`;
+    taken.set(key, (taken.get(key) || 0) + 1);
+    cursor = at;
+    return [at];
+  });
+  return { lines, anchors };
+}
+
+// Два прочтения одного текста (механика и нейросеть) → пары по месту: строки с тем же
+// местом в тексте (anchors[0], иначе исходная строка) встают друг к другу по порядку.
+// → [{ line: строка из others, base: строка из lines на том же месте | null }]
+function pairByPlace(lines, others) {
+  const place = (l) => ((l.anchors || []).length ? `@${l.anchors[0]}` : `#${String(l.source ?? '').trim()}`);
+  const byPlace = new Map();
+  for (const l of lines) {
+    if (!byPlace.has(place(l))) byPlace.set(place(l), []);
+    byPlace.get(place(l)).push(l);
+  }
+  const used = new Map();
+  return others.map((line) => {
+    const k = place(line);
+    const i = used.get(k) || 0;
+    used.set(k, i + 1);
+    return { line, base: (byPlace.get(k) || [])[i] || null };
+  });
+}
+
 class PlainText {
   async lines(data) {
     return splitText(Buffer.isBuffer(data) ? data.toString('utf8') : data);
@@ -167,4 +212,4 @@ class RequestText {
   }
 }
 
-module.exports = { RequestText, PlainText, SheetRows, PdfTextLayer, Refusal, splitText };
+module.exports = { RequestText, PlainText, SheetRows, PdfTextLayer, Refusal, splitText, anchorText, pairByPlace };

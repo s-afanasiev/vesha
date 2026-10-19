@@ -2,6 +2,9 @@
 // («наименование — количество единица»), потом модель — для того, что правила
 // не разобрали. Каждая цифра ответа модели должна найтись в исходной строке,
 // иначе строка помечается «проверить» (О18: модель не придумывает фактов).
+// С 19.10.2026 модель зовут только явно (ctx.llm): по умолчанию разбор механический
+// и бесплатный; «Распознать нейросетью» (ctx.whole) отдаёт модели всю заявку — кроме
+// приветствия, подписи и контактов, — а строки без ответа модели остаются за правилами.
 //
 // Строка: { ref, source, name, qty, unit, origin: rule | model | raw, verify }.
 // raw — строка с цифрами, которую не разобрал никто: она видна менеджеру, а не теряется.
@@ -116,6 +119,9 @@ const SYSTEM = [
   'Правила: не придумывай товаров и чисел — бери только то, что написано; число словами переведи в цифры;',
   'если в одной строке несколько товаров — верни несколько записей с одним ref; строки без товара пропусти.',
 ].join('\n');
+// «Распознать нейросетью» — вся заявка: названия — к виду каталога, чтобы их нашло сопоставление без модели
+const WHOLE = 'Название приводи к обычному виду каталога: тип изделия в единственном числе, стандарт, размер через ×, класс, покрытие; '
+  + 'разговорные слова — к обычному названию (шуруп по дереву — саморез по дереву), но новых цифр не добавляй.';
 
 class ModelLines {
   constructor({ verify = digitsInSource, maxLines = 60 } = {}) {
@@ -123,8 +129,13 @@ class ModelLines {
     this.maxLines = maxLines;
   }
 
+  // Модель не звали (механический разбор): остаток с цифрами — «не разобрано», без сбоя.
+  none(rest) {
+    return { lines: [], raw: rest.filter((r) => hasDigits(r.source)), skipped: rest.filter((r) => !hasDigits(r.source)), failures: [], calls: 0 };
+  }
+
   // rest: [{ ref, source }] → { lines, raw, skipped, failures, calls }
-  async of(rest, { llm, signal } = {}) {
+  async of(rest, { llm, signal, whole = false } = {}) {
     if (!rest.length) return { lines: [], raw: [], skipped: [], failures: [], calls: 0 };
     const unparsed = (failure, calls = 0) => ({
       lines: [],
@@ -139,7 +150,7 @@ class ModelLines {
     const prompt = rest.map((r) => `[${r.ref}] ${r.source.replace(/\t/g, ' | ')}`).join('\n');
     let answer;
     try {
-      answer = await llm.complete([{ role: 'system', content: SYSTEM }, { role: 'user', content: prompt }], { signal });
+      answer = await llm.complete([{ role: 'system', content: whole ? `${SYSTEM}\n${WHOLE}` : SYSTEM }, { role: 'user', content: prompt }], { signal });
     } catch (err) {
       return unparsed({ code: err.code || 'model_failed', detail: String(err.message || err) });
     }
@@ -178,7 +189,11 @@ class ModelLines {
   }
 }
 
-// Строки целиком: правила, затем модель для остатка; порядок — как в заявке.
+const rawLine = (r) => ({ ref: r.ref, source: r.source, name: cleanName(r.source.replace(BULLET, '').replace(/\t/g, ' ')), qty: null, unit: null, origin: 'raw', verify: null });
+
+// Строки целиком: правила, затем модель для остатка — если её позвали; порядок — как в заявке.
+// ctx.whole — модель читает всю заявку (кроме того, что правила отбросили как приветствие,
+// подпись и контакты); на что модель не ответила — остаётся за правилами.
 class Lines {
   constructor(rules, model) {
     this.rules = rules;
@@ -187,17 +202,30 @@ class Lines {
 
   async of(textLines, ctx = {}) {
     const ruled = this.rules.of(textLines);
-    const modeled = await this.model.of(ruled.rest, ctx);
-    const raw = modeled.raw.map((r) => ({ ref: r.ref, source: r.source, name: cleanName(r.source.replace(BULLET, '').replace(/\t/g, ' ')), qty: null, unit: null, origin: 'raw', verify: null }));
-    const lines = [...ruled.lines, ...modeled.lines, ...raw]
+    if (ctx.whole && ctx.llm) return this.whole(textLines, ruled, ctx);
+    const modeled = ctx.llm ? await this.model.of(ruled.rest, ctx) : this.model.none(ruled.rest);
+    return this.joined(ruled.lines, modeled, ruled.skipped);
+  }
+
+  async whole(textLines, ruled, ctx) {
+    const refs = [...new Set([...ruled.lines, ...ruled.rest].map((l) => l.ref))].sort((a, b) => a - b);
+    const modeled = await this.model.of(refs.map((ref) => ({ ref, source: textLines[ref] })), ctx);
+    const answered = new Set(modeled.lines.map((l) => l.ref));
+    const rest = ruled.rest.filter((r) => !answered.has(r.ref) && hasDigits(r.source));
+    return this.joined(ruled.lines.filter((l) => !answered.has(l.ref)), { ...modeled, raw: rest, skipped: [] }, ruled.skipped);
+  }
+
+  joined(ruleLines, modeled, skipped) {
+    const raw = modeled.raw.map(rawLine);
+    const lines = [...ruleLines, ...modeled.lines, ...raw]
       .sort((a, b) => a.ref - b.ref)
       .map((l, i) => ({ position: i + 1, ...l }));
     return {
       lines,
-      skipped: [...ruled.skipped, ...modeled.skipped].length,
+      skipped: [...skipped, ...modeled.skipped].length,
       failures: modeled.failures,
       counts: {
-        rule: ruled.lines.length,
+        rule: ruleLines.length,
         model: modeled.lines.length,
         raw: raw.length,
         verify: modeled.lines.filter((l) => l.verify).length,

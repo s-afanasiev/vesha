@@ -39,7 +39,8 @@ router.use(entry((req) => backboneDesk.signedIn(req.user))); // без вход�
 router.get('/me', async (req, res, next) => {
   try {
     const { admin, shops } = await backboneDesk.shopsFor(req.user);
-    res.json({ email: req.user.email, admin, shops: shops.map((s) => ({ slug: s.slug, name: s.name })) });
+    // demo — посев из кода: шапка не считает его, решая, одна ли установка на магазин
+    res.json({ email: req.user.email, admin, shops: shops.map((s) => ({ slug: s.slug, name: s.name, demo: backboneDesk.isSeed(s.slug) })) });
   } catch (err) {
     fail(err, res, next);
   }

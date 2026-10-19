@@ -8,8 +8,10 @@ const table = require('./table');
 const kanban = require('./kanban');
 const tree = require('./tree');
 const stages = require('./stages');
+const switchKind = require('./switch');
+const extract = require('./extract');
 
-const KINDS = { table, kanban, tree, stages };
+const KINDS = { table, kanban, tree, stages, switch: switchKind, extract };
 
 function Components(declarations) {
   const router = express.Router();

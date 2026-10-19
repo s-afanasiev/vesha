@@ -1,0 +1,96 @@
+/* v-switch@1 — складской рендерер контракта switch@1 (docs/ui-components.md §3).
+   Токены --vsw-* со светлыми дефолтами; страница переопределяет их под свою тему. */
+
+v-switch {
+  display: block;
+  --vsw-card: #fff;
+  --vsw-inset: #f4f5f7;
+  --vsw-line: #d9dde3;
+  --vsw-text: #1c2430;
+  --vsw-faint: #6b7280;
+  --vsw-accent: #3d6ec9;
+  --vsw-on: #1f5fbf;
+  --vsw-on-text: #fff;
+  --vsw-warn: #9a6408;
+  --vsw-warn-bg: #fdf6e7;
+  --vsw-bad: #b3452f;
+}
+
+.vsw {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--vsw-line);
+  border-radius: 12px;
+  background: var(--vsw-card);
+  color: var(--vsw-text);
+  font-size: 14px;
+}
+
+.vsw * { box-sizing: border-box; }
+
+.vsw-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.vsw-title { font-size: 15px; }
+.vsw-hint { color: var(--vsw-faint); font-size: 13px; }
+
+.vsw-lines { margin: 0; padding-left: 18px; display: grid; gap: 4px; line-height: 1.45; }
+
+/* сегменты: на узком экране переносятся, без горизонтальной прокрутки */
+.vsw-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--vsw-inset);
+}
+
+.vsw-opt {
+  flex: 1 1 140px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vsw-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.vsw-opt:hover:not([aria-checked="true"]):not(:disabled) { border-color: var(--vsw-accent); }
+.vsw-opt:focus-visible { outline: 2px solid var(--vsw-accent); outline-offset: 1px; }
+.vsw-opt[aria-checked="true"] { background: var(--vsw-on); color: var(--vsw-on-text); cursor: default; }
+.vsw-opt:disabled { opacity: .6; cursor: progress; }
+.vsw-name { font-weight: 600; }
+.vsw-note { font-size: 12.5px; opacity: .8; }
+
+.vsw-ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--vsw-warn-bg);
+  color: var(--vsw-warn);
+}
+.vsw-ask p { margin: 0; flex: 1 1 260px; }
+
+.vsw-cta { display: flex; }
+
+.vsw-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--vsw-line);
+  border-radius: 8px;
+  background: var(--vsw-card);
+  color: var(--vsw-text);
+  font: inherit;
+  cursor: pointer;
+}
+.vsw-btn--cta { background: var(--vsw-on); border-color: var(--vsw-on); color: var(--vsw-on-text); font-weight: 600; }
+.vsw-btn:disabled { opacity: .6; cursor: progress; }
+
+.vsw-msg { min-height: 0; font-size: 13px; color: var(--vsw-faint); }
+.vsw-msg:empty { display: none; }
+.vsw-msg--err { color: var(--vsw-bad); }

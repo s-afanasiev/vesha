@@ -42,19 +42,42 @@ class FinalInvoice {
   }
 }
 
+const sameQty = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-6;
+
+// Одна и та же строка счёта: та же позиция и то же количество в счёт (у черновика —
+// invoice_qty, у разбора нейросетью — invoiceQty).
+const invoiceQtyOf = (l) => (l.invoice_qty ?? l.invoiceQty ?? null);
+function sameLine(a, b) {
+  const qa = invoiceQtyOf(a);
+  const qb = invoiceQtyOf(b);
+  return (a.sku || null) === (b.sku || null) && (qa == null ? qb == null : qb != null && sameQty(qa, qb));
+}
+
+// Пары «строка черновика ↔ строка счёта» для «глаза» карточки заявки: сначала та же
+// позиция и то же количество (совпало), потом та же позиция с другим количеством
+// (расходится количеством); остальное — «в счёте нет» и «только в счёте».
+// → { pairs: [по строкам черновика { tone: same | qty | none, final? }], extra: [строки счёта без пары] }
+function pairLines(draftLines, finalLines) {
+  const pairs = draftLines.map(() => ({ tone: 'none' }));
+  const free = draftLines.map((l, i) => i).filter((i) => draftLines[i].sku && draftLines[i].invoice_qty != null);
+  let rest = [...finalLines];
+  for (const pass of [(d, f) => d.sku === f.sku && sameQty(d.invoice_qty, f.qty), (d, f) => d.sku === f.sku]) {
+    rest = rest.filter((f) => {
+      const at = free.findIndex((i) => pass(draftLines[i], f));
+      if (at < 0) return true;
+      const [i] = free.splice(at, 1);
+      pairs[i] = { tone: sameQty(draftLines[i].invoice_qty, f.qty) ? 'same' : 'qty', final: f };
+      return false;
+    });
+  }
+  return { pairs, extra: rest };
+}
+
 // черновик (строки backbone_order_lines) × строки счёта → сверка
 function compareDraft(draftLines, finalLines) {
-  const pool = draftLines.filter((l) => l.sku && l.invoice_qty != null).map((l) => ({ sku: l.sku, qty: Number(l.invoice_qty) }));
-  let matched = 0;
-  for (const f of finalLines) {
-    const i = pool.findIndex((d) => d.sku === f.sku && Math.abs(d.qty - f.qty) < 1e-6);
-    if (i >= 0) {
-      matched += 1;
-      pool.splice(i, 1);
-    }
-  }
+  const matched = pairLines(draftLines, finalLines).pairs.filter((p) => p.tone === 'same').length;
   const base = draftLines.length + finalLines.length - matched;
   return { draft: draftLines.length, final: finalLines.length, matched, right: matched, base, accuracy: base ? matched / base : null };
 }
 
-module.exports = { FinalInvoice, compareDraft };
+module.exports = { FinalInvoice, compareDraft, pairLines, sameLine };

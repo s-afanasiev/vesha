@@ -333,6 +333,13 @@ class MemoryRepository {
     await this.journal.appendIn(null, events);
   }
 
+  async setQuestion(lineId, question, events) {
+    const line = this.draftLines.find((l) => l.id === lineId);
+    if (!line) throw conflict('Строка черновика изменилась — обновите черновик');
+    line.question = question;
+    await this.journal.appendIn(null, events);
+  }
+
   async reviewLines(_orderIds, patches, synonyms, events) {
     const targets = patches.map((p) => this.draftLines.find((l) => l.id === p.id));
     if (targets.some((l) => !l)) throw conflict('Строка черновика изменилась — обновите черновик');

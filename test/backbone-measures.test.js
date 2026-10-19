@@ -58,7 +58,9 @@ function makeDesk(start) {
     shops: { [SHOP]: { name: 'Тест', niche: 'hardware', hours: HOURS } },
     tool, llm: new RecordedLlm(RECORDED),
     measuresOf: (shop, spec) => new Measures(new WorkingHours({ tz: shop.tz, ...spec.hours })),
-    baseline: new Baseline({ shadowDays: 14, accuracy: 0.8, minLines: 20 }),
+    // порог 0,6, а не 0,8 магазина: черновик здесь механический (без модели), и у демо-заявки
+    // две строки остаются «не разобрано» — мера проверяется на числах этой заявки
+    baseline: new Baseline({ shadowDays: 14, accuracy: 0.6, minLines: 20 }),
     clock: () => clock.now,
   });
   return { desk, journal, clock };
@@ -187,29 +189,29 @@ test('a final invoice pasted from 1C is read by article or by name; totals and h
   assert.deepEqual(cmp, { draft: 4, final: 3, matched: 2, right: 2, base: 5, accuracy: 0.4 });
 });
 
-// ---------- тень → решение с мерой → помощь ----------
+// ---------- сравнение (тень) → мера → помощь ----------
 
-test('shadow mode hides the draft, the 1C invoice measures accuracy, help is switched on only by the measure', async () => {
+test('comparison (shadow) hides the draft, the 1C invoice measures accuracy, help by the measure goes without a question', async () => {
   const { desk, journal, clock } = makeDesk(msk('2026-10-12T10:00'));
   const first = await desk.createOrder(SHOP, { client: 'ООО «Стройка»', text: REQUEST_20 }, 'manager@test');
   assert.equal((await journal.forSubject('order', first.id))[0].data.org, true);
   assert.equal((await desk.shop(SHOP)).mode, 'shadow');
 
-  await assert.rejects(desk.exportInvoice(SHOP, first.id, 'm'), /Тень/);
-  await assert.rejects(desk.invoiceSent(SHOP, first.id, 'm'), /Тень/);
+  await assert.rejects(desk.exportInvoice(SHOP, first.id, 'm'), /Сравнение/);
+  await assert.rejects(desk.invoiceSent(SHOP, first.id, 'm'), /Сравнение/);
 
   // менеджер сделал счёт в 1С сам: анкеры — 50 (упаковка), гвозди — оцинкованные, шуруп нашёл, ФУМ убрал
   clock.now = msk('2026-10-12T10:40');
   const final = DRAFT_20.filter((x) => x && !['AK-8x75', 'NL-3x70', 'FUM-19x15'].includes(x[0]))
     .concat([['AK-8x75', 50], ['NL-3x70-ZN', 5], ['SW-3.5x35-YZ', 400]]);
   const attached = await desk.attachInvoice(SHOP, first.id, invoiceFrom1C(final), { actor: 'manager@test' });
-  assert.deepEqual([attached.draft, attached.final, attached.matched, attached.base], [20, 19, 16, 23]); // черновик построен тут же
+  assert.deepEqual([attached.draft, attached.final, attached.matched, attached.base], [20, 19, 14, 25]); // механический черновик построен тут же
   assert.equal((await desk.managerLines(SHOP)).length, 20);                                           // после счёта — видно
   await assert.rejects(desk.attachInvoice(SHOP, first.id, invoiceFrom1C(final), { actor: 'm' }), /уже приложен/);
 
-  await assert.rejects(desk.switchMode(SHOP, 'help', 'owner'), /тень идёт 0 дн\. из 14/);
+  await assert.rejects(desk.switchMode(SHOP, 'help', 'owner'), /сравнение идёт 0 дн\. из 14/);
   clock.now = msk('2026-10-27T10:00');
-  await assert.rejects(desk.switchMode(SHOP, 'help', 'owner'), /точность черновика 0,7 — ниже порога 0,8/);
+  await assert.rejects(desk.switchMode(SHOP, 'help', 'owner'), /точность черновика 0,56 — ниже порога 0,6/);
 
   // вторая заявка в тени: черновик ещё не показан менеджеру, счёт совпал почти целиком
   const second = await desk.createOrder(SHOP, { client: 'ИП Петров', text: REQUEST_20 }, 'manager@test');
@@ -218,8 +220,9 @@ test('shadow mode hides the draft, the 1C invoice measures accuracy, help is swi
   await desk.attachInvoice(SHOP, second.id, invoiceFrom1C(DRAFT_20.filter(Boolean)), { actor: 'manager@test' });
 
   const switched = await desk.switchMode(SHOP, 'help', 'owner');
-  assert.match(switched.reason, /точность 0,81 на 43 строках за 15 дн\. тени/);
-  assert.deepEqual([switched.snapshot.days, switched.snapshot.orders, switched.snapshot.comparedLines], [15, 2, 43]);
+  assert.match(switched.reason, /точность 0,66 на 47 строках за 15 дн\. сравнения/);
+  assert.equal(switched.unmeasured, undefined); // мера набрана — без пометки
+  assert.deepEqual([switched.snapshot.days, switched.snapshot.orders, switched.snapshot.comparedLines], [15, 2, 47]);
   const changed = (await journal.history((await desk.shop(SHOP)).id)).find((e) => e.type === 'mode_changed');
   assert.deepEqual([changed.stream, changed.data.from, changed.data.to, changed.cause], ['shop', 'shadow', 'help', 'decision']);
 
@@ -232,7 +235,7 @@ test('shadow mode hides the draft, the 1C invoice measures accuracy, help is swi
   await desk.review(SHOP, [anchor.id], { verdict: 'edited', qty: '50' }, 'manager@test');
   clock.now = msk('2026-10-28T10:06');
   const exported = await desk.exportInvoice(SHOP, third.id, 'manager@test');
-  assert.deepEqual([exported.included, exported.left], [15, 5]);
+  assert.deepEqual([exported.included, exported.left], [14, 6]); // механика: две строки «не разобрано»
   const file = await desk.invoiceFile(SHOP, third.id);
   assert.equal(file.filename, `schet-zayavka-${third.number}.xlsx`);
   assert.ok((await new SheetRows().lines(file.buffer)).includes('AK-8x75\tАнкер клиновой 8×75\t50\tшт\t12\t600'));
@@ -244,13 +247,13 @@ test('shadow mode hides the draft, the 1C invoice measures accuracy, help is swi
 
   const { report } = await desk.measures(SHOP);
   assert.equal(report.before.orders, 2);
-  assert.equal(report.before.shadowAccuracy.base, 43);
+  assert.equal(report.before.shadowAccuracy.base, 47);
   assert.equal(report.after.orders, 1);
   assert.deepEqual([report.after.untouched.value, report.after.invoiceMinutes, report.after.managerMinutes], [0.95, 8, 5]);
 
-  // вернуть тень можно всегда — это новая база
+  // вернуться в сравнение можно всегда — это новая база
   await desk.switchMode(SHOP, 'shadow', 'owner');
-  await assert.rejects(desk.switchMode(SHOP, 'shadow', 'owner'), /Тень уже идёт/);
+  await assert.rejects(desk.switchMode(SHOP, 'shadow', 'owner'), /Сравнение уже идёт/);
 });
 
 test('an order from an organization is recognised by its legal form', () => {

@@ -50,13 +50,7 @@ class Match {
       const confidence = this.synonymConfidence;
       return { sku: known, confidence, state: this.stateOf(confidence), candidates: [{ sku: known, score: confidence }], via: 'synonym' };
     }
-    const attrs = this.index.parse(line.name);
-    const scored = [];
-    for (const entry of this.index.pool(attrs.kind)) {
-      const score = this.score(attrs, entry.attrs);
-      if (score > 0) scored.push({ sku: entry.item.sku, score });
-    }
-    scored.sort((a, b) => b.score - a.score);
+    const { attrs, scored } = this.scored(line.name);
     if (!scored.length) return { sku: null, confidence: 0, state: 'missing', candidates: [], via: 'attributes' };
 
     // второй кандидат ближе окна — уверенность падает вплоть до доли ambiguity
@@ -73,6 +67,19 @@ class Match {
       candidates: scored.slice(0, state === 'accepted' ? 1 : this.maxCandidates).map((c) => ({ sku: c.sku, score: round(c.score) })),
       via: 'attributes',
     };
+  }
+
+  // Все позиции, которые наименованию не противоречат, лучшие сверху: из них — кандидаты
+  // строки и «ещё N вариантов» карточки заявки. → { attrs, scored: [{ sku, score }] }
+  scored(name) {
+    const attrs = this.index.parse(name);
+    const scored = [];
+    for (const entry of this.index.pool(attrs.kind)) {
+      const score = this.score(attrs, entry.attrs);
+      if (score > 0) scored.push({ sku: entry.item.sku, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return { attrs, scored };
   }
 
   // 0 — позиция противоречит строке; иначе сумма весов совпадений.

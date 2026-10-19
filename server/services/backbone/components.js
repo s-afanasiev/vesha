@@ -17,6 +17,13 @@
 // сотрудников с «Убрать сотрудника» (desk.addStaff, desk.removeStaff).
 // Шаг 5 — экран ассистента: разговоры магазина и сообщения; черновик менеджеру по
 // кнопке (assistant.proposeReply), отправить, править, отклонить; свой ответ.
+// Разбор заявки (18.10.2026): тумблер «Выключен / Сравнение / Помощь» (switch@1,
+// desk.switchMode), «До и после» простыми словами (OwnerBrief) и карточка заявки
+// «две колонки» (extract@1, desk.orderCard) — текст покупателя слева, как понял
+// помощник справа; в «Сравнении» черновик открывается «глазом» только после счёта менеджера.
+// 19.10.2026: три колонки — текст покупателя, механический разбор (бесплатно, сразу при
+// поступлении) и нейросеть по кнопке с советом «стоит распознать»; «Взять как нейросеть»,
+// у строки «выбрать» — 3 лучших варианта с отличием, «ещё N» и «Спросить клиента».
 // Монтируется в server/routes/backbone.js (за границей ShopAccess: кабинет — админ,
 // магазин — админ или его сотрудник).
 
@@ -24,10 +31,14 @@ const config = require('../../config');
 const { Components } = require('../../components');
 const { Kanban } = require('../../components/kanban');
 const { Table } = require('../../components/table');
+const { Switch } = require('../../components/switch');
+const { Extract } = require('../../components/extract');
 const { backboneDesk, assistant, board, catalogFile, demoRequest, TEMPLATES } = require('./index');
 const { TYPE_NAMES } = require('./board/Board');
 const { NICHE_NAMES } = require('./board/templates');
 const { hoursText } = require('./shops/ShopForm');
+const { OwnerBrief, minutes: minutesText, seconds: secondsText } = require('./measures/OwnerBrief');
+const { sameLine } = require('./invoice/FinalInvoice');
 
 const actorOf = (user) => (user && (user.email || user.id)) || 'admin';
 // Кабинет магазина — там, где его открыла точка входа (Vesha или сборка магазина).
@@ -71,8 +82,10 @@ function describe(e, titles) {
     case 'staff_removed': return `сотрудник ${d.email} убран: кабинет магазина ему закрыт`;
     case 'catalog_loaded': return `каталог из «${d.file}» загружен: ${d.loaded} позиций${d.rejected ? `, не загружено строк ${d.rejected}` : ''} — версия ${d.version}`;
     case 'catalog_refused': return `каталог не подменён («${d.file}»): ${d.reason}`;
-    case 'mode_changed': return `режим магазина: ${MODES[d.from]} → ${MODES[d.to]} — ${d.reason}`;
-    case 'reviewed': return `черновик №${d.number}, строка ${d.line}: ${VERDICTS[d.verdict] || d.verdict}${d.verdict === 'replaced' ? ` ${d.from || '—'} → ${d.to}` : ''}${d.verdict === 'edited' ? ` ${d.from ?? '—'} → ${d.to}` : ''}${d.synonym ? ` · синоним «${d.synonym}»` : ''}`;
+    case 'mode_changed': return `разбор заявок: ${MODES[d.from]} → ${MODES[d.to]} — ${d.reason}${d.unmeasured ? ' (включено без полной меры)' : ''}`;
+    case 'model_parsed': return `заявка №${d.number} распознана нейросетью: ${d.lines.length} строк — ${d.accepted} принято, ${d.ask} выбрать, ${d.missing} нет в каталоге${d.invoice ? `; с вашим счётом совпало ${d.invoice.matched} из ${d.invoice.base}` : ''}`;
+    case 'client_asked': return `черновик №${d.number}, строка ${d.line}: вопрос клиенту — ${d.question}`;
+    case 'reviewed': return `черновик №${d.number}, строка ${d.line}: ${VERDICTS[d.verdict] || d.verdict}${d.via === 'model' ? ' как у нейросети' : ''}${d.verdict === 'replaced' ? ` ${d.from || '—'} → ${d.to}` : ''}${d.verdict === 'edited' ? ` ${d.from ?? '—'} → ${d.to}` : ''}${d.synonym ? ` · синоним «${d.synonym}»` : ''}`;
     default: return e.type;
   }
 }
@@ -83,7 +96,21 @@ const KINDS = {
   client: { received: 'получена', waiting: 'ждём ответа', done: 'готово', refused: 'закрыта' },
   shop: { received: 'новая заявка', again: 'тот же список ещё раз' },
 };
-const MODES = { shadow: 'тень', help: 'помощь' };
+const MODES = { off: 'выключен', shadow: 'сравнение', help: 'помощь' };
+// Положения тумблера разбора: как их видит менеджер.
+const MODE_OPTIONS = [
+  { value: 'off', name: 'Выключен', note: 'только доска' },
+  { value: 'shadow', name: 'Сравнение', note: 'помощник разбирает тихо, черновик — после вашего счёта' },
+  { value: 'help', name: 'Помощь', note: 'черновик сразу' },
+];
+const SWITCHED = {
+  off: 'Разбор выключен: заявки только на доске',
+  shadow: 'Сравнение: помощник разбирает тихо, черновик откроется после вашего счёта',
+  help: 'Помощь: черновик к заявке — сразу',
+};
+const CHANNELS = { manual: 'вручную', site: 'с сайта', chat: 'из чата ассистента' };
+const TONES = { accepted: 'ok', ask: 'ask', missing: 'miss' };
+const brief = new OwnerBrief();
 const STREAMS = { order: 'заявка', board: 'доска', shop: 'магазин', chat: 'разговор' };
 const ASKS = { stock: 'наличие и цена', status: 'статус заявки', hours: 'часы работы' };
 const AUTO_NAMES = { list_offered: 'список', list_sent: 'заявка', assistant_deferred: 'менеджеру' };
@@ -103,6 +130,7 @@ function delta(before, after, kind) {
 const STATES = { accepted: '✓ принято', ask: '? выбрать', missing: '✗ нет в каталоге' };
 const ORIGINS = { rule: 'правило', model: 'модель', raw: 'не разобрано' };
 const money = (n) => (n == null ? '' : Number(n).toFixed(2));
+const rub = (n) => `${Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`; // карточке — по-русски
 const amount = (n, unit) => (n == null ? null : `${String(n).replace('.', ',')} ${unit || ''}`.trim());
 const itemName = (catalog, sku) => {
   const item = sku && catalog.bySku(sku);
@@ -111,18 +139,245 @@ const itemName = (catalog, sku) => {
 const at = (t) => (t ? new Date(t).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : null);
 const LOAD_STATUS = { pending: 'ждёт «Загрузить каталог»', loaded: 'загружен', refused: 'отказ' };
 
-// Последний исход разбора заявки — словами; в тени черновик менеджеру не показываем.
+// Последний исход разбора заявки — словами; черновик виден только в «Помощи» и после счёта менеджера.
 function statusOf(d, mode) {
   const e = d.outcome;
   if (d.sent) {
     return d.sent.data.mode === 'shadow'
-      ? `счёт из 1С приложен · точность ${ratio(d.sent.data.accuracy)}`
+      ? `ваш счёт приложен · совпало ${d.sent.data.matched} из ${d.sent.data.base}`
       : `счёт отправлен · без правки ${d.sent.data.right} из ${d.sent.data.base}`;
   }
   if (e && e.type === 'parse_failed') return `отказ: ${e.data.reason}${d.lines ? ' (черновик прежний)' : ''}`;
-  if (d.lines && mode === 'shadow') return 'тень: черновик скрыт до счёта из 1С';
+  if (mode === 'off') return 'разбор выключен';
+  if (d.lines && mode === 'shadow') return 'сравнение: черновик откроется после вашего счёта';
   if (d.lines) return d.reviewed ? `черновик, правок ${d.reviewed}` : 'черновик';
   return 'не разобрана';
+}
+
+// Пояснение у тумблера на экране заявок (слова пользователя 19.10.2026): эксперимент или сразу помощь.
+const EXPERIMENT = 'Предлагаем эксперимент: в «Сравнении» вы подбираете товар вручную, как обычно, а потом смотрите разницу и пользу от автоматики. Либо можете сразу включить «Помощь».';
+const EXPLAIN = {
+  off: EXPERIMENT,
+  shadow: EXPERIMENT,
+  help: 'Помощь: механика готовит черновик сразу при поступлении заявки и бесплатно; если заявка сложная, в её карточке — «Распознать нейросетью».',
+};
+
+// Одна строка под тумблером: с какого дня положение и сколько набрано для «Помощи».
+function modeHint({ shop, days, shadowDays, current, minLines }) {
+  if (shop.mode === 'off') return `с ${day(shop.mode_since)}: заявки только на доске, помощник их не читает`;
+  if (shop.mode === 'help') return `с ${day(shop.mode_since)}: черновик к заявке — сразу, ваши правки рождают синонимы товаров`;
+  const base = current.shadowAccuracy.base;
+  return `с ${day(shop.mode_since)}, день ${days}${shadowDays ? ` из ${shadowDays}` : ''}; сравнено строк ${base}${base < minLines ? ` из нужных ${minLines}` : ' — для меры хватает'}`;
+}
+
+// Тумблер разбора: на экране заявок — коротко, на замерах — с «До и после» простыми словами.
+function modeSwitch(slug, { withBrief }) {
+  return Switch({
+    title: withBrief ? 'До и после — простыми словами' : 'Разбор заявок помощником',
+    state: async () => {
+      const m = await backboneDesk.measures(slug);
+      const said = withBrief ? brief.of(m) : { lines: [EXPLAIN[m.shop.mode]], cta: null };
+      return { value: m.shop.mode, options: MODE_OPTIONS, hint: modeHint(m), lines: said.lines, ...(said.cta ? { cta: said.cta } : {}) };
+    },
+    set: async ({ value, confirm, user }) => {
+      try {
+        const r = await backboneDesk.switchMode(slug, value, actorOf(user), { confirm });
+        return { message: `${SWITCHED[r.to]}${r.unmeasured ? ' — без полной меры, это отмечено в журнале' : ''}` };
+      } catch (err) {
+        if (err.warn) return { confirm: err.message }; // «Помощь» без меры — вопрос, а не запрет
+        throw err;
+      }
+    },
+  });
+}
+
+// Строка механического черновика → пункт колонки карточки: позиция, «просит → в счёт»,
+// цвет, вопрос клиенту, варианты строки «выбрать» (3 лучших с отличием и «ещё N»),
+// сверка со счётом менеджера.
+function lineItem(l, catalog, { pair = null, alternatives = null } = {}) {
+  const item = l.sku ? catalog.bySku(l.sku) : null;
+  const sum = l.invoice_qty != null && l.price != null ? Math.round(l.invoice_qty * l.price * 100) / 100 : null;
+  const want = amount(l.qty, l.unit);
+  const invoice = amount(l.invoice_qty, item && item.unit);
+  const option = (c) => ({ value: c.sku, text: `${c.sku} · ${c.name}`, note: c.differs || null });
+  return {
+    id: l.id,
+    text: item ? item.name : `нет в каталоге: ${l.name}`,
+    sub: [l.sku, want && `просит ${want}`, invoice && `в счёт ${invoice}`, sum != null && rub(sum)].filter(Boolean).join(' · ') || null,
+    tone: TONES[l.state],
+    tag: l.origin === 'model' ? 'понял по модели' : l.origin === 'raw' ? 'не разобрано' : null,
+    note: [l.verify && `проверить: ${l.verify}`, l.question && `вопрос клиенту: ${l.question}`, l.review && `менеджер: ${VERDICTS[l.review]}`]
+      .filter(Boolean).join(' · ') || null,
+    anchors: l.anchors,
+    choices: alternatives && alternatives.top.length ? alternatives.top.map(option) : null,
+    more: alternatives && alternatives.more.length ? alternatives.more.map(option) : null,
+    pair: pair ? pairOf(pair, catalog) : null,
+  };
+}
+
+// Строка разбора нейросетью → пункт третьей колонки; сверка — с механикой на том же месте
+// текста («Помощь») или со счётом менеджера («Сравнение» после счёта).
+function modelItem(m, catalog, { base = null, invoicePair = null, takeable = false } = {}) {
+  const item = m.sku ? catalog.bySku(m.sku) : null;
+  const sum = m.invoiceQty != null && m.price != null ? Math.round(m.invoiceQty * m.price * 100) / 100 : null;
+  const want = amount(m.qty, m.unit);
+  const invoice = amount(m.invoiceQty, item && item.unit);
+  let pair = invoicePair ? pairOf(invoicePair, catalog) : null;
+  if (!invoicePair && base !== undefined) {
+    if (!base) pair = { tone: 'diff', text: 'у механики этой строки нет' };
+    else if (sameLine(base, m)) pair = { tone: 'same', text: 'так же, как механика' };
+    else {
+      const was = base.sku ? catalog.bySku(base.sku) : null;
+      pair = { tone: 'diff', text: `механика: ${was ? was.name : base.origin === 'raw' ? 'не разобрала' : 'нет в каталоге'}${base.invoice_qty != null ? `, ${amount(base.invoice_qty, was && was.unit)}` : ''}` };
+    }
+  }
+  return {
+    id: `m:${m.position}`,
+    text: item ? item.name : `нет в каталоге: ${m.name}`,
+    sub: [m.sku, want && `просит ${want}`, invoice && `в счёт ${invoice}`, sum != null && rub(sum)].filter(Boolean).join(' · ') || null,
+    tone: TONES[m.state],
+    tag: m.origin === 'rule' ? 'нейросеть пропустила — как механика' : m.origin === 'raw' ? 'не разобрано' : null,
+    note: [m.verify && `проверить: ${m.verify}`, m.question && `вопрос клиенту: ${m.question}`].filter(Boolean).join(' · ') || null,
+    anchors: m.anchors,
+    pair,
+    actions: takeable ? ['take'] : [],
+  };
+}
+
+function pairOf(pair, catalog) {
+  if (pair.tone === 'same') return { tone: 'same', text: 'совпало с вашим счётом' };
+  if (pair.tone === 'qty') {
+    const item = catalog.bySku(pair.final.sku);
+    return { tone: 'diff', text: `у вас другое количество: ${amount(pair.final.qty, item && item.unit)}` };
+  }
+  return { tone: 'diff', text: 'в вашем счёте этой строки нет' };
+}
+
+// строки только в счёте менеджера — под пунктами колонки
+function onlyInInvoice(extra, catalog) {
+  return extra.map((f) => {
+    const item = catalog.bySku(f.sku);
+    return { tone: 'diff', text: `только в вашем счёте: ${item ? item.name : f.sku} — ${amount(f.qty, item && item.unit)}` };
+  });
+}
+
+// Вид карточки заявки по положению тумблера: источник и два прочтения — механика
+// (бесплатно, сразу) и нейросеть (по кнопке); что видно, почему закрыто, какие действия.
+async function orderView(slug, orderId) {
+  const card = await backboneDesk.orderCard(slug, orderId);
+  const { shop, order, sent } = card;
+  const catalog = await backboneDesk.catalogOf(slug);
+  const count = (lines, state) => lines.filter((l) => l.state === state).length;
+  const helper = card.helperMs != null ? `черновик ${secondsText(card.helperMs)}` : null;
+  const view = {
+    title: `Заявка №${order.number} · ${order.client}`,
+    facts: [
+      { label: 'Контакт', value: order.contact || null },
+      { label: 'Пришла', value: `${at(order.created_at)}, ${CHANNELS[order.channel] || order.channel}` },
+      { label: 'Разбор', value: MODE_OPTIONS.find((o) => o.value === shop.mode).name },
+    ],
+    source: {
+      title: 'Как прислал покупатель',
+      lines: card.text,
+      note: 'текст целиком; щёлкните строку разбора — здесь подсветится, откуда она',
+    },
+    results: [
+      { id: 'rules', title: 'Механический разбор — бесплатно, без нейросети', state: 'open', items: [], actions: [] },
+      { id: 'model', title: 'Нейросеть — по кнопке', state: 'closed', items: [], actions: [] },
+    ],
+  };
+  const [rules, model] = view.results;
+  const reading = card.reading;
+  const help = shop.mode === 'help' && !sent;
+
+  // ---- механика ----
+  if (sent && sent.mode === 'shadow') {
+    // «Сравнение» после счёта менеджера: черновик рядом с ним — «глазом», по желанию
+    const pairs = card.pairs ? card.pairs.pairs : [];
+    rules.state = 'peek';
+    rules.reason = `Ваш счёт приложен: механика совпала в ${sent.matched} из ${sent.base} строк, точность ${pct(sent.accuracy) || '—'}.`;
+    rules.peek = 'Показать черновик механики рядом с вашим счётом';
+    rules.facts = [
+      { label: 'Вы', value: card.managerMinutes != null ? `${minutesText(card.managerMinutes)} рабочего времени от заявки до счёта` : null },
+      { label: 'Помощник', value: helper },
+      { label: 'Совпало строк', value: `${sent.matched} из ${sent.base}` },
+    ];
+    rules.items = card.lines.map((l, i) => lineItem(l, catalog, { pair: pairs[i] }));
+    rules.extra = card.pairs ? onlyInInvoice(card.pairs.extra, catalog) : [];
+  } else if (!sent && shop.mode === 'off') {
+    rules.state = 'closed';
+    rules.reason = 'Разбор выключен — заявка только на доске. Включите «Сравнение» или «Помощь» на экране «Черновики счетов».';
+  } else if (!sent && shop.mode === 'shadow') {
+    rules.state = 'closed';
+    rules.reason = `${card.drafted ? 'Помощник уже разобрал заявку тихо.' : 'Помощник разберёт заявку тихо.'} Черновик откроется, когда вы приложите свой счёт из 1С, — иначе замер «до» испортится. Сделайте счёт в 1С как обычно и нажмите «Мой счёт готов».`;
+    rules.actions = card.drafted ? ['attach'] : ['parse', 'attach'];
+  } else if (!card.drafted) {
+    rules.state = 'closed';
+    rules.reason = card.failure ? `Механика не разобрала заявку: ${card.failure}` : 'Заявка ещё не разобрана.';
+    rules.actions = help ? ['parse'] : [];
+  } else {
+    // «Помощь»: черновик сразу; после «Счёт отправлен» — только чтение и выгрузка
+    rules.items = card.lines.map((l) => lineItem(l, catalog, { alternatives: help ? card.choices.get(l.id) : null }));
+    rules.facts = [
+      { label: 'Принято', value: `${count(card.lines, 'accepted')} из ${card.lines.length}` },
+      { label: 'Выбрать', value: count(card.lines, 'ask') || null },
+      { label: 'Нет в каталоге', value: count(card.lines, 'missing') || null },
+      { label: 'Вопросов клиенту', value: card.lines.filter((l) => l.question).length || null },
+      { label: 'Сумма принятого', value: rub(card.lines.reduce((t, l) => t + (l.state === 'accepted' && l.invoice_qty != null && l.price != null ? l.invoice_qty * l.price : 0), 0)) },
+      { label: 'Помощник', value: helper },
+      { label: 'Счёт', value: sent ? `отправлен: без правки ${sent.right} из ${sent.base}${card.managerMinutes != null ? `, ${minutesText(card.managerMinutes)} от заявки` : ''}` : null },
+    ];
+    rules.actions = sent ? ['export'] : ['accept-green', 'pick', 'ask', 'replace', 'qty', 'export', 'sent'];
+  }
+
+  // ---- нейросеть ----
+  const canRead = help || Boolean(sent && sent.mode === 'shadow'); // в «Сравнении» — только после счёта
+  if (!reading) {
+    model.reason = !sent && shop.mode === 'off' ? 'Разбор выключен.'
+      : !sent && shop.mode === 'shadow' ? 'Нейросеть — после вашего счёта: иначе замер «до» испортится.'
+        : sent && sent.mode === 'shadow' ? 'Сравните: распознайте нейросетью — увидите, насколько она ближе к вашему счёту, чем бесплатная механика. Одна заявка — один запрос к модели, контакты покупателя в модель не уходят.'
+          : canRead ? (card.advice && card.advice.advise ? 'Одна заявка — один запрос к модели; контакты покупателя в модель не уходят.'
+            : 'Механика справилась сама — нейросеть можно не звать. Если что-то выглядит не так — распознайте нейросетью: одна заявка — один запрос к модели.')
+            : 'Счёт уже отправлен.';
+    if (canRead) {
+      model.actions = ['read-model'];
+      if (card.advice && card.advice.advise) model.hint = card.advice.reason;
+      else if (card.drafted === false || (card.failure && !card.lines.length)) model.hint = 'Механика не нашла товарных строк — попробуйте нейросеть.';
+    }
+    return view;
+  }
+  const differs = card.readingPairs.filter((p) => p.base && !sameLine(p.base, p.line)).length;
+  const modelFacts = [
+    { label: 'Принято', value: `${count(reading.lines, 'accepted')} из ${reading.lines.length}` },
+    { label: 'Выбрать', value: count(reading.lines, 'ask') || null },
+    { label: 'Нет в каталоге', value: count(reading.lines, 'missing') || null },
+    { label: 'Нейросеть', value: `${secondsText(reading.ms)}` },
+  ];
+  if (sent && sent.mode === 'shadow') {
+    const inv = reading.invoice || {};
+    model.state = 'peek';
+    model.reason = `Нейросеть против вашего счёта: совпало ${inv.matched ?? '—'} из ${inv.base ?? '—'} строк (механика — ${sent.matched} из ${sent.base}).`;
+    model.peek = 'Показать разбор нейросети рядом с вашим счётом';
+    model.facts = modelFacts;
+    model.items = reading.lines.map((m, i) => modelItem(m, catalog, { invoicePair: card.readingInvoice ? card.readingInvoice.pairs[i] : null }));
+    model.extra = card.readingInvoice ? onlyInInvoice(card.readingInvoice.extra, catalog) : [];
+    return view;
+  }
+  model.state = 'open';
+  model.facts = [...modelFacts, { label: 'Иначе, чем механика', value: differs || 'нет' }];
+  model.items = card.readingPairs.map(({ line, base }) => modelItem(line, catalog, {
+    base, takeable: help && Boolean(line.sku && base && !sameLine(base, line)),
+  }));
+  model.actions = help ? [...(differs ? ['take-all', 'take'] : []), 'read-model'] : [];
+  return view;
+}
+
+const download = (slug, orderId) => `/api/backbone/s/${encodeURIComponent(slug)}/files/invoice/${orderId}.xlsx`;
+
+// Итог «Мой счёт готов»: сколько совпало, и что черновик теперь можно открыть «глазом».
+function attachedText(r, { inCard = false } = {}) {
+  return `№${r.number}: ваш счёт приложен — совпало ${r.matched} из ${r.base} строк, точность ${pct(r.accuracy) || '—'}${r.unknown ? `; не узнано строк счёта: ${r.unknown}` : ''}.`
+    + (inCard ? ' Нажмите «глаз» — черновик помощника встанет рядом с вашим счётом.' : ' Черновик помощника — в карточке заявки («Открыть»), кнопка «глаз».');
 }
 
 // Экземпляры одного магазина: всё — по его адресу (slug).
@@ -137,7 +392,7 @@ function shopComponents(slug) {
         const drafts = new Map((await backboneDesk.drafts(slug)).map((d) => [d.order.id, d]));
         return (await backboneDesk.orders(slug)).map((o) => {
           const d = drafts.get(o.id);
-          const seen = d && d.lines && (shop.mode !== 'shadow' || d.sent); // в тени черновик скрыт до счёта
+          const seen = d && d.lines && (shop.mode === 'help' || d.sent); // черновик скрыт до счёта менеджера
           const badges = o.contact && o.text ? [{ text: o.contact }] : [];
           if (o.channel === 'site') badges.unshift({ text: 'с сайта', kind: 'waiting' });
           if (o.channel === 'chat') badges.unshift({ text: 'из чата', kind: 'waiting' });
@@ -160,6 +415,22 @@ function shopComponents(slug) {
       configure: {
         types: board.typeNames(),
         run: ({ op, user }) => backboneDesk.configure(slug, op, actorOf(user)),
+      },
+      // подробности карточки: контакт, канал и ссылка на карточку «две колонки»
+      details: {
+        read: async ({ cardId }) => {
+          const { order, events } = await backboneDesk.history(slug, cardId);
+          const columns = await backboneDesk.columns(slug);
+          const titles = new Map(columns.map((c) => [c.id, c.title]));
+          return {
+            card: { title: `№${order.number} · ${order.client}`, subtitle: CHANNELS[order.channel] || order.channel },
+            facts: [
+              { label: 'Разбор заявки', value: 'открыть: как прислал покупатель и как понял помощник', href: `${cabinetOf(slug)}&page=order&order=${order.id}` },
+              { label: 'Контакт', value: order.contact || '—' },
+            ],
+            journal: [...events].reverse().map((e) => ({ at: new Date(e.at).toISOString(), what: describe(e, titles), actor: e.actor, why: e.cause })),
+          };
+        },
       },
     }),
 
@@ -229,13 +500,15 @@ function shopComponents(slug) {
     'drafts': Table({
       rows: async () => {
         const shop = await backboneDesk.shop(slug);
-        const hidden = shop.mode === 'shadow';
+        const hidden = shop.mode !== 'help';
         return (await backboneDesk.drafts(slug)).map((d) => {
           const has = d.lines > 0 && (!hidden || d.sent);
           return {
             id: d.order.id,
             number: d.order.number,
             client: d.order.client,
+            card: `${cabinetOf(slug)}&page=order&order=${d.order.id}`,
+            open: 'Открыть',
             status: statusOf(d, shop.mode),
             lines: has ? d.lines : null,
             accepted: has ? d.accepted : null,
@@ -251,6 +524,7 @@ function shopComponents(slug) {
       columns: [
         { key: 'number', name: '№', type: 'num', sortable: true },
         { key: 'client', name: 'Клиент', sortable: true },
+        { key: 'card', name: 'Карточка', render: 'link', label: 'open' },
         { key: 'status', name: 'Разбор' },
         { key: 'lines', name: 'Строк', type: 'num', sortable: true },
         { key: 'accepted', name: 'Принято', type: 'num' },
@@ -297,11 +571,11 @@ function shopComponents(slug) {
           },
         },
         {
-          id: 'attach', name: 'Приложить счёт из 1С', bulk: true, max: 1,
-          fields: [{ key: 'invoice', label: 'Строки счёта из 1С', required: true, multiline: true, placeholder: 'скопируйте табличную часть счёта в 1С и вставьте сюда' }],
+          id: 'attach', name: 'Мой счёт готов', bulk: true, max: 1,
+          fields: [{ key: 'invoice', label: 'Строки вашего счёта из 1С', required: true, multiline: true, placeholder: 'скопируйте табличную часть счёта в 1С и вставьте сюда' }],
           run: async ({ ids, body, user }) => {
             const r = await backboneDesk.attachInvoice(slug, ids[0], body.invoice, { actor: actorOf(user), user });
-            return { ...r, message: `№${r.number}: совпало ${r.matched} из ${r.final} строк счёта, в черновике ${r.draft}; точность ${ratio(r.accuracy)}${r.unknown ? `; не узнано строк: ${r.unknown}` : ''}` };
+            return { ...r, message: attachedText(r) };
           },
         },
         {
@@ -310,7 +584,7 @@ function shopComponents(slug) {
             const order = await backboneDesk.createOrder(slug, {
               client: 'ООО «СтройМонтаж» (демо)', contact: 'snab@example.ru', text: demoRequest(),
             }, actorOf(user));
-            return { message: `Заявка №${order.number} создана — отметьте её и нажмите «Разобрать»` };
+            return { message: `Заявка №${order.number} создана и разобрана механикой — откройте её карточку («Открыть»)` };
           },
         },
       ],
@@ -403,18 +677,20 @@ function shopComponents(slug) {
         const silent = report.silence;
         const row = (id, metric, before, after, d = null, note = null) => ({ id, metric, before, after, delta: d, note });
         return [
-          row('mode', 'Режим',
-            shop.mode === 'shadow' ? `тень с ${day(shop.mode_since)}, ${shadowDays ? `день ${days} из ${shadowDays}` : 'без срока'}` : null,
+          row('mode', 'Разбор заявок',
+            shop.mode === 'shadow' ? `сравнение с ${day(shop.mode_since)}, ${shadowDays ? `день ${days} из ${shadowDays}` : 'без срока'}` : null,
             shop.mode === 'help' ? `помощь с ${day(shop.mode_since)}` : null, null,
-            decision ? `${decision.ok ? 'помощь можно включить' : 'помощь пока нельзя'}: ${decision.reason}` : '«Вернуть тень» — новая база «до»'),
+            shop.mode === 'off' ? `выключен с ${day(shop.mode_since)}`
+              : decision ? `${decision.ok ? 'мера для помощи набрана' : 'мера для помощи не набрана'}: ${decision.reason}` : 'вернуться в «Сравнение» можно всегда — это новая база «до»'),
           row('orders', 'Заявок', String(b.orders), String(a.orders)),
           row('reply1h', 'Ответ в течение часа рабочего времени', pct(b.replyWithinHour), pct(a.replyWithinHour), delta(b.replyWithinHour, a.replyWithinHour, 'pct'),
             'ответ — счёт или перенос в «ждём клиента», «готово», «отказ»'),
           row('reply', 'До первого ответа, медиана', mins(b.replyMinutes), mins(a.replyMinutes), delta(b.replyMinutes, a.replyMinutes), 'минуты рабочего времени магазина'),
           row('invoice', 'До счёта, медиана', mins(b.invoiceMinutes), mins(a.invoiceMinutes), delta(b.invoiceMinutes, a.invoiceMinutes), 'главный эффект инструмента'),
-          row('manager', 'Минуты менеджера на заявку, медиана', null, mins(a.managerMinutes), null, 'в тени менеджер работает в 1С — видно только время до счёта'),
+          row('manager', 'Минуты менеджера на заявку, медиана', null, mins(a.managerMinutes), null, 'в сравнении менеджер работает в 1С — видно только время до счёта'),
+          row('helper', 'Помощник: разбор заявки, медиана', b.helperMs == null ? null : secondsText(b.helperMs), a.helperMs == null ? null : secondsText(a.helperMs), null, 'сколько шёл разбор — правила и модель'),
           row('accuracy', 'Точность черновика', accuracyText(b.shadowAccuracy), accuracyText(a.untouched), null,
-            'тень: черновик против счёта из 1С; помощь: строки без правки; порог помощи — 0,8'),
+            'сравнение: черновик против счёта менеджера; помощь: строки без правки; мера для помощи — 0,8'),
           row('missing', 'Нет в каталоге, доля строк', pct(b.missingShare), pct(a.missingShare), delta(b.missingShare, a.missingShare, 'pct'), 'полнота каталога и синонимов'),
           row('questions', 'Вопросы клиенту, доля строк', pct(b.questionShare), pct(a.questionShare), delta(b.questionShare, a.questionShare, 'pct')),
           row('conversion', 'Конверсия: выдано / (выдано + отказ)', conversionText(b.conversion), conversionText(a.conversion),
@@ -430,24 +706,109 @@ function shopComponents(slug) {
       idKey: 'id',
       columns: [
         { key: 'metric', name: 'Метрика' },
-        { key: 'before', name: 'Тень (до)' },
+        { key: 'before', name: 'Сравнение (до)' },
         { key: 'after', name: 'Помощь (после)' },
         { key: 'delta', name: 'Разница' },
         { key: 'note', name: 'Пояснение' },
       ],
+    }),
+
+    // ---------- разбор заявки: тумблер, «До и после», карточка «две колонки» ----------
+
+    'mode': modeSwitch(slug, { withBrief: false }),
+    'mode-brief': modeSwitch(slug, { withBrief: true }),
+
+    'order-card': Extract({
+      title: 'Заявка: как прислал покупатель и как понял помощник',
+      legend: { ok: 'принято', ask: 'выбрать', miss: 'нет в каталоге' },
+      view: ({ key }) => orderView(slug, key),
       actions: [
         {
-          id: 'help', name: 'Включить помощь',
-          run: async ({ user }) => {
-            const r = await backboneDesk.switchMode(slug, 'help', actorOf(user));
-            return { message: `Помощь включена: ${r.reason}` };
+          id: 'parse', name: 'Разобрать',
+          run: async ({ key, user }) => {
+            const r = await backboneDesk.parseOrder(slug, key, { actor: actorOf(user), user });
+            if (!r.ok) return { message: `Не разобрано: ${r.message}` };
+            const shop = await backboneDesk.shop(slug);
+            return { message: shop.mode === 'help' ? r.summary : 'Помощник разобрал заявку тихо — черновик откроется после вашего счёта' };
           },
         },
         {
-          id: 'shadow', name: 'Вернуть тень',
-          run: async ({ user }) => {
-            await backboneDesk.switchMode(slug, 'shadow', actorOf(user));
-            return { message: 'Тень: черновики скрыты, к заявкам прикладывают счёт из 1С' };
+          id: 'attach', name: 'Мой счёт готов', primary: true,
+          fields: [{ key: 'invoice', label: 'Строки вашего счёта из 1С', required: true, multiline: true, placeholder: 'скопируйте табличную часть счёта в 1С и вставьте сюда' }],
+          run: async ({ key, body, user }) => ({
+            message: attachedText(await backboneDesk.attachInvoice(slug, key, body.invoice, { actor: actorOf(user), user }), { inCard: true }),
+          }),
+        },
+        {
+          id: 'accept-green', name: 'Принять всё зелёное', primary: true,
+          run: async ({ key, user }) => {
+            const r = await backboneDesk.acceptConfident(slug, key, actorOf(user));
+            return { message: `Принято строк: ${r.lines}` };
+          },
+        },
+        {
+          id: 'export', name: 'Выгрузить в 1С (xlsx)',
+          run: async ({ key, user }) => {
+            const r = await backboneDesk.exportInvoice(slug, key, actorOf(user));
+            return { message: `В счёт ${r.included} строк на ${rub(r.sum)}${r.left ? `, не вошло ${r.left} — лист «Вопросы и пропуски»` : ''}`, download: download(slug, r.orderId) };
+          },
+        },
+        {
+          id: 'sent', name: 'Счёт отправлен',
+          run: async ({ key, user }) => {
+            const r = await backboneDesk.invoiceSent(slug, key, actorOf(user));
+            return { message: `Счёт отправлен: без правки ${r.right} из ${r.base} строк` };
+          },
+        },
+        {
+          id: 'read-model', name: 'Распознать нейросетью', primary: true,
+          run: async ({ key, user }) => {
+            const r = await backboneDesk.readByModel(slug, key, { actor: actorOf(user), user });
+            return { message: `Нейросеть: ${r.lines.length} строк — ${r.accepted} принято, ${r.ask} выбрать, ${r.missing} нет в каталоге${r.invoice ? `; с вашим счётом совпало ${r.invoice.matched} из ${r.invoice.base}` : ''}` };
+          },
+        },
+        {
+          id: 'take-all', name: 'Взять всё у нейросети', primary: true,
+          run: async ({ key, user }) => {
+            const r = await backboneDesk.takeAllModel(slug, key, actorOf(user));
+            return { message: `Взято у нейросети строк: ${r.lines} — это ваши правки, синонимы записаны` };
+          },
+        },
+        {
+          id: 'take', name: 'Взять как нейросеть', scope: 'item',
+          run: async ({ key, item, user }) => {
+            await backboneDesk.takeModelLine(slug, key, String(item).replace(/^m:/, ''), actorOf(user));
+            return { message: 'Строка взята у нейросети — синоним записан: механика найдёт её сама в следующий раз' };
+          },
+        },
+        {
+          id: 'ask', name: 'Спросить клиента', scope: 'item', tones: ['ask', 'miss'],
+          run: async ({ key, item, user }) => {
+            const r = await backboneDesk.askClient(slug, key, item, actorOf(user));
+            return { message: `В вопросы клиенту: ${r.question}` };
+          },
+        },
+        {
+          id: 'pick', name: 'Выбрать', scope: 'item', tones: ['ask', 'miss'], choose: true,
+          run: async ({ key, item, value, user }) => {
+            const r = await backboneDesk.pickCandidate(slug, key, item, value, actorOf(user));
+            return { message: `Выбрано ${value}${r.synonyms ? ' — синоним записан: в следующей заявке эта фраза найдётся сама' : ''}` };
+          },
+        },
+        {
+          id: 'replace', name: 'Заменить позицию', scope: 'item',
+          fields: [{ key: 'sku', label: 'Артикул из каталога', required: true, placeholder: 'SW-3.5x35-YZ' }],
+          run: async ({ key, item, body, user }) => {
+            await backboneDesk.reviseLine(slug, key, item, { verdict: 'replaced', sku: body.sku }, actorOf(user));
+            return { message: 'Позиция заменена — синоним записан: в следующей заявке эта фраза найдётся сама' };
+          },
+        },
+        {
+          id: 'qty', name: 'Количество', scope: 'item', tones: ['ok', 'ask'],
+          fields: [{ key: 'qty', label: 'Сколько в счёт (в единице позиции)', required: true, placeholder: '50' }],
+          run: async ({ key, item, body, user }) => {
+            await backboneDesk.reviseLine(slug, key, item, { verdict: 'edited', qty: body.qty }, actorOf(user));
+            return { message: 'Количество исправлено, упаковка и остаток пересчитаны' };
           },
         },
       ],
@@ -457,7 +818,7 @@ function shopComponents(slug) {
       rows: async () => (await backboneDesk.measures(slug)).report.weeks.map((w) => ({
         id: w.week,
         week: `с ${w.week.slice(8, 10)}.${w.week.slice(5, 7)}.${w.week.slice(0, 4)}`,
-        mode: w.modes.map((m) => MODES[m]).join(' + '),
+        mode: w.modes.map((m) => MODES[m] || m).join(' + '),
         orders: w.orders,
         reply1h: pct(w.replyWithinHour),
         reply: mins(w.replyMinutes),
@@ -479,7 +840,7 @@ function shopComponents(slug) {
         { key: 'reply', name: 'До ответа' },
         { key: 'invoice', name: 'До счёта' },
         { key: 'manager', name: 'Менеджер' },
-        { key: 'shadow', name: 'Точность (тень)' },
+        { key: 'shadow', name: 'Точность (сравнение)' },
         { key: 'untouched', name: 'Без правки (помощь)' },
         { key: 'missing', name: 'Нет в каталоге' },
         { key: 'questions', name: 'Вопросы' },
@@ -763,7 +1124,7 @@ const cabinet = Components({
           slug: shop.slug,
           name: shop.name,
           niche: NICHE_NAMES[shop.niche] || shop.niche,
-          mode: shop.mode === 'shadow' ? `тень, день ${days}${shadowDays ? ` из ${shadowDays}` : ''}` : 'помощь',
+          mode: shop.mode === 'shadow' ? `сравнение, день ${days}${shadowDays ? ` из ${shadowDays}` : ''}` : MODES[shop.mode] || shop.mode,
           hours: hoursText(shop.hours),
           email: shop.reply_to,
           catalog: shop.catalog_version ? `выгрузка, ${catalog.items().length} поз.` : catalog.items().length ? `фикстура, ${catalog.items().length} поз.` : 'не загружен',
@@ -779,7 +1140,7 @@ const cabinet = Components({
       { key: 'slug', name: 'Адрес', sortable: true },
       { key: 'name', name: 'Название', sortable: true },
       { key: 'niche', name: 'Ниша' },
-      { key: 'mode', name: 'Режим' },
+      { key: 'mode', name: 'Разбор заявок' },
       { key: 'hours', name: 'Часы работы' },
       { key: 'email', name: 'Почта для квитанций' },
       { key: 'catalog', name: 'Каталог' },
@@ -801,7 +1162,7 @@ const cabinet = Components({
           const shop = await backboneDesk.openShop(body, actorOf(user));
           return {
             slug: shop.slug,
-            message: `Магазин «${shop.name}» заведён в тени: витрина /backbone/?shop=${shop.slug}, кабинет ${cabinetOf(shop.slug)}. Дальше — экран «Каталог»: загрузите выгрузку.`,
+            message: `Магазин «${shop.name}» заведён, разбор — «Сравнение»: витрина /backbone/?shop=${shop.slug}, кабинет ${cabinetOf(shop.slug)}. Дальше — экран «Каталог»: загрузите выгрузку.`,
           };
         },
       },
