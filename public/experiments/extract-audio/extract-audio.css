@@ -148,6 +148,12 @@ body.page-extract-audio {
   border-radius: 10px;
 }
 
+/* display выше перебивал hidden — поле выбора и выбранный файл показывались разом */
+.ea-dropzone[hidden],
+.ea-file-chosen[hidden] {
+  display: none;
+}
+
 .ea-file-meta {
   display: flex;
   flex-direction: column;

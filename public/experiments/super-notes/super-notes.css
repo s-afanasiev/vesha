@@ -151,6 +151,10 @@
   font-size: 0.85rem;
 }
 
+.sn-active-filters[hidden] {
+  display: none;
+}
+
 .sn-filter-label {
   color: var(--sn-text-muted);
 }

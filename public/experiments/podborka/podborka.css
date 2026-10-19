@@ -776,6 +776,13 @@ body.page-podborka {
   display: none !important;
 }
 
+/* display: flex у карточек, превью и поля файла перебивал hidden */
+.podborka__file-label[hidden],
+.podborka__preview[hidden],
+.podborka__analysis-card[hidden] {
+  display: none;
+}
+
 .podborka-modal__backdrop {
   position: absolute;
   inset: 0;

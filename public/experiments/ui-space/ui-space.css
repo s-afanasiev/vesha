@@ -313,6 +313,7 @@ html {
   transform: translateZ(0);
 }
 
+.sp-scene__svg[hidden],
 .sp-scene__canvas[hidden] {
   display: none;
 }
