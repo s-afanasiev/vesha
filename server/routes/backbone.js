@@ -7,7 +7,7 @@
 //   /me                              кто вошёл: админ ли, какие магазины ему открыты
 //   POST /invite {token}             сотрудник принимает приглашение: магазин — за его аккаунтом
 //   /c/pages/shops, /c/shops, /c/staff  кабинет: магазины и сотрудники — только админ
-//   /s/<slug>/c/pages/<экран>        экраны магазина: доска, черновики, замеры, каталог
+//   /s/<slug>/c/pages/<экран>        экраны магазина: доска, черновики, замеры, каталог, данные покупателей
 //   /s/<slug>/c/<экземпляр>          компоненты магазина — админ или сотрудник магазина
 //   /s/<slug>/files/invoice/<id>.xlsx  счёт для 1С
 
@@ -39,8 +39,13 @@ router.use(entry((req) => backboneDesk.signedIn(req.user))); // без вход�
 router.get('/me', async (req, res, next) => {
   try {
     const { admin, shops } = await backboneDesk.shopsFor(req.user);
-    // demo — посев из кода: шапка не считает его, решая, одна ли установка на магазин
-    res.json({ email: req.user.email, admin, shops: shops.map((s) => ({ slug: s.slug, name: s.name, demo: backboneDesk.isSeed(s.slug) })) });
+    // demo — посев из кода: шапка не считает его, решая, одна ли установка на магазин;
+    // missing — чего не хватает политике ПДн магазина: шапка предупреждает «политика неполная»
+    res.json({
+      email: req.user.email,
+      admin,
+      shops: shops.map((s) => ({ slug: s.slug, name: s.name, demo: backboneDesk.isSeed(s.slug), missing: backboneDesk.policyOf(s).missing })),
+    });
   } catch (err) {
     fail(err, res, next);
   }

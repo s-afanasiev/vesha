@@ -90,6 +90,7 @@ export const MANIFEST = {
     '027_backbone_staff_invite.sql',
     '028_backbone_chat_channel.sql',
     '029_backbone_mode_off.sql',
+    '030_backbone_personal_data.sql',
   ],
   // пакеты — версии из корневого package.json и package-lock.json
   dependencies: [

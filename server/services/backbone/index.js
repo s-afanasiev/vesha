@@ -10,6 +10,8 @@
 // витрины на ядре chat-engine: наличие и цена, статус своей заявки, часы — сам;
 // список из разговора — заявка тем же ключом, что с сайта; остальное — менеджеру.
 // Вход в кабинет — ShopAccess: админ экземпляра — все магазины, сотрудник — свой.
+// 152-ФЗ: реквизиты оператора в политике (Requisites — форма магазина), данные
+// покупателя — по запросу и по сроку хранения одним узлом (Erasure, Retention — раз в сутки).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -51,12 +53,14 @@ const { ChatDesk } = require('../chat-engine/ChatDesk');
 const { DialogueRepository } = require('../chat-engine/DialogueRepository');
 const { ReplySuggester } = require('../chat-engine/ReplySuggester');
 const { Funnel } = require('../chat-engine/Funnel');
-const { Assistant, CHANNEL: CHAT_CHANNEL } = require('./assistant/Assistant');
+const { Assistant, CHANNEL: CHAT_CHANNEL, visitorKey } = require('./assistant/Assistant');
 const { ShopFacts } = require('./assistant/ShopFacts');
 const { AutoAnswers, StatusAnswer, HoursAnswer, StockAnswer } = require('./assistant/AutoAnswers');
 const { ChatIntake } = require('./assistant/ChatIntake');
 const { ShopPersona, replyModel } = require('./assistant/ShopPersona');
 const { ShopNotice } = require('./receipts/ShopNotice');
+const { Anonymizer } = require('./privacy/Anonymizer');
+const { Erasure, Retention } = require('./privacy/Erasure');
 
 // Посев: магазины, которые костяк знает из кода, — только демо. Остальные админ
 // заводит в кабинете (backbone_shops, шаг 6); новый начинает с тени (14 дней базы
@@ -151,6 +155,31 @@ const receipts = new Receipts({
   }),
 });
 
+// Разговоры ассистента магазинов — территория в общих таблицах chat-engine: только канал
+// виджета витрины и своя персона — демо chat-engine Vesha эти разговоры и персону не видит.
+const dialogues = new DialogueRepository(db, { channels: [CHAT_CHANNEL], personaKey: 'backbone.persona' });
+
+// Политика ПДн витрины: срок хранения; отзыв согласия — не позже 30 дней (152-ФЗ, ст. 21).
+const PRIVACY = { keepYears: 3, withdrawDays: 30 };
+// Данные покупателя — по его запросу и по сроку хранения одним узлом: заявки, строки,
+// синонимы, письма и журнал — одной транзакцией; переписка ассистента; письма-файлы.
+const erasure = new Erasure({
+  repository,
+  journal,
+  anonymizer: new Anonymizer(),                                           // что в строках — ПДн и чем заменить
+  keepYears: PRIVACY.keepYears,
+  visitorKeyOf: visitorKey,                                               // ключ разговора гостя — как у ассистента
+  dialogues,
+  mailbox,                                                                // файлы .eml без SMTP — тоже ПДн
+  batch: 100,                                                             // заявок на транзакцию автоочистки
+});
+const retention = new Retention({                                        // срок хранения — раз в сутки по всем магазинам
+  shops: () => repository.shops(),
+  erasure,
+  everyHours: 24,
+  firstMinutes: 5,                                                        // первая проверка — через 5 минут после старта
+});
+
 const llm = config.backboneModel === 'recorded'
   ? new RecordedLlm(JSON.parse(fs.readFileSync(path.join(FIXTURES, 'recorded-llm.json'), 'utf8')))
   : new GuardedLlm({ selection: { provider: 'openai' }, timeoutMs: 20_000 }); // серверный пресет шлюза, квота инициатора
@@ -179,17 +208,15 @@ const backboneDesk = new BackboneDesk({
   intake: siteIntake,                                                     // заявка с витрины (§6.3)
   statusPage: new StatusPage(),                                           // окно статуса клиента (stages@1)
   receipts,                                                               // квитанции и письмо менеджеру после переходов (§6.1)
-  privacy: { keepYears: 3, withdrawDays: 30 },                            // политика ПДн витрины: срок хранения; отзыв согласия — 152-ФЗ ст. 21
+  privacy: PRIVACY,                                                       // политика ПДн витрины: оператор, сроки, почта для отзыва
+  erasure,                                                                // удаление данных покупателя: по запросу и по сроку
 });
 
 const demoRequest = () => fs.readFileSync(path.join(FIXTURES, 'request-20.txt'), 'utf8');
 
-// Ассистент магазина (шаг 5, §6.4): разговор — ядро chat-engine без правки (ChatDesk,
+// Ассистент магазина (шаг 5, §6.4): разговор — ядро chat-engine (ChatDesk,
 // DialogueRepository, ReplySuggester, Funnel — единственная зависимость костяка от
 // chat-engine); ответы — только из фактов магазина (О18); заявки — только собеседника (О20).
-// Территория магазинов в общих таблицах chat-engine: только канал виджета витрины и своя
-// персона — демо chat-engine Vesha эти разговоры и эту персону не видит и не правит.
-const dialogues = new DialogueRepository(db, { channels: [CHAT_CHANNEL], personaKey: 'backbone.persona' });
 const chatFunnel = new Funnel();
 const statusPath = (token) => `/backbone/status.html?t=${encodeURIComponent(token)}`;
 const assistant = new Assistant({
@@ -226,4 +253,4 @@ const assistant = new Assistant({
   limits: { messages: 30, windowMin: 10 },                               // сообщений посетителя за окно минут
 });
 
-module.exports = { backboneDesk, assistant, board, catalogFile, invoiceTool, demoRequest, DEMO_SHOP, SEEDS, TEMPLATES };
+module.exports = { backboneDesk, assistant, retention, board, catalogFile, invoiceTool, demoRequest, DEMO_SHOP, SEEDS, TEMPLATES };

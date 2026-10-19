@@ -24,6 +24,9 @@
 // 19.10.2026: три колонки — текст покупателя, механический разбор (бесплатно, сразу при
 // поступлении) и нейросеть по кнопке с советом «стоит распознать»; «Взять как нейросеть»,
 // у строки «выбрать» — 3 лучших варианта с отличием, «ещё N» и «Спросить клиента».
+// 152-ФЗ: экран «Данные покупателей» — политика ПДн магазина (чего не хватает) и заявки
+// с поиском по контакту: «Удалить данные покупателя» (desk.eraseCustomer) и «Удалить старше
+// срока хранения» (desk.eraseExpired); в кабинете — реквизиты оператора у магазина.
 // Монтируется в server/routes/backbone.js (за границей ShopAccess: кабинет — админ,
 // магазин — админ или его сотрудник).
 
@@ -39,6 +42,8 @@ const { NICHE_NAMES } = require('./board/templates');
 const { hoursText } = require('./shops/ShopForm');
 const { OwnerBrief, minutes: minutesText, seconds: secondsText } = require('./measures/OwnerBrief');
 const { sameLine } = require('./invoice/FinalInvoice');
+const { missingOf, ogrnName } = require('./privacy/Requisites');
+const { findsOrder } = require('./privacy/Anonymizer');
 
 const actorOf = (user) => (user && (user.email || user.id)) || 'admin';
 // Кабинет магазина — там, где его открыла точка входа (Vesha или сборка магазина).
@@ -73,8 +78,9 @@ function describe(e, titles) {
     case 'invoice_sent': return d.mode === 'shadow'
       ? `тень, заявка №${d.number}: счёт из 1С приложен — совпало ${d.matched} из ${d.final} строк, в черновике ${d.draft}; точность ${ratio(d.accuracy)}`
       : `счёт по заявке №${d.number} отправлен: без правки ${d.right} из ${d.base} строк`;
-    case 'shop_opened': return `магазин «${d.name}» заведён: адрес ${d.slug}, ниша «${NICHE_NAMES[d.niche] || d.niche}», ${hoursText(d.hours)}, режим — ${MODES[d.mode] || d.mode}`;
-    case 'shop_changed': return `магазин изменён: «${d.name}», ${hoursText(d.hours)}, почта ${d.replyTo || '—'}`;
+    case 'shop_opened': return `магазин «${d.name}» заведён: адрес ${d.slug}, ниша «${NICHE_NAMES[d.niche] || d.niche}», ${hoursText(d.hours)}, режим — ${MODES[d.mode] || d.mode}${'operator' in d ? `, реквизиты оператора ПДн — ${missingOf(d.operator, d.replyTo).length ? 'неполные' : 'заполнены'}` : ''}`;
+    case 'shop_changed': return `магазин изменён: «${d.name}», ${hoursText(d.hours)}, почта ${d.replyTo || '—'}${'operator' in d ? `, реквизиты оператора ПДн — ${missingOf(d.operator, d.replyTo).length ? 'неполные' : 'заполнены'}` : ''}`;
+    case 'personal_data_erased': return `данные покупателя удалены ${d.reason === 'retention' ? 'по сроку хранения' : 'по запросу'}: заявок ${d.orders}${(d.numbers || []).length ? ` (№${d.numbers.join(', №')})` : ''}, писем ${d.letters}, разговоров в чате ${d.dialogues}${d.files ? `, файлов писем ${d.files}` : ''}`;
     case 'staff_added': return d.login === 'password'
       ? `сотрудник ${d.email} добавлен: учётка заведена, пароль выдан админу`
       : `сотрудник ${d.email} приглашён: ссылка${d.until ? ` до ${at(d.until)}` : ''}, вход — после того, как он её откроет`;
@@ -137,6 +143,15 @@ const itemName = (catalog, sku) => {
   return item ? `${sku} · ${item.name}` : sku || null;
 };
 const at = (t) => (t ? new Date(t).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : null);
+const years = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'год' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'года' : 'лет'}`;
+const policyText = (missing) => (missing.length ? `неполная: не указаны ${missing.join(', ')}` : 'заполнена');
+// Итог удаления данных покупателя — для менеджера, без самих данных.
+const erasedText = (r) => `заявок ${r.orders}${r.numbers.length ? ` (№${r.numbers.join(', №')})` : ''}, писем ${r.letters}, разговоров в чате ${r.dialogues}${r.files ? `, файлов писем ${r.files}` : ''}`;
+// Безвозвратное действие — с подтверждением в форме: без «Да, удалить» дверь не зовём.
+const CONFIRM_ERASE = {
+  key: 'confirm', label: 'Безвозвратно: имя, контакт, текст и файл заявки, письма и переписка в чате. Номер, позиции и суммы останутся',
+  options: [{ value: 'yes', name: 'Да, удалить' }],
+};
 const LOAD_STATUS = { pending: 'ждёт «Загрузить каталог»', loaded: 'загружен', refused: 'отказ' };
 
 // Последний исход разбора заявки — словами; черновик виден только в «Помощи» и после счёта менеджера.
@@ -394,6 +409,7 @@ function shopComponents(slug) {
           const d = drafts.get(o.id);
           const seen = d && d.lines && (shop.mode === 'help' || d.sent); // черновик скрыт до счёта менеджера
           const badges = o.contact && o.text ? [{ text: o.contact }] : [];
+          if (o.erased_at) badges.push({ text: 'данные покупателя удалены' });
           if (o.channel === 'site') badges.unshift({ text: 'с сайта', kind: 'waiting' });
           if (o.channel === 'chat') badges.unshift({ text: 'из чата', kind: 'waiting' });
           if (seen) badges.push({ text: `черновик ${d.accepted}/${d.lines}`, kind: 'draft' });
@@ -463,6 +479,75 @@ function shopComponents(slug) {
           const r = await backboneDesk.sendReceipts(slug);
           return { message: `новых писем ${r.made}, к отправке ${r.pending}, ушло ${r.sent}` };
         } },
+      ],
+    }),
+
+    // ---------- данные покупателей (152-ФЗ) ----------
+
+    // Политика ПДн магазина: реквизиты оператора, почта, сроки — и чего ей не хватает.
+    'privacy': Table({
+      rows: async () => {
+        const p = await backboneDesk.privacyOf(slug);
+        const op = p.operator || {};
+        const none = 'не указано — заполняет админ: «Настройки и доступ» → «Изменить»';
+        return [
+          { id: 'state', what: 'Политика ПДн', value: policyText(p.missing), link: `/backbone/privacy.html?shop=${encodeURIComponent(slug)}` },
+          { id: 'name', what: 'Оператор', value: op.name || none },
+          { id: 'inn', what: 'ИНН', value: op.inn || none },
+          { id: 'ogrn', what: ogrnName(op.ogrn), value: op.ogrn || none },
+          { id: 'address', what: 'Адрес оператора', value: op.address || none },
+          { id: 'email', what: 'Почта для обращений по ПДн', value: p.email || none },
+          { id: 'keep', what: 'Срок хранения', value: `${years(p.keepYears)} с даты последней заявки покупателя — потом данные обезличиваются сами, проверка раз в сутки` },
+          { id: 'withdraw', what: 'Отзыв согласия', value: `не позже ${p.withdrawDays} дней с письма покупателя: ниже найдите его заявки по почте или телефону → «Удалить данные покупателя»` },
+        ];
+      },
+      idKey: 'id',
+      columns: [
+        { key: 'what', name: 'Что' },
+        { key: 'value', name: 'Сейчас' },
+        { key: 'link', name: 'Страница политики', render: 'link' },
+      ],
+    }),
+
+    // Заявки и контакты покупателей: поиск — почта или телефон любой записью, имя, номер.
+    // Удаление — выбранные заявки, безвозвратно; по сроку — тем же узлом, что таймер.
+    'customers': Table({
+      rows: async () => (await backboneDesk.customers(slug)).map((o) => ({
+        id: o.id,
+        number: o.number,
+        at: at(o.created_at),
+        client: o.erased_at ? '—' : o.client,
+        contact: o.contact || '—',
+        channel: CHANNELS[o.channel] || o.channel,
+        data: o.erased_at ? `удалены ${at(o.erased_at)}` : `хранятся до ${day(o.keep_until)}`,
+      })),
+      idKey: 'id',
+      columns: [
+        { key: 'number', name: '№', type: 'num', sortable: true },
+        { key: 'at', name: 'Когда' },
+        { key: 'client', name: 'Клиент', sortable: true },
+        { key: 'contact', name: 'Контакт' },
+        { key: 'channel', name: 'Откуда' },
+        { key: 'data', name: 'Данные покупателя' },
+      ],
+      search: (row, q) => findsOrder(row, q),
+      actions: [
+        {
+          id: 'erase', name: 'Удалить данные покупателя', bulk: true, max: 100,
+          fields: [CONFIRM_ERASE],
+          run: async ({ ids, body, user }) => {
+            if (body.confirm !== 'yes') throw new Error('Подтвердите удаление: выберите «Да, удалить»');
+            const r = await backboneDesk.eraseCustomer(slug, ids, actorOf(user));
+            return { message: `Данные покупателя удалены: ${erasedText(r)}. Ответьте покупателю, что его данные удалены.` };
+          },
+        },
+        {
+          id: 'expired', name: 'Удалить старше срока хранения',
+          run: async ({ user }) => {
+            const r = await backboneDesk.eraseExpired(slug, actorOf(user));
+            return { message: r.orders || r.dialogues ? `Срок хранения вышел — обезличено: ${erasedText(r)}` : 'Заявок и разговоров старше срока хранения нет' };
+          },
+        },
       ],
     }),
 
@@ -1111,6 +1196,14 @@ const SHOP_FIELDS = [
   { key: 'time', label: 'Часы', placeholder: '09:00–19:00' },
   { key: 'email', label: 'Почта магазина для квитанций (ответ клиента)', placeholder: 'zakaz@shop.ru' },
 ];
+// Реквизиты оператора ПДн для политики витрины: ИНН и ОГРН проверяются до базы.
+const OPERATOR_FIELDS = [
+  { key: 'operator', label: 'Оператор ПДн — как в ЕГРЮЛ / ЕГРИП', placeholder: 'ООО «Крепёж на Ленина» или ИП Иванов Иван Иванович' },
+  { key: 'inn', label: 'ИНН оператора: 10 цифр у организации, 12 у ИП', placeholder: '4632000000' },
+  { key: 'ogrn', label: 'ОГРН (13 цифр) или ОГРНИП (15)', placeholder: '1024600000000' },
+  { key: 'address', label: 'Адрес оператора: юридический или регистрации ИП', placeholder: '305000, г. Курск, ул. Ленина, д. 1' },
+  { key: 'pdEmail', label: 'Почта для обращений по ПДн — пусто: почта магазина', placeholder: 'pd@shop.ru' },
+];
 
 const cabinet = Components({
   'shops': Table({
@@ -1127,6 +1220,7 @@ const cabinet = Components({
           mode: shop.mode === 'shadow' ? `сравнение, день ${days}${shadowDays ? ` из ${shadowDays}` : ''}` : MODES[shop.mode] || shop.mode,
           hours: hoursText(shop.hours),
           email: shop.reply_to,
+          policy: policyText(backboneDesk.policyOf(shop).missing),
           catalog: shop.catalog_version ? `выгрузка, ${catalog.items().length} поз.` : catalog.items().length ? `фикстура, ${catalog.items().length} поз.` : 'не загружен',
           site: `/backbone/?shop=${encodeURIComponent(shop.slug)}`,
           cabinet: cabinetOf(shop.slug),
@@ -1143,6 +1237,7 @@ const cabinet = Components({
       { key: 'mode', name: 'Разбор заявок' },
       { key: 'hours', name: 'Часы работы' },
       { key: 'email', name: 'Почта для квитанций' },
+      { key: 'policy', name: 'Политика ПДн' },
       { key: 'catalog', name: 'Каталог' },
       { key: 'site', name: 'Витрина', render: 'link' },
       { key: 'cabinet', name: 'Кабинет', render: 'link' },
@@ -1157,21 +1252,24 @@ const cabinet = Components({
           { ...SHOP_FIELDS[0], required: true },
           { key: 'niche', label: 'Ниша', required: true, options: Object.keys(TEMPLATES).map((k) => ({ value: k, name: NICHE_NAMES[k] || k })) },
           ...SHOP_FIELDS.slice(1),
+          ...OPERATOR_FIELDS,
         ],
         run: async ({ body, user }) => {
           const shop = await backboneDesk.openShop(body, actorOf(user));
+          const { missing } = backboneDesk.policyOf(shop);
           return {
             slug: shop.slug,
-            message: `Магазин «${shop.name}» заведён, разбор — «Сравнение»: витрина /backbone/?shop=${shop.slug}, кабинет ${cabinetOf(shop.slug)}. Дальше — экран «Каталог»: загрузите выгрузку.`,
+            message: `Магазин «${shop.name}» заведён, разбор — «Сравнение»: витрина /backbone/?shop=${shop.slug}, кабинет ${cabinetOf(shop.slug)}. Дальше — экран «Каталог»: загрузите выгрузку.`
+              + (missing.length ? ` Политика ПДн неполная: не указаны ${missing.join(', ')} — «Изменить».` : ''),
           };
         },
       },
       {
         id: 'change', name: 'Изменить', bulk: true, max: 1,
-        fields: SHOP_FIELDS.map((f) => (f.key === 'email' ? { ...f, label: `${f.label}; «-» — убрать` } : f)),
+        fields: [...SHOP_FIELDS, ...OPERATOR_FIELDS].map((f) => (f.key === 'email' || OPERATOR_FIELDS.includes(f) ? { ...f, label: `${f.label}; «-» — убрать` } : f)),
         run: async ({ ids, body, user }) => {
           const shop = await backboneDesk.changeShop(ids[0], body, actorOf(user));
-          return { message: `«${shop.name}»: ${hoursText(shop.hours)}, почта ${shop.reply_to || '—'}` };
+          return { message: `«${shop.name}»: ${hoursText(shop.hours)}, почта ${shop.reply_to || '—'}; политика ПДн — ${policyText(backboneDesk.policyOf(shop).missing)}` };
         },
       },
       {

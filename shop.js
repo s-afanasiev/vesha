@@ -27,6 +27,7 @@ const { identityMiddleware } = require('./server/middleware/identity');
 const authRoutes = require('./server/routes/auth');
 const backboneRoutes = require('./server/routes/backbone');
 const backbonePublicRoutes = require('./server/routes/backbonePublic');
+const { retention } = require('./server/services/backbone');
 
 const PUBLIC = path.join(__dirname, 'public');
 
@@ -80,6 +81,7 @@ async function start() {
   try {
     await db.migrate();
     await bootAdmins(new Accounts(db), config); // админ — из .env: регистрация его почты закрыта
+    retention.start();                          // срок хранения ПДн покупателей — раз в сутки
   } catch (err) {
     console.warn('DB migrate failed:', err.message);
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');

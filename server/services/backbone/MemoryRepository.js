@@ -35,14 +35,14 @@ class MemoryRepository {
     return this.shopRows.map((s) => ({ ...s }));
   }
 
-  async createShop({ slug, name, niche, mode = 'shadow', hours = null, replyTo = null, shadowDays = null }, columns, makeEvents, { exists = 'return' } = {}) {
+  async createShop({ slug, name, niche, mode = 'shadow', hours = null, replyTo = null, shadowDays = null, operator = null }, columns, makeEvents, { exists = 'return' } = {}) {
     const existing = await this.shopBySlug(slug);
     if (existing && exists !== 'return') throw conflict(`Адрес магазина «${slug}» уже занят`);
     if (existing) return existing;
     const now = this.journal.now();
     const shop = {
       id: crypto.randomUUID(), slug, name, niche, tz: 'Europe/Moscow', board_version: 1, mode, mode_since: now, receipts_cursor: 0, created_at: now,
-      hours, reply_to: replyTo, shadow_days: shadowDays, catalog_version: 0,
+      hours, reply_to: replyTo, shadow_days: shadowDays, catalog_version: 0, operator,
     };
     this.shopRows.push(shop);
     this.boards.set(shop.id, columns.map((c, position) => ({ ...c, position })));
@@ -63,6 +63,16 @@ class MemoryRepository {
     return order ? { ...order } : null;
   }
 
+  async ordersByIds(shopId, ids) {
+    const wanted = new Set(ids.map(String));
+    return this.rows.filter((o) => o.shop_id === shopId && wanted.has(o.id)).sort((a, b) => a.number - b.number).map((o) => ({ ...o }));
+  }
+
+  async ordersBefore(shopId, before) {
+    return this.rows.filter((o) => o.shop_id === shopId && !o.erased_at && new Date(o.created_at) < before)
+      .sort((a, b) => a.number - b.number).map((o) => ({ ...o }));
+  }
+
   async ordersOfClient(shopId, clientKey) {
     return this.rows.filter((o) => o.shop_id === shopId && o.client_key === clientKey)
       .sort((a, b) => b.number - a.number).map((o) => ({ ...o }));
@@ -78,7 +88,7 @@ class MemoryRepository {
       id: crypto.randomUUID(), shop_id: shopId, number, column_id: columnId,
       client: draft.client, contact: draft.contact, text: draft.text, channel: draft.channel || 'manual',
       status_token: draft.statusToken || null, content_key: draft.contentKey || null, consent_at: draft.consentAt || null,
-      client_key: draft.clientKey || null, created_at: now, updated_at: now,
+      client_key: draft.clientKey || null, created_at: now, updated_at: now, erased_at: null,
     };
     this.rows.push(order);
     await this.journal.appendIn(null, makeEvents({ ...order }));
@@ -102,10 +112,10 @@ class MemoryRepository {
     return { ...shop };
   }
 
-  async updateShop(shopId, { name, hours, replyTo }, events) {
+  async updateShop(shopId, { name, hours, replyTo, operator = null }, events) {
     const shop = this.shopRows.find((s) => s.id === shopId);
     if (!shop) throw conflict('Магазин не найден');
-    Object.assign(shop, { name, hours, reply_to: replyTo });
+    Object.assign(shop, { name, hours, reply_to: replyTo, operator });
     await this.journal.appendIn(null, events);
     return { ...shop };
   }
@@ -284,6 +294,36 @@ class MemoryRepository {
     return this.receiptRows.filter((r) => r.shop_id === shopId)
       .map((r) => ({ ...r, number: (this.rows.find((o) => o.id === r.order_id) || {}).number }))
       .reverse();
+  }
+
+  // ---------- данные покупателя (152-ФЗ): та же транзакция, что у Postgres ----------
+
+  async eraseOrders(shopId, { orderIds, client, lines, synonyms, events: patches }, makeEvents) {
+    const own = new Set(orderIds);
+    const targets = this.rows.filter((o) => o.shop_id === shopId && own.has(o.id) && !o.erased_at);
+    if (targets.length !== orderIds.length) throw conflict('Данные заявок уже удаляются — обновите список');
+    const now = this.journal.now();
+    for (const o of targets) Object.assign(o, { client, contact: '', text: '', content_key: null, client_key: null, erased_at: now });
+    for (const l of lines) {
+      const line = this.draftLines.find((x) => x.id === l.id && x.shop_id === shopId);
+      if (line) Object.assign(line, { source: l.source, name: l.name });
+    }
+    for (const s of synonyms) {
+      if (s.drop) this.synonymRows = this.synonymRows.filter((r) => !(r.shop_id === shopId && r.phrase === s.phrase));
+      else Object.assign(this.synonymRows.find((r) => r.shop_id === shopId && r.phrase === s.phrase) || {}, { example: s.example });
+    }
+    let letters = 0;
+    for (const r of this.receiptRows.filter((x) => x.shop_id === shopId && own.has(x.order_id))) {
+      const waiting = r.status === 'pending' || r.status === 'failed';
+      Object.assign(r, {
+        address: '', reply_to: null, subject: 'данные покупателя удалены', body: '',
+        last_error: waiting ? 'данные покупателя удалены' : null, status: waiting ? 'skipped' : r.status,
+      });
+      letters++;
+    }
+    await this.journal.scrubIn(null, patches);
+    await this.journal.appendIn(null, makeEvents({ letters }));
+    return { letters };
   }
 
   // ---------- черновик счёта (шаг 2): те же отказы, что у Postgres ----------

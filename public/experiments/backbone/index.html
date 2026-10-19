@@ -28,6 +28,10 @@
     .boot-shop select { font: inherit; padding: 0.25rem 0.5rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface); color: var(--text-heading); max-width: min(16rem, 55vw); }
     .boot-shop a { color: var(--text-muted); }
     .experiments__nav [hidden] { display: none; }
+    /* политика ПДн магазина неполная — предупреждение над экраном (заявки витрина принимает) */
+    .boot-warn { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--danger-border); border-radius: 10px; background: var(--danger-bg); color: var(--danger-text); font-size: 0.95rem; }
+    .boot-warn[hidden] { display: none; }
+    .boot-warn a { color: inherit; }
   </style>
 </head>
 <body class="page-experiments">
@@ -45,6 +49,7 @@
           <a data-page="measures">Замеры</a>
           <a data-page="catalog">Каталог</a>
           <a data-page="assistant">Ассистент</a>
+          <a data-page="privacy">Данные покупателей</a>
           <a data-page="shops">Магазины</a>
         </nav>
         <div data-vesha-auth-widget></div>
@@ -53,6 +58,7 @@
 
     <!-- UI костяка — проекции, а не вёрстка: страницу собирает boot@1 из спеки
          server/services/backbone/pages.js (docs/backbone-architecture.md) -->
+    <p id="boot-warn" class="boot-warn" role="alert" hidden></p>
     <div id="boot-root" class="boot-root"></div>
   </main>
 
@@ -70,6 +76,7 @@
     // «Магазины», сотруднику — его магазины. Скрытие — удобство, граница — на сервере.
     // Карточка заявки (?page=order&order=<id>) — часть экрана «Черновики счетов». Вкладка
     // «Магазины» на установке с одним магазином (демо не в счёт) — «Настройки и доступ».
+    // Политика ПДн магазина неполная (нет реквизитов оператора) — предупреждение над экраном.
     const params = new URLSearchParams(location.search);
     const asked = params.get('page');
     const picker = document.getElementById('boot-shop');
@@ -105,7 +112,7 @@
         const settings = document.querySelector('.boot-pages [data-page="shops"]');
         settings.hidden = !admin;
         if (shops.filter((s) => !s.demo).length <= 1) settings.textContent = 'Настройки и доступ';
-        const page = ['draft', 'order', 'measures', 'catalog', 'assistant', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
+        const page = ['draft', 'order', 'measures', 'catalog', 'assistant', 'privacy', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
         const shop = params.get('shop') || (admin ? 'demo-krepezh' : shops[0] && shops[0].slug);
         if (!shop) return say('Вашему аккаунту пока не открыт ни один магазин — попросите у админа ссылку-приглашение.');
         // выбор магазина и вкладки — только тому, кому есть что открыть
@@ -117,6 +124,14 @@
         document.getElementById('boot-site').href = `/backbone/?shop=${encodeURIComponent(shop)}`;
         // адрес не из списка остаётся в выборе — его экраны ответят отказом сервера
         const list = shops.some((s) => s.slug === shop) ? shops : [{ slug: shop, name: shop }, ...shops];
+        const current = shops.find((s) => s.slug === shop);
+        if (current && current.missing && current.missing.length) {
+          const warn = document.getElementById('boot-warn');
+          warn.innerHTML = `Политика ПДн магазина неполная: не указаны ${VeshaUI.escapeHtml(current.missing.join(', '))}. `
+            + (admin ? 'Заполните: «Настройки и доступ» → отметить магазин → «Изменить».' : 'Реквизиты оператора заполняет админ.')
+            + ` <a href="${link('privacy')}">Данные покупателей</a>`;
+          warn.hidden = false;
+        }
         picker.innerHTML = list.map((s) => `<option value="${VeshaUI.escapeHtml(s.slug)}"${s.slug === shop ? ' selected' : ''}>${VeshaUI.escapeHtml(s.name)}</option>`).join('');
         // другой магазин — та же вкладка; кабинет и карточка заявки — к его доске и заявкам
         picker.addEventListener('change', () => { location.search = link({ shops: 'main', order: 'draft' }[page] || page, picker.value); });

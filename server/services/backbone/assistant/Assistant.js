@@ -25,6 +25,10 @@ function fail(message, status) {
 // channels: [CHANNEL]); демо chat-engine Vesha (канал web) разговоры магазинов не видит.
 const CHANNEL = 'shop';
 
+// Ключ разговора посетителя: «<id магазина>:<гость>» — у каждого магазина свои разговоры;
+// пустой гость — начало ключей магазина (удаление данных покупателя забывает только их).
+const visitorKey = (shop, guest) => `${shop.id}:${guest}`;
+
 class Assistant {
   constructor({
     desk, chatDesk, replyDeskOf, factsOf, answers, intake, repository, journal, statusPath,
@@ -45,7 +49,7 @@ class Assistant {
   }
 
   keyOf(shop, guest) {
-    return `${shop.id}:${guest}`;
+    return visitorKey(shop, guest);
   }
 
   // ---------- сторона посетителя: виджет витрины ----------
@@ -231,4 +235,4 @@ class Assistant {
   }
 }
 
-module.exports = { Assistant, CHANNEL };
+module.exports = { Assistant, CHANNEL, visitorKey };

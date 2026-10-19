@@ -21,6 +21,14 @@ class Journal {
     }
   }
 
+  // Единственная правка истории: обезличивание данных покупателя (152-ФЗ) переписывает
+  // data событий, где нашлись его ПДн; тип, кто, когда и почему остаются (П26, П40).
+  async scrubIn(client, patches) {
+    for (const p of patches) {
+      await client.query('UPDATE journal_events SET data = $2 WHERE id = $1', [p.id, JSON.stringify(p.data)]);
+    }
+  }
+
   async forSubject(stream, subjectId) {
     const { rows } = await this.db.query(
       'SELECT * FROM journal_events WHERE stream = $1 AND subject_id = $2 ORDER BY id',
@@ -81,6 +89,13 @@ class MemoryJournal {
         cause: e.cause || 'manual',
         at: this.now(),
       });
+    }
+  }
+
+  async scrubIn(_client, patches) {
+    for (const p of patches) {
+      const e = this.events.find((x) => String(x.id) === String(p.id));
+      if (e) e.data = { ...p.data };
     }
   }
 

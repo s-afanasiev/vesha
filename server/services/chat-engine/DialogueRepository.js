@@ -249,6 +249,23 @@ class DialogueRepository {
     return rows[0];
   }
 
+  // Забыть разговоры посетителей (удаление их персональных данных): разговор, сообщения
+  // и журнал этапов — каскадом. Только своя территория и только ключи с prefix — ключ
+  // владельца (у магазинов костяка — «<id магазина>:»); пустой prefix — отказ, а не «всё».
+  // Какие: по ключу посетителя, по id или без движения с idleBefore. → id забытых.
+  async forget({ prefix, visitorKeys = [], ids = [], idleBefore = null }) {
+    if (!prefix) throw new Error('forget: нужен prefix ключей посетителей');
+    const { rows } = await this.db.query(
+      `DELETE FROM chat_engine_dialogues
+       WHERE channel = ANY($1::text[]) AND starts_with(visitor_key, $2)
+         AND (visitor_key = ANY($3::text[]) OR id = ANY($4::uuid[])
+              OR ($5::timestamptz IS NOT NULL AND GREATEST(created_at, last_incoming_at, last_outgoing_at) < $5))
+       RETURNING id`,
+      [this.channels, prefix, visitorKeys, ids.filter(isId), idleBefore]
+    );
+    return rows.map((r) => r.id);
+  }
+
   async persona() {
     const { rows } = await this.db.query(
       'SELECT value FROM chat_engine_settings WHERE key = $1',

@@ -61,7 +61,7 @@ class Receipts {
   letter({ shop, order, event, kind, column }) {
     const link = this.statusUrl(order.status_token);
     const n = order.number;
-    const email = order.contact.includes('@');
+    const email = !order.erased_at && order.contact.includes('@'); // данные покупателя удалены — писать некому
     let subject;
     let body;
     if (kind === 'received') {
@@ -92,7 +92,7 @@ class Receipts {
       replyTo: null,                // ответ клиента — на почту магазина (letter.js)
       subject, body: `${body}\n\n— ${shop.name}`,
       status: email ? 'pending' : 'skipped',
-      lastError: email ? null : 'нет почты: квитанции по телефону — после MVP',
+      lastError: email ? null : order.erased_at ? 'данные покупателя удалены' : 'нет почты: квитанции по телефону — после MVP',
     };
   }
 
