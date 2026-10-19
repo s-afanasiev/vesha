@@ -56,12 +56,12 @@ class BackboneRepository {
 
   // Магазин с доской из шаблона. Магазин уже есть: посев из кода получает его как
   // есть (exists = 'return'), заведение из кабинета — отказ «адрес занят».
-  async createShop({ slug, name, niche, mode = 'shadow', hours = null, replyTo = null, shadowDays = null }, columns, makeEvents, { exists = 'return' } = {}) {
+  async createShop({ slug, name, niche, mode = 'shadow', hours = null, replyTo = null, shadowDays = null, operator = null }, columns, makeEvents, { exists = 'return' } = {}) {
     return this.tx(async (client) => {
       const inserted = await client.query(
-        `INSERT INTO backbone_shops (slug, name, niche, mode, hours, reply_to, shadow_days) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO backbone_shops (slug, name, niche, mode, hours, reply_to, shadow_days, operator) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (slug) DO NOTHING RETURNING *`,
-        [slug, name, niche, mode, hours && JSON.stringify(hours), replyTo, shadowDays]
+        [slug, name, niche, mode, hours && JSON.stringify(hours), replyTo, shadowDays, operator && JSON.stringify(operator)]
       );
       if (!inserted.rows[0]) {
         if (exists !== 'return') throw conflict(`Адрес магазина «${slug}» уже занят`);
@@ -93,6 +93,24 @@ class BackboneRepository {
     if (!UUID.test(String(id))) return null;
     const { rows } = await this.db.query('SELECT * FROM backbone_orders WHERE id = $1', [id]);
     return rows[0] || null;
+  }
+
+  // Заявки магазина по id с клиента (удаление данных покупателя): только этого магазина.
+  async ordersByIds(shopId, ids) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM backbone_orders WHERE shop_id = $1 AND id = ANY($2::uuid[]) ORDER BY number',
+      [shopId, ids.map(String).filter((id) => UUID.test(id))]
+    );
+    return rows;
+  }
+
+  // Заявки с данными покупателя, принятые раньше границы срока хранения.
+  async ordersBefore(shopId, before) {
+    const { rows } = await this.db.query(
+      'SELECT * FROM backbone_orders WHERE shop_id = $1 AND erased_at IS NULL AND created_at < $2 ORDER BY number',
+      [shopId, before]
+    );
+    return rows;
   }
 
   // Заявки одного клиента магазина (шаг 5, О20): по ключу гостя витрины, новые первыми.
@@ -178,12 +196,13 @@ class BackboneRepository {
     });
   }
 
-  // Описание магазина из кабинета: название, часы, почта; слаг, ниша и режим — не здесь.
-  async updateShop(shopId, { name, hours, replyTo }, events) {
+  // Описание магазина из кабинета: название, часы, почта, реквизиты оператора ПДн;
+  // слаг, ниша и режим — не здесь.
+  async updateShop(shopId, { name, hours, replyTo, operator = null }, events) {
     return this.tx(async (client) => {
       const { rows: [shop] } = await client.query(
-        'UPDATE backbone_shops SET name = $2, hours = $3, reply_to = $4 WHERE id = $1 RETURNING *',
-        [shopId, name, hours && JSON.stringify(hours), replyTo]
+        'UPDATE backbone_shops SET name = $2, hours = $3, reply_to = $4, operator = $5 WHERE id = $1 RETURNING *',
+        [shopId, name, hours && JSON.stringify(hours), replyTo, operator && JSON.stringify(operator)]
       );
       if (!shop) throw conflict('Магазин не найден');
       await this.journal.appendIn(client, events);
@@ -459,6 +478,40 @@ class BackboneRepository {
       [shopId, limit]
     );
     return rows;
+  }
+
+  // ---------- данные покупателя (152-ФЗ): обезличивание по плану Anonymizer ----------
+
+  // Одной транзакцией: заявки (имя, контакт, текст, ключи гостя и содержимого), строки
+  // черновика, синонимы, письма и данные событий журнала — и событие о самом удалении
+  // (makeEvents получает { letters }). Заявку успели обезличить параллельно — отказ, повтор безопасен.
+  async eraseOrders(shopId, { orderIds, client: erased, lines, synonyms, events: patches }, makeEvents) {
+    return this.tx(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE backbone_orders SET client = $3, contact = '', text = '', content_key = NULL, client_key = NULL, erased_at = now()
+         WHERE shop_id = $1 AND id = ANY($2::uuid[]) AND erased_at IS NULL RETURNING id`,
+        [shopId, orderIds, erased]
+      );
+      if (rows.length !== orderIds.length) throw conflict('Данные заявок уже удаляются — обновите список');
+      for (const l of lines) {
+        await client.query('UPDATE backbone_order_lines SET source = $3, name = $4 WHERE id = $1 AND shop_id = $2', [l.id, shopId, l.source, l.name]);
+      }
+      for (const s of synonyms) {
+        if (s.drop) await client.query('DELETE FROM backbone_synonyms WHERE shop_id = $1 AND phrase = $2', [shopId, s.phrase]);
+        else await client.query('UPDATE backbone_synonyms SET example = $3 WHERE shop_id = $1 AND phrase = $2', [shopId, s.phrase, s.example]);
+      }
+      // письма: адрес, ответ-куда, тема и тело уходят; ждавшие отправки — «пропущены»
+      const { rowCount: letters } = await client.query(
+        `UPDATE backbone_receipts SET address = '', reply_to = NULL, subject = 'данные покупателя удалены', body = '',
+           last_error = CASE WHEN status IN ('pending', 'failed') THEN 'данные покупателя удалены' ELSE NULL END,
+           status = CASE WHEN status IN ('pending', 'failed') THEN 'skipped' ELSE status END
+         WHERE shop_id = $1 AND order_id = ANY($2::uuid[])`,
+        [shopId, orderIds]
+      );
+      await this.journal.scrubIn(client, patches);
+      await this.journal.appendIn(client, makeEvents({ letters }));
+      return { letters };
+    });
   }
 
   // ---------- черновик счёта: строки заявки и синонимы (шаг 2) ----------

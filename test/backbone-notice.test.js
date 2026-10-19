@@ -136,7 +136,10 @@ test('privacy: the shop name, its e-mail and the terms from the assembly point �
   const { desk } = makeDesk();
   await desk.receiveFromSite(SHOP, FORM);
   const p = await desk.privacyOf(SHOP);
-  assert.deepEqual(p, { name: 'Крепёж', email: 'zakaz@shop.test', keepYears: 3, withdrawDays: 30 });
+  assert.deepEqual(p, {
+    name: 'Крепёж', email: 'zakaz@shop.test', operator: null, missing: ['наименование', 'ИНН', 'ОГРН или ОГРНИП', 'адрес'],
+    keepYears: 3, withdrawDays: 30,
+  }, 'реквизитов нет — политика неполная; почта для обращений — почта магазина');
   await assert.rejects(desk.privacyOf('nope'), /не найден/);
 
   const storefront = fs.readFileSync(path.join(__dirname, '..', 'public', 'backbone', 'index.html'), 'utf8');

@@ -46,8 +46,10 @@ const COMPONENTS = {
   'catalog-loads': { kind: 'table', actions: [] },
   chats: { kind: 'table', actions: ['propose', 'reply'] },
   'chat-messages': { kind: 'table', actions: ['approve', 'reject'] },
+  privacy: { kind: 'table', actions: [] },
+  customers: { kind: 'table', actions: ['erase', 'expired'] },
 };
-const PAGES = ['main', 'draft', 'measures', 'catalog', 'assistant'];
+const PAGES = ['main', 'draft', 'measures', 'catalog', 'assistant', 'privacy'];
 
 // Чтения и записи магазина по его адресу: все экраны, строки, карточки, действия, файл.
 function surfaces(slug, { orderId, lineId, dialogueId } = {}) {
@@ -65,7 +67,7 @@ function surfaces(slug, { orderId, lineId, dialogueId } = {}) {
       gets.push(`${base}/c/${id}/rows`, `${base}/c/${id}/ids`);
       for (const a of c.actions) {
         const ids = id === 'lines' ? [lineId] : id.startsWith('chat') ? [dialogueId] : [orderId];
-        posts.push([`${base}/c/${id}/actions/${a}`, { ids, text: 'взлом', sku: 'x', qty: '1', invoice: 'Болт — 1 шт', column: 'A' }]);
+        posts.push([`${base}/c/${id}/actions/${a}`, { ids, text: 'взлом', sku: 'x', qty: '1', invoice: 'Болт — 1 шт', column: 'A', confirm: 'yes' }]);
       }
     }
   }
@@ -206,14 +208,14 @@ test('postgres: shops are isolated — staff of A, visitors and anonymous users 
       for (const m of marksB) assert.ok(!r.raw.includes(m), `${what}: в ответе метка B «${m}»`);
     };
     const snapshotB = async () => JSON.stringify({
-      order: await sql('SELECT column_id, updated_at FROM backbone_orders WHERE shop_id = $1', [shopB.id]),
+      order: await sql('SELECT column_id, updated_at, client, contact, text, client_key, erased_at FROM backbone_orders WHERE shop_id = $1', [shopB.id]),
       lines: await sql('SELECT id, state, review, sku, invoice_qty FROM backbone_order_lines WHERE shop_id = $1 ORDER BY id', [shopB.id]),
       columns: await sql('SELECT id, title, position FROM backbone_board_columns WHERE shop_id = $1 ORDER BY id', [shopB.id]),
       events: await sql('SELECT count(*)::int AS n FROM journal_events WHERE scope = $1', [String(shopB.id)]),
       messages: await sql('SELECT id, role, state, text FROM chat_engine_messages WHERE dialogue_id = $1 ORDER BY id', [dialogB.id]),
       dialogue: await sql('SELECT stage, notes, visitor_name FROM chat_engine_dialogues WHERE id = $1', [dialogB.id]),
       load: await sql('SELECT status, mapping FROM backbone_catalog_loads WHERE id = $1', [loadB.id]),
-      receipts: await sql('SELECT status FROM backbone_receipts WHERE shop_id = $1 ORDER BY id', [shopB.id]),
+      receipts: await sql('SELECT status, address, body FROM backbone_receipts WHERE shop_id = $1 ORDER BY id', [shopB.id]),
       persona: await sql("SELECT value FROM chat_engine_settings WHERE key = 'backbone.persona'"),
     });
     const before = await snapshotB();
@@ -345,6 +347,34 @@ test('postgres: shops are isolated — staff of A, visitors and anonymous users 
       clean(map, 'map');
     });
 
+    await t.test('данные покупателя B через экран A: поиск не находит, удаление — «не найдена», срок хранения — только у A', async () => {
+      const found = await staffA.get(`/api/backbone/s/${A}/c/customers/rows?q=${encodeURIComponent(buyerB)}`);
+      assert.deepEqual([found.status, found.rows], [200, []]);
+      clean(found, 'customers search');
+      const erase = await staffA.post(`/api/backbone/s/${A}/c/customers/actions/erase`, { ids: [orderB.id], confirm: 'yes' });
+      assert.equal(erase.status, 404);
+      clean(erase, 'erase');
+      const [orderA] = await sql('SELECT id FROM backbone_orders WHERE shop_id = $1', [shopA.id]);
+      const mixed = await staffA.post(`/api/backbone/s/${A}/c/customers/actions/erase`, { ids: [orderA.id, orderB.id], confirm: 'yes' });
+      assert.equal(mixed.status, 404, 'своя и чужая заявка — отказ целиком');
+      const [still] = await sql('SELECT erased_at FROM backbone_orders WHERE id = $1', [orderA.id]);
+      assert.equal(still.erased_at, null, 'и своя не тронута');
+      const bad = await staffA.post(`/api/backbone/s/${A}/c/customers/actions/erase`, { ids: ["1' OR '1'='1"], confirm: 'yes' });
+      assert.equal(bad.status, 404, 'id не в форме UUID — «не найдена»');
+      assert.doesNotMatch(bad.raw, /syntax|uuid/i);
+      const expired = await staffA.post(`/api/backbone/s/${A}/c/customers/actions/expired`, {});
+      assert.equal(expired.status, 200, expired.error);
+      assert.match(expired.result.message, /старше срока хранения нет/);
+      clean(expired, 'expired');
+      // своя заявка — сотруднику можно: данные покупателя удалены, данные B не тронуты (снимок ниже)
+      const own = await staffA.post(`/api/backbone/s/${A}/c/customers/actions/erase`, { ids: [orderA.id], confirm: 'yes' });
+      assert.equal(own.status, 200, own.error);
+      assert.match(own.result.message, /заявок 1 \(№1\)/);
+      const [gone] = await sql('SELECT client, erased_at FROM backbone_orders WHERE id = $1', [orderA.id]);
+      assert.equal(gone.client, 'данные удалены');
+      assert.ok(gone.erased_at);
+    });
+
     await t.test('квитанции: «Отправить ожидающие» в кабинете A — только письма A, очередь B не тронута и не сосчитана', async () => {
       const sent = await staffA.post(`/api/backbone/s/${A}/c/receipts/actions/send`, {});
       assert.equal(sent.status, 200, sent.error);
@@ -353,7 +383,8 @@ test('postgres: shops are isolated — staff of A, visitors and anonymous users 
 
     await t.test('данные A — без меток B: доска, журнал, черновики, строки, синонимы, каталог, замеры, письма, разговоры', async () => {
       for (const p of ['board/cards', 'journal/rows?limit=500', 'drafts/rows', 'lines/rows', 'synonyms/rows', 'catalog/rows?limit=500', 'summary/rows',
-        'weeks/rows', 'receipts/rows', 'chats/rows', 'chat-messages/rows', 'catalog-loads/rows', 'catalog-rejects/rows', 'catalog-fields/rows', 'board/meta']) {
+        'weeks/rows', 'receipts/rows', 'chats/rows', 'chat-messages/rows', 'catalog-loads/rows', 'catalog-rejects/rows', 'catalog-fields/rows', 'board/meta',
+        'customers/rows', 'privacy/rows']) {
         const r = await staffA.get(`/api/backbone/s/${A}/c/${p}`);
         assert.equal(r.status, 200, `${p}: ${r.error}`);
         clean(r, p);

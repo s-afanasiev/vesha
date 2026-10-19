@@ -9,6 +9,8 @@
 // Поле действия type: 'file' — тело приходит multipart (в памяти, не больше
 // maxBytes), файл ложится в body[key] как { name, size, data }; options —
 // выбор из списка, чужое значение — 400.
+// search — ключи строки (подстрока в любом) или функция (строка, запрос) → да/нет:
+// домен сам приводит запрос к своей записи (телефон любым видом, почта любым регистром).
 
 const express = require('express');
 const multer = require('multer');
@@ -39,7 +41,7 @@ function router(decl) {
         ...(c.note ? { note: c.note } : {}),
         ...(c.label ? { label: c.label } : {}), // render: 'link' — текст ссылки из этого поля строки
       })),
-      search: Array.isArray(decl.search) && decl.search.length > 0,
+      search: typeof decl.search === 'function' || (Array.isArray(decl.search) && decl.search.length > 0),
       select: {
         presets: ((decl.select && decl.select.presets) || []).map((p) => ({ id: p.id, name: p.name })),
       },
@@ -140,7 +142,9 @@ async function viewOf(decl, limits, query, { idsOnly = false, user = null } = {}
 
   let list = Array.isArray(all) ? all : [];
   const q = typeof query.q === 'string' ? query.q.trim().toLowerCase() : '';
-  if (q && Array.isArray(decl.search)) {
+  if (q && typeof decl.search === 'function') {
+    list = list.filter((row) => decl.search(row, q));
+  } else if (q && Array.isArray(decl.search)) {
     list = list.filter((row) =>
       decl.search.some((k) => String(row[k] ?? '').toLowerCase().includes(q)));
   }

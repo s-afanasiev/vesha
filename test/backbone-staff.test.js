@@ -281,10 +281,10 @@ test('postgres: a new e-mail gets an account with a password from the admin; an 
     const joined = await invitee.post('/api/backbone/invite', { token });
     assert.deepEqual([joined.status, joined.slug], [200, own], joined.error);
     assert.equal((await squatter.post('/api/backbone/invite', { token })).status, 404, 'ссылка одноразовая');
-    assert.deepEqual((await invitee.get('/api/backbone/me')).shops, [{ slug: own, name: 'Магазин сотрудника', demo: false }]);
+    assert.deepEqual((await invitee.get('/api/backbone/me')).shops, [{ slug: own, name: 'Магазин сотрудника', demo: false, missing: ['наименование', 'ИНН', 'ОГРН или ОГРНИП', 'адрес', 'почта для обращений'] }]);
 
     const me = await staff.get('/api/backbone/me');
-    assert.deepEqual([me.status, me.email, me.admin, me.shops], [200, email, false, [{ slug: own, name: 'Магазин сотрудника', demo: false }]]);
+    assert.deepEqual([me.status, me.email, me.admin, me.shops], [200, email, false, [{ slug: own, name: 'Магазин сотрудника', demo: false, missing: ['наименование', 'ИНН', 'ОГРН или ОГРНИП', 'адрес', 'почта для обращений'] }]]);
 
     // свой магазин: доска, черновики, замеры, каталог — экраны и данные
     for (const page of ['main', 'draft', 'measures', 'catalog']) {

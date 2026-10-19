@@ -35,7 +35,7 @@ Components({
       { key: 'rating', name: 'Рейтинг', type: 'num', sortable: true },
       // ...
     ],
-    search: ['name', 'address'],
+    search: ['name', 'address'],                    // или (row, q) => bool — домен сам читает запрос (телефон любой записью)
     select: { presets: [{ id: 'nosite', name: 'Только без сайта', where: r => r.site_scanned && !r.site }] },
     actions: [
       { id: 'scan-sites', name: 'Скан контактов', bulk: true, max: 120,

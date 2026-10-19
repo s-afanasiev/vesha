@@ -112,13 +112,13 @@ test('shop form: days and hours in human words, slug and e-mail checked before t
   const shop = form.create({ slug: ' Krepezh-Kursk ', name: 'Крепёж  Курск', niche: 'hardware', days: 'пн-пт', time: '8-17', email: 'zakaz@kk.test' });
   assert.deepEqual(shop, {
     slug: 'krepezh-kursk', name: 'Крепёж Курск', niche: 'hardware',
-    hours: { days: [1, 2, 3, 4, 5], from: '08:00', to: '17:00' }, replyTo: 'zakaz@kk.test',
+    hours: { days: [1, 2, 3, 4, 5], from: '08:00', to: '17:00' }, replyTo: 'zakaz@kk.test', operator: null,
   });
   assert.throws(() => form.create({ slug: 'кр', name: 'Магазин' }), /латиница/);
   assert.throws(() => form.create({ slug: 'shop-1', name: 'Магазин', niche: 'bakery' }), /Ниша/);
   assert.throws(() => form.create({ slug: 'shop-1', name: 'Магазин', email: 'не почта' }), /не похоже на адрес/);
   const changed = form.change({ time: '9-18', email: '-' }, { name: 'Старое', hours: { days: [1, 2], from: '08:00', to: '17:00' }, reply_to: 'a@b.ru' });
-  assert.deepEqual(changed, { name: 'Старое', hours: { days: [1, 2], from: '09:00', to: '18:00' }, replyTo: null }, 'пустое — прежнее, «-» — убрать почту');
+  assert.deepEqual(changed, { name: 'Старое', hours: { days: [1, 2], from: '09:00', to: '18:00' }, replyTo: null, operator: null }, 'пустое — прежнее, «-» — убрать почту');
 });
 
 // ---------- выгрузка каталога ----------

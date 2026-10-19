@@ -1,5 +1,5 @@
 // Квитанции настоящим письмом (§10, шаг 6): тот же контракт send({ to, subject,
-// body, shop, replyTo }), что у FileMailbox, — точка сборки берёт его, когда в .env задан
+// body, shop, replyTo }) и forget(), что у FileMailbox, — точка сборки берёт его, когда в .env задан
 // BACKBONE_SMTP_HOST. SMTP без библиотек — столько, сколько нужно одному письму
 // (как zip у xlsx): EHLO, STARTTLS (587) или TLS сразу (465), AUTH PLAIN / LOGIN,
 // MAIL FROM, RCPT TO, DATA. Тело — base64: ни 8BITMIME, ни длинные строки не нужны.
@@ -144,6 +144,12 @@ class SmtpMailbox {
     } finally {
       session.socket.destroy();
     }
+  }
+
+  // Удаление данных покупателя: письмо ушло адресату — копий у сайта нет, забывать нечего
+  // (тот же контракт forget, что у FileMailbox).
+  async forget() {
+    return 0;
   }
 }
 

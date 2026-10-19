@@ -26,11 +26,15 @@
 // помощник разбирает тихо, черновик — после счёта менеджера), «Помощь» (help — черновик
 // сразу). «Помощь» без набранной меры — подтверждением (решение пользователя). Карточка
 // заявки «две колонки» — orderCard: текст покупателя и как понял помощник.
+// 152-ФЗ (19.10.2026): реквизиты оператора в политике витрины (privacyOf, policyOf — чего не
+// хватает); данные покупателя удаляются по его запросу и по сроку хранения одним узлом
+// (Erasure): заявки, строки, письма, журнал, переписка — событие personal_data_erased.
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
 const { anchorText, pairByPlace } = require('./invoice/RequestText');
 const { sameLine } = require('./invoice/FinalInvoice');
+const { missingOf } = require('./privacy/Requisites');
 const crypto = require('node:crypto');
 
 // Положения тумблера разбора: id — в таблице магазинов и событиях mode_changed.
@@ -78,7 +82,7 @@ class BackboneDesk {
   constructor({
     repository, journal, board, path, templateOf, shops = {}, tool = null, toolOf = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
-    intake = null, statusPage = null, receipts = null, privacy = null,
+    intake = null, statusPage = null, receipts = null, privacy = null, erasure = null,
     shopForm = null, catalogs = null, catalogFile = null, access = null, invites = { days: 7 }, accounts = null,
     autoParse = false,
   }) {
@@ -104,6 +108,7 @@ class BackboneDesk {
     this.statusPage = statusPage; // окно статуса клиента
     this.receipts = receipts;     // квитанции: проекция журнала и доставка
     this.privacy = privacy;       // политика ПДн витрины: { keepYears, withdrawDays }
+    this.erasure = erasure;       // удаление данных покупателя: по запросу и по сроку хранения
   }
 
   // Магазин по slug — из таблицы; посев из кода (демо) заводится при первом обращении.
@@ -129,7 +134,7 @@ class BackboneDesk {
       },
       ...(cabinet ? [{
         stream: 'shop', scope: shop.id, subjectId: shop.id, type: 'shop_opened',
-        data: { slug: fields.slug, name: fields.name, niche: fields.niche, mode: fields.mode, hours: fields.hours, replyTo: fields.replyTo },
+        data: { slug: fields.slug, name: fields.name, niche: fields.niche, mode: fields.mode, hours: fields.hours, replyTo: fields.replyTo, operator: fields.operator || null },
         actor, cause: 'cabinet',
       }] : []),
     ], { exists });
@@ -150,13 +155,14 @@ class BackboneDesk {
     return this.open({ ...form, mode: 'shadow' }, actor, { exists: 'fail', cabinet: true });
   }
 
-  // Правка из кабинета: название, часы, почта для квитанций. Адрес, ниша и режим — не здесь.
+  // Правка из кабинета: название, часы, почта для квитанций, реквизиты оператора ПДн.
+  // Адрес, ниша и режим — не здесь.
   async changeShop(slug, fields, actor) {
     const shop = await this.shop(slug);
     const next = this.shopForm.change(fields, shop);
     return this.repository.updateShop(shop.id, next, [{
       stream: 'shop', scope: shop.id, subjectId: shop.id, type: 'shop_changed',
-      data: { name: next.name, hours: next.hours, replyTo: next.replyTo }, actor, cause: 'cabinet',
+      data: { name: next.name, hours: next.hours, replyTo: next.replyTo, operator: next.operator }, actor, cause: 'cabinet',
     }]);
   }
 
@@ -494,11 +500,39 @@ class BackboneDesk {
     });
   }
 
-  // Политика обработки персональных данных витрины (152-ФЗ): кто обрабатывает, сроки,
-  // почта для отзыва согласия — из таблицы магазинов; контактов клиентов здесь нет.
+  // Политика ПДн магазина: оператор — реквизиты из кабинета, почта для обращений — своя
+  // или почта магазина; missing — чего не хватает (пусто — политика полная).
+  policyOf(shop) {
+    const op = shop.operator || null;
+    return {
+      operator: op && (op.name || op.inn || op.ogrn || op.address) ? { name: op.name, inn: op.inn, ogrn: op.ogrn, address: op.address } : null,
+      email: (op && op.email) || shop.reply_to || null,
+      missing: missingOf(op, shop.reply_to),
+    };
+  }
+
+  // Политика обработки персональных данных витрины (152-ФЗ): оператор с реквизитами,
+  // сроки, почта для отзыва согласия — из таблицы магазинов; контактов клиентов здесь нет.
   async privacyOf(slug) {
     const shop = await this.shop(slug);
-    return { name: shop.name, email: shop.reply_to || null, ...this.privacy };
+    return { name: shop.name, ...this.policyOf(shop), ...this.privacy };
+  }
+
+  // ---------- данные покупателя (152-ФЗ): найти, удалить по запросу и по сроку ----------
+
+  // Заявки магазина с днём, до которого хранятся данные покупателя.
+  async customers(slug) {
+    return this.erasure.ledger(await this.shop(slug));
+  }
+
+  // «Удалить данные покупателя» — выбранные заявки этого магазина (отзыв согласия, запрос).
+  async eraseCustomer(slug, orderIds, actor) {
+    return this.erasure.byRequest(await this.shop(slug), orderIds, actor);
+  }
+
+  // Срок хранения вышел — тем же узлом, что по запросу; кнопка в кабинете и таймер.
+  async eraseExpired(slug, actor) {
+    return this.erasure.expired(await this.shop(slug), { actor });
   }
 
   async receiptsOf(slug) {

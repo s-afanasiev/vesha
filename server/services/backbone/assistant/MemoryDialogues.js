@@ -112,6 +112,17 @@ class MemoryDialogues {
     return { ...d };
   }
 
+  async forget({ prefix, visitorKeys = [], ids = [], idleBefore = null }) {
+    if (!prefix) throw new Error('forget: нужен prefix ключей посетителей');
+    const last = (d) => Math.max(...[d.created_at, d.last_incoming_at, d.last_outgoing_at].filter(Boolean).map((t) => new Date(t).getTime()));
+    const gone = this.rows.filter((d) => d.visitor_key.startsWith(prefix)
+      && (visitorKeys.includes(d.visitor_key) || ids.includes(d.id) || (idleBefore && last(d) < new Date(idleBefore).getTime())));
+    const out = new Set(gone.map((d) => d.id));
+    this.rows = this.rows.filter((d) => !out.has(d.id));
+    this.msgs = this.msgs.filter((m) => !out.has(m.dialogue_id));
+    return [...out];
+  }
+
   async persona() {
     return this.personaText;
   }

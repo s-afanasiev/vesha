@@ -1,7 +1,9 @@
 // Форма магазина из кабинета (docs/backbone-architecture.md §10, шаг 6): магазин
 // заводится без правки кода. Форма — слова человека («пн–сб», «9–19»), выход —
 // описание, которое понимают WorkingHours и квитанции. Ошибка — отказ с именем
-// поля до базы.
+// поля до базы. Реквизиты оператора ПДн для политики витрины — privacy/Requisites.
+
+const { operatorOf } = require('../privacy/Requisites');
 
 const DAYS = { пн: 1, вт: 2, ср: 3, чт: 4, пт: 5, сб: 6, вс: 7 };
 const DAY_NAMES = Object.keys(DAYS);
@@ -74,7 +76,8 @@ class ShopForm {
     this.niches = niches; // ниши, для которых есть шаблон доски
   }
 
-  // Новый магазин: { slug, name, niche, hours, replyTo }
+  // Новый магазин: { slug, name, niche, hours, replyTo, operator }; реквизиты оператора — по желанию
+  // (без них политика неполная: кабинет предупреждает).
   create(fields = {}) {
     const slug = String(fields.slug ?? '').trim().toLowerCase();
     if (!SLUG.test(slug)) throw bad('Адрес (slug): латиница, цифры и дефис, от 3 до 40 знаков — например, krepezh-kursk');
@@ -84,10 +87,11 @@ class ShopForm {
       slug, name: nameOf(fields.name), niche,
       hours: { days: parseDays(fields.days), ...parseTime(fields.time) },
       replyTo: replyToOf(fields.email),
+      operator: operatorOf(fields),
     };
   }
 
-  // Правка из кабинета: пустое поле — прежнее значение; «-» в почте — убрать адрес.
+  // Правка из кабинета: пустое поле — прежнее значение; «-» в почте и реквизитах — убрать.
   change(fields = {}, shop) {
     const blank = (v) => !String(v ?? '').trim();
     const hours = shop.hours || { days: [1, 2, 3, 4, 5, 6], from: '09:00', to: '19:00' };
@@ -98,6 +102,7 @@ class ShopForm {
         ...(blank(fields.time) ? { from: hours.from, to: hours.to } : parseTime(fields.time)),
       },
       replyTo: blank(fields.email) ? shop.reply_to : String(fields.email).trim() === '-' ? null : replyToOf(fields.email),
+      operator: operatorOf(fields, shop.operator),
     };
   }
 
