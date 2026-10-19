@@ -7,3 +7,5 @@ data/
 dist/
 !docs/economic-strength/data/
 .playwright-mcp/
+
+__pycache__/
