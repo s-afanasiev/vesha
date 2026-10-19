@@ -197,7 +197,7 @@ test('postgres: the admin adds an e-mail, the employee registers with it and wor
     assert.equal(registered.status, 201, registered.error);
 
     const me = await staff.get('/api/backbone/me');
-    assert.deepEqual([me.status, me.email, me.admin, me.shops], [200, email, false, [{ slug: own, name: 'Магазин сотрудника' }]]);
+    assert.deepEqual([me.status, me.email, me.admin, me.shops], [200, email, false, [{ slug: own, name: 'Магазин сотрудника', demo: false }]]);
 
     // свой магазин: доска, черновики, замеры, каталог — экраны и данные
     for (const page of ['main', 'draft', 'measures', 'catalog']) {

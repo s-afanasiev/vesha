@@ -6,13 +6,16 @@
 // типа «ждём клиента», «готово», «отказ»; квитанции шага 4 добавятся сюда же.
 // Минуты менеджера — активное время над черновиком: правки, выгрузка, отправка
 // счёта; паузы длиннее sessionGap не считаются (событие «открыл черновик» — с витриной).
-// Режим заявки — тот, что был у магазина в момент приёма (тень — база «до»).
+// Режим заявки — тот, что был у магазина в момент приёма: «Сравнение» (shadow) — база
+// «до», «Помощь» (help) — «после»; заявки при выключенном разборе (off) — ни там, ни там.
+// Время помощника — сколько секунд шёл разбор (parsed.data.ms, с 18.10.2026).
+// Нейросеть по кнопке после счёта менеджера — своя точность (model_parsed.data.invoice, 19.10.2026).
 // Ассистент (шаг 5) — вопросы в чате: ответил сам или ждали менеджера (поток chat).
 
 const { DAY_MS } = require('./WorkingHours');
 
 const REPLY_TYPES = new Set(['waiting_client', 'done', 'refused']);
-const WORK_TYPES = new Set(['reviewed', 'invoice_exported', 'invoice_sent']);
+const WORK_TYPES = new Set(['reviewed', 'client_asked', 'invoice_exported', 'invoice_sent']);
 
 const median = (xs) => {
   if (!xs.length) return null;
@@ -51,7 +54,7 @@ class Measures {
         card = {
           id: e.subject_id, number: e.data.number, receivedAt: t, org: !!e.data.org,
           mode: Measures.modeAt(changes, t, mode), type: e.data.columnType || 'inbox', typeSince: t,
-          firstReplyAt: null, invoiceAt: null, invoice: null, draft: null, edited: new Set(), work: [],
+          firstReplyAt: null, invoiceAt: null, invoice: null, draft: null, edited: new Set(), work: [], parseMs: null, modelInvoice: null,
         };
         byOrder.set(e.subject_id, card);
         continue;
@@ -62,6 +65,8 @@ class Measures {
         card.typeSince = t;
         if (REPLY_TYPES.has(e.data.toType) && card.firstReplyAt == null) card.firstReplyAt = t;
       }
+      if (e.type === 'parsed' && e.data.ms != null && card.invoiceAt == null) card.parseMs = e.data.ms;
+      if (e.type === 'model_parsed' && e.data.invoice) card.modelInvoice = e.data.invoice; // нейросеть против счёта менеджера
       if (e.type === 'draft_ready' && card.invoiceAt == null) {
         card.draft = e.data;
         card.edited = new Set();
@@ -115,6 +120,13 @@ class Measures {
       replyMinutes: median(replied.map((c) => this.hours.minutes(c.receivedAt, c.firstReplyAt))),
       invoiceMinutes: median(invoiced.map((c) => this.hours.minutes(c.receivedAt, c.invoiceAt))),
       managerMinutes: median(invoiced.filter((c) => c.invoice.mode === 'help').map((c) => this.activeMinutes(c.work)).filter((x) => x != null)),
+      helperMs: median(cards.filter((c) => c.parseMs != null).map((c) => c.parseMs)),
+      modelAccuracy: (() => {
+        const list = cards.filter((c) => c.modelInvoice && c.modelInvoice.base > 0);
+        const right = list.reduce((t, c) => t + c.modelInvoice.matched, 0);
+        const base = list.reduce((t, c) => t + c.modelInvoice.base, 0);
+        return { value: share(right, base), right, base, orders: list.length };
+      })(),
       shadowAccuracy: accuracy('shadow'),
       untouched: accuracy('help'),
       missingShare: share(drafted.reduce((s, c) => s + c.draft.missing, 0), lines),
@@ -125,7 +137,8 @@ class Measures {
   }
 
   // Ассистент без менеджера (шаг 5): вопросы в чате, на которые ассистент ответил сам,
-  // против ждавших менеджера; режим — тот, что был у магазина в момент вопроса.
+  // против ждавших менеджера; режим — тот, что был у магазина в момент вопроса
+  // (при выключенном разборе вопрос не считается ни «до», ни «после»).
   assistant(events, { mode }) {
     const changes = events.filter((e) => e.type === 'mode_changed');
     const out = { shadow: { auto: 0, manager: 0 }, help: { auto: 0, manager: 0 } };
@@ -133,7 +146,8 @@ class Measures {
       if (e.stream !== 'chat') continue;
       const kind = { assistant_answered: 'auto', assistant_deferred: 'manager' }[e.type];
       if (!kind) continue;
-      (out[Measures.modeAt(changes, ms(e.at), mode)] || out.help)[kind] += 1;
+      const bucket = out[Measures.modeAt(changes, ms(e.at), mode)];
+      if (bucket) bucket[kind] += 1;
     }
     for (const v of Object.values(out)) v.share = share(v.auto, v.auto + v.manager);
     return out;

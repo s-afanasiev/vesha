@@ -16,6 +16,8 @@
   <link rel="stylesheet" href="/c/ui.css" />
   <link rel="stylesheet" href="/c/table.css" />
   <link rel="stylesheet" href="/c/kanban.css" />
+  <link rel="stylesheet" href="/c/switch.css" />
+  <link rel="stylesheet" href="/c/extract.css" />
   <link rel="stylesheet" href="/c/page.css" />
   <style>
     .boot-pages { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
@@ -59,11 +61,15 @@
   <script src="/c/ui.js"></script>
   <script src="/c/table.js"></script>
   <script src="/c/kanban.js"></script>
+  <script src="/c/switch.js"></script>
+  <script src="/c/extract.js"></script>
   <script src="/c/boot.js"></script>
   <script>
     // экран — из ?page=, магазин — из ?shop=; спеки — server/services/backbone/pages.js.
     // Какие магазины и вкладки показать — /api/backbone/me: админу — все магазины и
     // «Магазины», сотруднику — его магазины. Скрытие — удобство, граница — на сервере.
+    // Карточка заявки (?page=order&order=<id>) — часть экрана «Черновики счетов». Вкладка
+    // «Магазины» на установке с одним магазином (демо не в счёт) — «Настройки и доступ».
     const params = new URLSearchParams(location.search);
     const asked = params.get('page');
     const picker = document.getElementById('boot-shop');
@@ -79,8 +85,10 @@
         if (status === 401) return say('Войдите: кабинет открыт админу и сотрудникам магазина.');
         if (status !== 200) return say(body.error || `HTTP ${status}`);
         const { admin, shops } = body;
-        document.querySelector('.boot-pages [data-page="shops"]').hidden = !admin;
-        const page = ['draft', 'measures', 'catalog', 'assistant', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
+        const settings = document.querySelector('.boot-pages [data-page="shops"]');
+        settings.hidden = !admin;
+        if (shops.filter((s) => !s.demo).length <= 1) settings.textContent = 'Настройки и доступ';
+        const page = ['draft', 'order', 'measures', 'catalog', 'assistant', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
         const shop = params.get('shop') || (admin ? 'demo-krepezh' : shops[0] && shops[0].slug);
         if (!shop) return say('Вашей почте пока не открыт ни один магазин — попросите админа добавить её на экране «Магазины».');
         // выбор магазина и вкладки — только тому, кому есть что открыть
@@ -88,12 +96,13 @@
         document.querySelector('.boot-pages').hidden = false;
         const link = (p, s = shop) => `?${new URLSearchParams({ shop: s, page: p })}`;
         for (const a of document.querySelectorAll('.boot-pages a')) a.href = link(a.dataset.page);
-        document.querySelector(`.boot-pages [data-page="${page}"]`).setAttribute('aria-current', 'page');
+        document.querySelector(`.boot-pages [data-page="${page === 'order' ? 'draft' : page}"]`).setAttribute('aria-current', 'page');
         document.getElementById('boot-site').href = `/backbone/?shop=${encodeURIComponent(shop)}`;
         // адрес не из списка остаётся в выборе — его экраны ответят отказом сервера
         const list = shops.some((s) => s.slug === shop) ? shops : [{ slug: shop, name: shop }, ...shops];
         picker.innerHTML = list.map((s) => `<option value="${VeshaUI.escapeHtml(s.slug)}"${s.slug === shop ? ' selected' : ''}>${VeshaUI.escapeHtml(s.name)}</option>`).join('');
-        picker.addEventListener('change', () => { location.search = link(page === 'shops' ? 'main' : page, picker.value); });
+        // другой магазин — та же вкладка; кабинет и карточка заявки — к его доске и заявкам
+        picker.addEventListener('change', () => { location.search = link({ shops: 'main', order: 'draft' }[page] || page, picker.value); });
         VeshaBoot.boot(page === 'shops'
           ? '/api/backbone/c/pages/shops'
           : `/api/backbone/s/${encodeURIComponent(shop)}/c/pages/${page}`);

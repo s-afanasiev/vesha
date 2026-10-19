@@ -1,0 +1,207 @@
+/* v-extract@1 — складской рендерер контракта extract@1 (docs/ui-components.md §3).
+   Токены --vx-* со светлыми дефолтами; тон пункта — класс .vx--ok | .vx--ask | .vx--miss.
+   Узкий экран — колонки друг под другом, длинные строки переносятся (без горизонтальной
+   прокрутки). */
+
+v-extract {
+  display: block;
+  --vx-card: #fff;
+  --vx-inset: #f4f5f7;
+  --vx-line: #d9dde3;
+  --vx-text: #1c2430;
+  --vx-faint: #6b7280;
+  --vx-accent: #3d6ec9;
+  --vx-lit: #fff3c4;
+  --vx-ok: #2f8f57;
+  --vx-ok-bg: #eef8f1;
+  --vx-ask: #a86a07;
+  --vx-ask-bg: #fdf6e7;
+  --vx-miss: #b3452f;
+  --vx-miss-bg: #fdf1ee;
+  --vx-mono: ui-monospace, Consolas, "Cascadia Mono", monospace;
+}
+
+.vx { display: grid; gap: 12px; color: var(--vx-text); font-size: 14px; }
+.vx * { box-sizing: border-box; }
+
+.vx-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.vx-title { font-size: 17px; }
+.vx-sub { color: var(--vx-faint); font-size: 13px; }
+
+.vx-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; width: 100%; }
+.vx-facts li { padding: 3px 9px; border-radius: 999px; background: var(--vx-inset); font-size: 12.5px; }
+.vx-facts span { color: var(--vx-faint); }
+
+.vx-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 14px;
+  align-items: start;
+}
+/* источник и два прочтения: три колонки на широком, источник сверху на среднем */
+.vx-cols--3 { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 1100px) {
+  .vx-cols--3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .vx-cols--3 > .vx-col--src { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .vx-cols, .vx-cols--3 { grid-template-columns: minmax(0, 1fr); }
+}
+
+.vx-col {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--vx-line);
+  border-radius: 12px;
+  background: var(--vx-card);
+}
+.vx-col-title { margin: 0 0 8px; font-size: 14.5px; }
+.vx-note { margin: 0 0 8px; color: var(--vx-faint); font-size: 12.5px; }
+
+/* источник: строки с номерами, прокрутка внутри колонки */
+.vx-src {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 70vh;
+  overflow: auto;
+  font-family: var(--vx-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+@media (max-width: 760px) { .vx-src { max-height: 45vh; } }
+
+.vx-line { display: grid; grid-template-columns: 2.4em minmax(0, 1fr); gap: 6px; padding: 1px 4px; border-radius: 4px; cursor: pointer; }
+.vx-line:hover { background: var(--vx-inset); }
+.vx-line.is-lit { background: var(--vx-lit); }
+.vx-n { color: var(--vx-faint); text-align: right; user-select: none; }
+.vx-t { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* закрытая или спрятанная под «глаз» правая колонка */
+.vx-gate {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 14px;
+  border: 1px dashed var(--vx-line);
+  border-radius: 10px;
+  background: var(--vx-inset);
+  line-height: 1.45;
+}
+.vx-gate p { margin: 0; }
+.vx-reason { margin: 0 0 8px; color: var(--vx-faint); font-size: 13px; }
+
+.vx-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 8px; font-size: 12.5px; color: var(--vx-faint); }
+.vx-legend-i { display: inline-flex; gap: 5px; align-items: center; }
+
+.vx-items { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+
+.vx-item {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--vx-line);
+  border-left-width: 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.vx-item:focus-visible { outline: 2px solid var(--vx-accent); outline-offset: 1px; }
+.vx-item.is-on { box-shadow: 0 0 0 2px var(--vx-accent); }
+.vx-item.is-near { box-shadow: 0 0 0 2px var(--vx-lit), 0 0 0 3px var(--vx-line); }
+
+/* совет колонки: «механика справилась плохо — стоит распознать нейросетью» */
+.vx-hint {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--vx-ask-bg);
+  color: var(--vx-ask);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.vx--ok.vx-item { border-left-color: var(--vx-ok); background: var(--vx-ok-bg); }
+.vx--ask.vx-item { border-left-color: var(--vx-ask); background: var(--vx-ask-bg); }
+.vx--miss.vx-item { border-left-color: var(--vx-miss); background: var(--vx-miss-bg); }
+
+.vx-item-main { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.vx-text { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.vx-dot {
+  display: inline-grid; place-items: center; flex: none;
+  width: 1.35em; height: 1.35em; border-radius: 50%;
+  color: #fff; font-size: 11px; font-weight: 700;
+}
+.vx--ok .vx-dot { background: var(--vx-ok); }
+.vx--ask .vx-dot { background: var(--vx-ask); }
+.vx--miss .vx-dot { background: var(--vx-miss); }
+.vx-tag { padding: 1px 7px; border-radius: 999px; background: var(--vx-card); border: 1px solid var(--vx-line); font-size: 11.5px; color: var(--vx-faint); }
+.vx-where { font-size: 11.5px; color: var(--vx-faint); }
+.vx-item-sub { font-size: 12.5px; color: var(--vx-faint); overflow-wrap: anywhere; }
+.vx-item-note { font-size: 12.5px; }
+
+.vx-pair { font-size: 12.5px; overflow-wrap: anywhere; }
+.vx-pair::before { margin-right: 5px; font-weight: 700; }
+.vx-pair--same { color: var(--vx-ok); }
+.vx-pair--same::before { content: '='; }
+.vx-pair--diff { color: var(--vx-miss); }
+.vx-pair--diff::before { content: '≠'; }
+.vx-extra { margin: 8px 0 0; padding: 0 0 0 4px; list-style: none; display: grid; gap: 4px; }
+
+.vx-item-acts, .vx-bar, .vx-form-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.vx-item-acts { margin-top: 4px; }
+.vx-bar { margin: 4px 0 10px; }
+
+.vx-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--vx-line);
+  border-radius: 8px;
+  background: var(--vx-card);
+  color: var(--vx-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.vx-btn:hover:not(:disabled) { border-color: var(--vx-accent); }
+.vx-btn:disabled { opacity: .55; cursor: progress; }
+.vx-btn--main { background: var(--vx-accent); border-color: var(--vx-accent); color: #fff; font-weight: 600; }
+.vx-btn--eye { font-weight: 600; }
+.vx-btn--choice { font-size: 12.5px; }
+.vx-btn--choice[hidden] { display: none; }
+.vx-differs { font-weight: 700; color: var(--vx-text); }
+.vx-item:not(.is-on) .vx-item-acts--more { display: none; }
+.vx-choose { align-self: center; font-size: 12.5px; color: var(--vx-faint); }
+
+/* «ещё N вариантов»: свёрнуто; внутри — поиск и фильтр по отличию */
+.vx-more { margin-top: 4px; font-size: 12.5px; }
+.vx-more > summary { cursor: pointer; color: var(--vx-accent); }
+.vx-more-tools { display: grid; gap: 6px; margin: 6px 0; }
+.vx-filter {
+  width: 100%; padding: 5px 8px; border: 1px solid var(--vx-line); border-radius: 7px;
+  background: var(--vx-card); color: var(--vx-text); font: inherit; font-size: 12.5px;
+}
+.vx-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.vx-chip {
+  padding: 2px 8px; border: 1px solid var(--vx-line); border-radius: 999px;
+  background: var(--vx-card); color: var(--vx-text); font: inherit; font-size: 12px; cursor: pointer;
+}
+.vx-chip.is-on { background: var(--vx-accent); border-color: var(--vx-accent); color: #fff; }
+.vx-more-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 260px; overflow: auto; }
+.vx-link { border: 0; background: none; padding: 0; color: var(--vx-accent); font: inherit; cursor: pointer; text-decoration: underline; }
+
+.vx-form { display: grid; gap: 8px; margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--vx-inset); cursor: default; }
+.vx-form[hidden] { display: none; }
+.vx-form-title { font-weight: 600; }
+.vx-field { display: grid; gap: 4px; font-size: 13px; }
+.vx-field input, .vx-field textarea {
+  width: 100%; padding: 6px 9px; border: 1px solid var(--vx-line); border-radius: 7px;
+  background: var(--vx-card); color: var(--vx-text); font: inherit; font-size: 13px;
+}
+.vx-field textarea { font-family: var(--vx-mono); font-size: 12px; }
+
+.vx-msg { margin-top: 8px; font-size: 13px; color: var(--vx-faint); }
+.vx-msg:empty { display: none; }
+.vx-msg--err { color: var(--vx-miss); }

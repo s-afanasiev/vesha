@@ -478,6 +478,15 @@ class BackboneRepository {
     });
   }
 
+  // Вопрос клиенту у строки («Спросить клиента») и событие — одной транзакцией.
+  async setQuestion(lineId, question, events) {
+    return this.tx(async (client) => {
+      const { rowCount } = await client.query('UPDATE backbone_order_lines SET question = $2 WHERE id = $1', [lineId, question]);
+      if (!rowCount) throw conflict('Строка черновика изменилась — обновите черновик');
+      await this.journal.appendIn(client, events);
+    });
+  }
+
   // Правка менеджера: строки, синонимы и события — одной транзакцией; заявки
   // блокируются по порядку id, чтобы встречные правки не сцепились.
   async reviewLines(orderIds, patches, synonyms, events) {

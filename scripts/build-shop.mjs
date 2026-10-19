@@ -85,6 +85,7 @@ export const MANIFEST = {
     '024_backbone_shop_notice.sql',
     '025_backbone_shop_staff.sql',
     '026_backbone_assistant.sql',
+    '029_backbone_mode_off.sql',
   ],
   // пакеты — версии из корневого package.json и package-lock.json
   dependencies: [

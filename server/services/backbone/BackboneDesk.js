@@ -21,10 +21,21 @@
 // успешном чтении (О17). Инструмент разбора строится на каталоге магазина (toolOf).
 // Сотрудники магазина: админ добавляет почту магазину, сотрудник входит обычной
 // регистрацией и видит только свой магазин; кто куда входит — правило ShopAccess.
+// Тумблер разбора (18.10.2026): «Выключен» (off — только доска), «Сравнение» (shadow —
+// помощник разбирает тихо, черновик — после счёта менеджера), «Помощь» (help — черновик
+// сразу). «Помощь» без набранной меры — подтверждением (решение пользователя). Карточка
+// заявки «две колонки» — orderCard: текст покупателя и как понял помощник.
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
+const { anchorText, pairByPlace } = require('./invoice/RequestText');
+const { sameLine } = require('./invoice/FinalInvoice');
 const crypto = require('node:crypto');
+
+// Положения тумблера разбора: id — в таблице магазинов и событиях mode_changed.
+const MODES = ['off', 'shadow', 'help'];
+const ALREADY = { off: 'Разбор уже выключен', shadow: 'Сравнение уже идёт', help: 'Помощь уже включена' };
+const ms = (at) => new Date(at).getTime(); // pg отдаёт Date, двойник — строку ISO
 
 function notFound(message) {
   const err = new Error(message);
@@ -44,6 +55,14 @@ function conflict(message) {
   return err;
 }
 
+// «Помощь» без набранной меры: не запрет, а вопрос — включить всё равно (confirm).
+function unmeasured(reason) {
+  const err = new Error(`Мера для «Помощи» ещё не набрана: ${reason}. Включить всё равно? Замер «до» останется неполным.`);
+  err.status = 409;
+  err.warn = true;
+  return err;
+}
+
 // Отказ во входе — вердикт ShopAccess: 401 без входа, 403 — не ваш магазин.
 function refused({ status, reason }) {
   const err = new Error(reason);
@@ -56,7 +75,7 @@ class BackboneDesk {
     repository, journal, board, path, templateOf, shops = {}, tool = null, toolOf = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
     intake = null, statusPage = null, receipts = null, privacy = null,
-    shopForm = null, catalogs = null, catalogFile = null, access = null,
+    shopForm = null, catalogs = null, catalogFile = null, access = null, autoParse = false,
   }) {
     this.repository = repository;
     this.journal = journal;
@@ -65,7 +84,8 @@ class BackboneDesk {
     this.templateOf = templateOf;
     this.shops = shops; // посев: slug → { name, niche, hours, mode, shadowDays } — демо-магазин из кода
     this.toolOf = toolOf || (async () => tool); // магазин → инструмент слота на его каталоге
-    this.llm = llm;     // модель для строк, которые не разобрали правила: forActor(user)
+    this.llm = llm;     // модель — только по кнопке «Распознать нейросетью»: forActor(user)
+    this.autoParse = autoParse; // механика разбирает заявку сразу при поступлении (без модели — бесплатно)
     this.shopForm = shopForm;       // форма магазина из кабинета
     this.catalogs = catalogs;       // каталоги магазинов по версии выгрузки
     this.catalogFile = catalogFile; // чтение выгрузки xlsx
@@ -309,11 +329,25 @@ class BackboneDesk {
     const draft = Order.draft(fields || {});
     const { shop, columns } = await this.board(slug);
     const inbox = columns.find((c) => c.type === 'inbox');
-    return this.repository.createOrder(shop.id, inbox.id, { ...draft, channel: 'manual' }, (order) => [{
-      stream: 'order', scope: shop.id, subjectId: order.id, type: 'received',
-      data: { number: order.number, column: inbox.id, columnType: inbox.type, channel: order.channel, org: Order.fromOrganization(order.client) },
+    const order = await this.repository.createOrder(shop.id, inbox.id, { ...draft, channel: 'manual' }, (o) => [{
+      stream: 'order', scope: shop.id, subjectId: o.id, type: 'received',
+      data: { number: o.number, column: inbox.id, columnType: inbox.type, channel: o.channel, org: Order.fromOrganization(o.client) },
       actor, cause: 'manual',
     }]);
+    await this.parseOnArrival(shop, order);
+    return order;
+  }
+
+  // Механический разбор сразу при поступлении (решение пользователя 19.10.2026): без
+  // модели и бесплатно; в «Помощи» менеджер открывает готовый черновик, в «Сравнении»
+  // разбор идёт тихо. Сбой разбора не роняет приём заявки (П35) — только в лог.
+  async parseOnArrival(shop, order) {
+    if (!this.autoParse || shop.mode === 'off') return;
+    try {
+      await this.parseOrder(shop.slug, order.id, { actor: 'helper', cause: 'auto' });
+    } catch (err) {
+      console.error('backbone: заявка не разобрана при поступлении', err);
+    }
   }
 
   async moveOrder(slug, orderId, to, { actor, cause = 'manual' } = {}) {
@@ -383,6 +417,7 @@ class BackboneDesk {
       if (err.code !== '23505') throw err;
       return again(await this.repository.orderByContentKey(shop.id, read.contentKey)); // гонка двух одинаковых отправок
     }
+    await this.parseOnArrival(shop, order);
     await this.afterChange(shop);
     return { order, duplicate: false, refusal: read.refusal };
   }
@@ -489,19 +524,22 @@ class BackboneDesk {
 
   // ---------- шаг 2: черновик счёта ----------
 
-  // Разбор заявки инструментом. Отказ (скан, пусто, слишком длинно) — результат
-  // с именем и событие parse_failed; модель зовётся от имени того, кто нажал (П37).
-  async parseOrder(slug, orderId, { actor, user = null } = {}) {
+  // Разбор заявки инструментом — механический: правила и сопоставление с каталогом, без
+  // модели (с 19.10.2026; нейросеть — readByModel, по кнопке). Отказ (скан, пусто, слишком
+  // длинно) — результат с именем и событие parse_failed.
+  async parseOrder(slug, orderId, { actor, cause = 'tool' } = {}) {
     const shop = await this.shop(slug);
+    if (shop.mode === 'off') throw bad('Разбор выключен — включите «Сравнение» или «Помощь» на экране заявок');
     const order = await this.orderOf(shop, orderId);
     const event = (type, data) => ({
       stream: 'order', scope: shop.id, subjectId: order.id, type,
-      data: { number: order.number, ...data }, actor, cause: 'tool',
+      data: { number: order.number, ...data }, actor, cause,
     });
     const synonyms = new Synonyms(await this.repository.synonyms(shop.id));
     let result;
+    const started = performance.now(); // время помощника — настоящее, не часы журнала
     try {
-      result = await (await this.toolOf(shop)).run({ text: order.text }, { llm: this.llm && this.llm.forActor(user), synonyms });
+      result = await (await this.toolOf(shop)).run({ text: order.text }, { synonyms });
     } catch (err) {
       if (!err.refusal) throw err;
       await this.repository.appendEvents([event('parse_failed', { code: err.code, reason: err.message })]);
@@ -512,6 +550,7 @@ class BackboneDesk {
       event('parsed', {
         source: facts.source, lines: facts.lines, rule: facts.rule, model: facts.model, raw: facts.raw,
         verify: facts.verify, skipped: facts.skipped, modelCalls: facts.modelCalls, failures: failures.map((f) => f.code),
+        ms: Math.round(performance.now() - started),
       }),
       event('draft_ready', {
         lines: facts.lines, accepted: facts.accepted, ask: facts.ask, missing: facts.missing,
@@ -519,6 +558,46 @@ class BackboneDesk {
       }),
     ]);
     return { ok: true, number: order.number, summary: facts.summary, failures };
+  }
+
+  // «Распознать нейросетью» (по кнопке, решение пользователя 19.10.2026): модель читает
+  // заявку целиком от имени того, кто нажал (его квота, П37), её строки проходят то же
+  // сопоставление с каталогом. Результат — событие model_parsed рядом с механическим
+  // черновиком, а не вместо него. В «Сравнении» — только после счёта менеджера (иначе замер
+  // «до» испорчен), и тогда же — сверка с его счётом.
+  async readByModel(slug, orderId, { actor, user = null } = {}) {
+    const shop = await this.shop(slug);
+    if (shop.mode === 'off') throw bad('Разбор выключен — включите «Сравнение» или «Помощь» на экране заявок');
+    const order = await this.orderOf(shop, orderId);
+    const sent = await this.sentOf(order);
+    if (shop.mode === 'shadow' && !sent) throw bad('Сравнение: нейросеть — после вашего счёта, иначе замер «до» испортится');
+    if (!this.llm) throw bad('Нейросеть не подключена');
+    const tool = await this.toolOf(shop);
+    const synonyms = new Synonyms(await this.repository.synonyms(shop.id));
+    const started = performance.now();
+    let result;
+    try {
+      result = await tool.run({ text: order.text }, { llm: this.llm.forActor(user), synonyms, whole: true });
+    } catch (err) {
+      if (err.refusal) throw bad(err.message);
+      throw err;
+    }
+    const { draft, facts, failures } = result;
+    if (!facts.model) throw bad(`Нейросеть не ответила: ${failures.map((f) => f.detail).join('; ') || 'пустой ответ'}`);
+    const lines = draft.lines.map((l) => ({
+      position: l.position, source: l.source, name: l.name, qty: l.qty, unit: l.unit, origin: l.origin, verify: l.verify,
+      sku: l.sku, confidence: l.confidence, state: l.state, candidates: l.candidates, invoiceQty: l.invoiceQty, price: l.price, question: l.question,
+    }));
+    const invoice = sent && sent.data.invoiceLines
+      ? tool.compare(lines.map((l) => ({ sku: l.sku, invoice_qty: l.invoiceQty })), sent.data.invoiceLines) : null;
+    const data = {
+      number: order.number, lines, rule: facts.rule, model: facts.model, raw: facts.raw, verify: facts.verify,
+      accepted: facts.accepted, ask: facts.ask, missing: facts.missing, ms: Math.round(performance.now() - started),
+      failures: failures.map((f) => f.code),
+      ...(invoice ? { invoice: { matched: invoice.matched, base: invoice.base, accuracy: invoice.accuracy } } : {}),
+    };
+    await this.repository.appendEvents([{ stream: 'order', scope: shop.id, subjectId: order.id, type: 'model_parsed', data, actor, cause: 'model' }]);
+    return data;
   }
 
   // Строки черновиков магазина: новые заявки первыми, внутри — по порядку строк.
@@ -585,7 +664,10 @@ class BackboneDesk {
       if (synonym) synonyms.push({ shopId: shop.id, phrase: Synonyms.phrase(line.name), sku: synonym, example: line.source, createdBy: actor });
       events.push({
         stream: 'order', scope: shop.id, subjectId: line.order_id, type: 'reviewed',
-        data: { number: line.number, line: line.position, verdict: change.verdict, ...data, ...(synonym ? { synonym: Synonyms.phrase(line.name) } : {}) },
+        data: {
+          number: line.number, line: line.position, verdict: change.verdict, ...data,
+          ...(synonym ? { synonym: Synonyms.phrase(line.name) } : {}), ...(change.via ? { via: change.via } : {}), // via: 'model' — взято у нейросети
+        },
         actor, cause: 'review',
       });
     }
@@ -605,19 +687,26 @@ class BackboneDesk {
     return (await this.journal.forSubject('order', order.id)).find((e) => e.type === 'invoice_sent') || null;
   }
 
-  // Строки, которые видит менеджер: в тени черновик скрыт, пока к заявке не приложен счёт.
+  // Строки, которые видит менеджер: черновик открыт в «Помощи»; в «Сравнении» и при
+  // выключенном разборе — только у заявок, к которым менеджер уже приложил свой счёт.
   async managerLines(slug) {
     const shop = await this.shop(slug);
     const lines = await this.repository.lines(shop.id);
-    if (shop.mode !== 'shadow') return lines;
+    if (shop.mode === 'help') return lines;
     const sent = new Set((await this.journal.history(shop.id)).filter((e) => e.type === 'invoice_sent').map((e) => e.subject_id));
     return lines.filter((l) => sent.has(String(l.order_id)));
+  }
+
+  // Черновик в работе менеджера — только в «Помощи».
+  helpOnly(shop, shadowText) {
+    if (shop.mode === 'off') throw bad('Разбор выключен — черновиков нет');
+    if (shop.mode === 'shadow') throw bad(`Сравнение: ${shadowText}`);
   }
 
   // Выгрузка черновика в xlsx для 1С: решение — событие, файл — чистое чтение (invoiceFile).
   async exportInvoice(slug, orderId, actor) {
     const shop = await this.shop(slug);
-    if (shop.mode === 'shadow') throw bad('Тень: черновик менеджеру не показываем — счёт делается в 1С как обычно, потом «Приложить счёт из 1С»');
+    this.helpOnly(shop, 'черновик скрыт — счёт делается в 1С как обычно, потом «Мой счёт готов»');
     const order = await this.orderOf(shop, orderId);
     const file = (await this.toolOf(shop)).exportFile(await this.orderLines(shop, order));
     await this.repository.appendEvents([{
@@ -629,7 +718,7 @@ class BackboneDesk {
 
   async invoiceFile(slug, orderId) {
     const shop = await this.shop(slug);
-    if (shop.mode === 'shadow') throw bad('Тень: выгрузки черновика нет');
+    this.helpOnly(shop, 'выгрузки черновика нет');
     const order = await this.orderOf(shop, orderId);
     const file = (await this.toolOf(shop)).exportFile(await this.orderLines(shop, order));
     return { buffer: file.buffer, filename: `schet-zayavka-${order.number}.xlsx` };
@@ -638,7 +727,7 @@ class BackboneDesk {
   // Помощь: счёт ушёл клиенту. Точность — доля строк черновика без правки менеджера.
   async invoiceSent(slug, orderId, actor) {
     const shop = await this.shop(slug);
-    if (shop.mode !== 'help') throw bad('Тень: приложите итоговый счёт из 1С — так считается точность черновика');
+    this.helpOnly(shop, 'нажмите «Мой счёт готов» и вставьте свой счёт из 1С — так считается точность черновика');
     const order = await this.orderOf(shop, orderId);
     if (await this.sentOf(order)) throw bad(`Счёт по заявке №${order.number} уже отправлен`);
     const lines = await this.orderLines(shop, order);
@@ -654,11 +743,13 @@ class BackboneDesk {
     return data;
   }
 
-  // Тень: менеджер вставляет табличную часть итогового счёта из 1С; черновик, если его
-  // ещё нет, строится тут же — сверка идёт с тем, что инструмент дал бы без человека.
+  // Сравнение: «Мой счёт готов» — менеджер вставляет табличную часть своего счёта из 1С;
+  // черновик, если его ещё нет, строится тут же — сверка идёт с тем, что инструмент дал
+  // бы без человека. Строки счёта — в событии: по ним «глаз» карточки сверяет построчно.
   async attachInvoice(slug, orderId, text, { actor, user = null } = {}) {
     const shop = await this.shop(slug);
-    if (shop.mode !== 'shadow') throw bad('Помощь: счёт отмечают кнопкой «Счёт отправлен»');
+    if (shop.mode === 'help') throw bad('Помощь: счёт отмечают кнопкой «Счёт отправлен»');
+    if (shop.mode === 'off') throw bad('Разбор выключен — сравнивать не с чем');
     const order = await this.orderOf(shop, orderId);
     if (await this.sentOf(order)) throw bad(`Счёт по заявке №${order.number} уже приложен`);
     const tool = await this.toolOf(shop);
@@ -671,38 +762,193 @@ class BackboneDesk {
       lines = await this.orderLines(shop, order);
     }
     const cmp = tool.compare(lines, final.lines);
-    const data = { number: order.number, mode: 'shadow', source: 'attached', ...cmp, unknown: final.unknown.length };
+    const data = {
+      number: order.number, mode: 'shadow', source: 'attached', ...cmp, unknown: final.unknown.length,
+      invoiceLines: final.lines.map(({ sku, qty }) => ({ sku, qty })),
+    };
     await this.repository.appendEvents([{ stream: 'order', scope: shop.id, subjectId: order.id, type: 'invoice_sent', data, actor, cause: 'invoice' }]);
     return data;
   }
 
-  // Замеры магазина: отчёт из журнала, режим и решение о помощи.
+  // Замеры магазина: отчёт из журнала, режим, мера для помощи и последняя смена режима.
   async measures(slug) {
     const shop = await this.shop(slug);
     const spec = this.specOf(shop);
     const measures = this.measuresOf(shop, spec);
     const now = this.clock().getTime();
-    const report = measures.report(await this.journal.history(shop.id), { now, mode: shop.mode });
+    const events = await this.journal.history(shop.id);
+    const report = measures.report(events, { now, mode: shop.mode });
     const since = new Date(shop.mode_since).getTime();
     const current = measures.metrics(report.cards.filter((c) => c.mode === shop.mode && c.receivedAt >= since), now);
     const shadowDays = spec.shadowDays ?? this.baseline.shadowDays;
-    const decision = shop.mode === 'shadow' ? this.baseline.decide({ shop, metrics: current, now, shadowDays }) : null;
-    return { shop, report, current, decision, days: this.baseline.daysOf(shop, now), shadowDays };
+    const decision = shop.mode !== 'help' ? this.baseline.decide({ shop, metrics: current, now, shadowDays }) : null;
+    const switched = events.filter((e) => e.type === 'mode_changed').pop() || null;
+    return {
+      shop, report, current, decision, days: this.baseline.daysOf(shop, now), shadowDays, switched, minLines: this.baseline.minLines,
+    };
   }
 
-  // Смена режима: помощь — только решением с мерой; тень — всегда (новая база «до»).
-  async switchMode(slug, to, actor) {
-    if (to !== 'shadow' && to !== 'help') throw bad(`Неизвестный режим: ${to}`);
+  // Тумблер разбора: «Выключен» и «Сравнение» — всегда (сравнение — новая база «до»);
+  // «Помощь» — по мере, а без неё — только подтверждением: событие помечает «без меры».
+  async switchMode(slug, to, actor, { confirm = false } = {}) {
+    if (!MODES.includes(to)) throw bad(`Неизвестный режим: ${to}`);
     const { shop, current, decision, days } = await this.measures(slug);
-    if (shop.mode === to) throw bad(to === 'help' ? 'Помощь уже включена' : 'Тень уже идёт');
-    if (to === 'help' && !decision.ok) throw bad(`Помощь пока нельзя: ${decision.reason}`);
+    if (shop.mode === to) throw bad(ALREADY[to]);
+    if (to === 'help' && !decision.ok && !confirm) throw unmeasured(decision.reason);
     const data = to === 'help'
-      ? { from: shop.mode, to, reason: decision.reason, snapshot: this.baseline.snapshot(current, days) }
-      : { from: shop.mode, to, reason: 'новая база «до»' };
+      ? {
+        from: shop.mode, to, reason: decision.reason, snapshot: this.baseline.snapshot(current, days),
+        ...(decision.ok ? {} : { unmeasured: true }),
+      }
+      : { from: shop.mode, to, reason: to === 'shadow' ? 'новая база «до»' : 'разбор выключен: только доска' };
     await this.repository.setMode(shop.id, shop.mode, to, [{
       stream: 'shop', scope: shop.id, subjectId: shop.id, type: 'mode_changed', data, actor, cause: 'decision',
     }]);
     return data;
+  }
+
+  // ---------- карточка заявки «две колонки» ----------
+
+  // Слева — текст покупателя целиком, справа — как понял помощник, и где в тексте каждая
+  // строка черновика. Черновик виден в «Помощи» и у заявки, к которой менеджер уже
+  // приложил свой счёт; в «Сравнении» до счёта строк здесь нет вовсе — замер «до» честный.
+  // После счёта — пары «черновик ↔ счёт менеджера» и время: менеджер — рабочие минуты
+  // от заявки до счёта, помощник — секунды разбора.
+  async orderCard(slug, orderId) {
+    const shop = await this.shop(slug);
+    const order = await this.orderOf(shop, orderId);
+    const [all, events] = await Promise.all([this.repository.lines(shop.id), this.journal.forSubject('order', order.id)]);
+    const lines = all.filter((l) => l.order_id === order.id).sort((a, b) => a.position - b.position);
+    const last = (type) => events.filter((e) => e.type === type).pop() || null;
+    const received = events.find((e) => e.type === 'received') || null;
+    const parsed = last('parsed');
+    const failed = last('parse_failed');
+    const sent = last('invoice_sent');
+    const reading = last('model_parsed'); // третья колонка: разбор нейросетью по кнопке
+    const visible = shop.mode === 'help' || Boolean(sent);
+    const tool = await this.toolOf(shop);
+    const text = anchorText(order.text, visible ? lines.map((l) => l.source) : []);
+    const shown = visible ? lines.map((l, i) => ({ ...l, anchors: text.anchors[i] })) : [];
+    const read = visible && reading ? anchorText(order.text, reading.data.lines.map((l) => l.source)) : null;
+    const modelLines = read ? reading.data.lines.map((l, i) => ({ ...l, anchors: read.anchors[i] })) : [];
+    const invoiceLines = sent && sent.data.invoiceLines;
+    return {
+      shop,
+      order,
+      text: text.lines,
+      lines: shown,
+      drafted: lines.length > 0,
+      failure: failed && (!parsed || ms(failed.at) > ms(parsed.at)) ? failed.data.reason : null,
+      sent: sent ? { ...sent.data, at: sent.at } : null,
+      pairs: visible && invoiceLines ? tool.pair(lines, invoiceLines) : null,
+      managerMinutes: sent && received ? this.measuresOf(shop, this.specOf(shop)).hours.minutes(ms(received.at), ms(sent.at)) : null,
+      helperMs: parsed && parsed.data.ms != null ? parsed.data.ms : null,
+      // механика справилась плохо — совет распознать нейросетью; варианты строк «выбрать»
+      advice: visible && lines.length ? tool.advice(lines) : null,
+      choices: new Map(shown.filter((l) => l.state !== 'accepted' && l.origin !== 'raw').map((l) => [l.id, tool.alternatives(l)])),
+      reading: read ? { ...reading.data, lines: modelLines, at: reading.at, actor: reading.actor } : null,
+      readingPairs: read ? pairByPlace(shown, modelLines) : null,                       // нейросеть ↔ механика на том же месте
+      readingInvoice: read && invoiceLines ? tool.pair(modelLines.map((l) => ({ ...l, invoice_qty: l.invoiceQty })), invoiceLines) : null,
+    };
+  }
+
+  // Строка черновика этой заявки этого магазина — для действий карточки.
+  async cardLine(shop, orderId, lineId) {
+    const [line] = await this.repository.linesByIds([String(lineId)]);
+    if (!line || line.shop_id !== shop.id || String(line.order_id) !== String(orderId)) throw notFound('Строка черновика не найдена');
+    return line;
+  }
+
+  // Вариант строки «выбрать» (из 3 лучших или «ещё N»): позиция строки — подтверждение
+  // (accepted), другой — замена (replaced); оба рождают синоним «фраза клиента → позиция».
+  async pickCandidate(slug, orderId, lineId, sku, actor) {
+    const shop = await this.shop(slug);
+    this.helpOnly(shop, 'черновик скрыт до вашего счёта');
+    const line = await this.cardLine(shop, orderId, lineId);
+    const pick = String(sku ?? '').trim();
+    const { top, more } = (await this.toolOf(shop)).alternatives(line);
+    if (pick !== line.sku && ![...top, ...more].some((c) => c.sku === pick)) throw bad(`«${pick}» — не вариант строки ${line.position}`);
+    return this.review(slug, [line.id], pick === line.sku ? { verdict: 'accepted' } : { verdict: 'replaced', sku: pick }, actor);
+  }
+
+  // «Спросить клиента» у строки «выбрать»: вопрос из отличия лучших вариантов («какое
+  // покрытие — оцинк. или нерж. A2?») — к вопросам строки: карточка заявки и лист
+  // «Вопросы и пропуски» выгрузки для 1С. Работа менеджера, не правка черновика.
+  async askClient(slug, orderId, lineId, actor) {
+    const shop = await this.shop(slug);
+    this.helpOnly(shop, 'черновик скрыт до вашего счёта');
+    const line = await this.cardLine(shop, orderId, lineId);
+    const { question } = (await this.toolOf(shop)).alternatives(line);
+    if (!question) throw bad('Спрашивать не о чем: подходит один вариант');
+    if (String(line.question || '').includes(question)) throw bad('Этот вопрос уже в вопросах клиенту');
+    await this.repository.setQuestion(line.id, line.question ? `${line.question}; ${question}` : question, [{
+      stream: 'order', scope: shop.id, subjectId: line.order_id, type: 'client_asked',
+      data: { number: line.number, line: line.position, question }, actor, cause: 'review',
+    }]);
+    return { question };
+  }
+
+  // «Взять как нейросеть»: строка механики на том же месте текста получает позицию и
+  // количество из разбора нейросетью — это правка менеджера (replaced / edited, via:
+  // 'model'), синоним учит бесплатную механику на следующий раз.
+  async takeModelLine(slug, orderId, position, actor) {
+    const pair = (await this.modelPairs(slug, orderId)).find((p) => p.line.position === Number(position));
+    if (!pair) throw notFound('Строки нейросети нет — обновите карточку');
+    const lines = await this.takeOne(slug, pair, actor);
+    if (!lines) throw bad('Механика уже поняла эту строку так же');
+    return { lines };
+  }
+
+  // «Взять всё у нейросети»: каждая строка, где нейросеть нашла позицию иначе, чем механика.
+  async takeAllModel(slug, orderId, actor) {
+    const pairs = (await this.modelPairs(slug, orderId)).filter((p) => p.line.sku && p.base && !sameLine(p.base, p.line));
+    if (!pairs.length) throw bad('Брать нечего: где нейросеть нашла позицию, механика поняла так же');
+    let lines = 0;
+    for (const p of pairs) lines += await this.takeOne(slug, p, actor);
+    return { lines };
+  }
+
+  async modelPairs(slug, orderId) {
+    const card = await this.orderCard(slug, orderId);
+    this.helpOnly(card.shop, 'черновик скрыт до вашего счёта');
+    if (card.sent) throw bad(`Счёт по заявке №${card.order.number} уже отправлен`);
+    if (!card.reading) throw bad('Нейросеть ещё не читала заявку — нажмите «Распознать нейросетью»');
+    return card.readingPairs;
+  }
+
+  // пара { line: строка нейросети, base: строка механики } → сколько строк черновика изменилось
+  async takeOne(slug, { line, base }, actor) {
+    if (!base) throw bad('В механическом черновике этой строки нет — добавьте позицию вручную');
+    if (!line.sku) throw bad('Нейросеть тоже не нашла позицию в каталоге');
+    let changed = 0;
+    if (line.sku !== base.sku) {
+      await this.review(slug, [base.id], { verdict: 'replaced', sku: line.sku, via: 'model' }, actor);
+      changed = 1;
+    }
+    const [now] = await this.repository.linesByIds([String(base.id)]);
+    if (line.invoiceQty != null && !sameLine(now, line)) {
+      await this.review(slug, [base.id], { verdict: 'edited', qty: line.invoiceQty, via: 'model' }, actor);
+      changed = 1;
+    }
+    return changed;
+  }
+
+  // «Принять всё зелёное»: строки, которые помощник принял сам, менеджер подтверждает разом.
+  async acceptConfident(slug, orderId, actor) {
+    const shop = await this.shop(slug);
+    this.helpOnly(shop, 'черновик скрыт до вашего счёта');
+    const order = await this.orderOf(shop, orderId);
+    const green = (await this.orderLines(shop, order)).filter((l) => l.state === 'accepted' && !l.review);
+    if (!green.length) throw bad('Зелёных строк без отметки не осталось');
+    return this.review(slug, green.map((l) => l.id), { verdict: 'accepted' }, actor);
+  }
+
+  // Правка строки из карточки: замена позиции или количество — та же дверь review.
+  async reviseLine(slug, orderId, lineId, change, actor) {
+    const shop = await this.shop(slug);
+    this.helpOnly(shop, 'черновик скрыт до вашего счёта');
+    const line = await this.cardLine(shop, orderId, lineId);
+    return this.review(slug, [line.id], change, actor);
   }
 
   // Решение по одной строке: новые поля, синоним (артикул) или null, данные события.

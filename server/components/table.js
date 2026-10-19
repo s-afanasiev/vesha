@@ -37,6 +37,7 @@ function router(decl) {
         sortable: !!c.sortable,
         ...(c.render ? { render: c.render } : {}),
         ...(c.note ? { note: c.note } : {}),
+        ...(c.label ? { label: c.label } : {}), // render: 'link' — текст ссылки из этого поля строки
       })),
       search: Array.isArray(decl.search) && decl.search.length > 0,
       select: {

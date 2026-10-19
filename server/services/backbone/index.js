@@ -36,6 +36,8 @@ const { RequestText, PlainText, SheetRows, PdfTextLayer } = require('./invoice/R
 const { GuardedLlm, RecordedLlm } = require('./invoice/models');
 const { InvoiceExport } = require('./invoice/InvoiceExport');
 const { FinalInvoice } = require('./invoice/FinalInvoice');
+const { Alternatives } = require('./invoice/Alternatives');
+const { ModelAdvice } = require('./invoice/ModelAdvice');
 const { Measures } = require('./measures/Measures');
 const { WorkingHours } = require('./measures/WorkingHours');
 const { Baseline } = require('./measures/Baseline');
@@ -98,7 +100,7 @@ function invoiceTool(catalog, niche) {
       new Matches(match),
       new Lines(
         new RuleLines(),                                                  // «наименование — количество ед.»
-        new ModelLines({ verify: digitsInSource, maxLines: 60 }),         // остаток — модели; цифры сверяются с текстом (О18)
+        new ModelLines({ verify: digitsInSource, maxLines: 120 }),        // модель — по кнопке, вся заявка; цифры сверяются с текстом (О18)
       ),
       new RequestText({ text: new PlainText(), xlsx: new SheetRows(), pdf: new PdfTextLayer() }, { maxBytes: 5 * 1024 * 1024 }),
     ),
@@ -106,6 +108,8 @@ function invoiceTool(catalog, niche) {
       maxLines: 200,
       exporter: new InvoiceExport(catalog),                               // принятые строки → xlsx для загрузки в 1С
       finalInvoice: new FinalInvoice(catalog.index, match, new RuleLines()), // тень: итоговый счёт из 1С для сверки
+      alternatives: new Alternatives(match, { shown: 3, max: 50 }),       // «выбрать»: 3 лучших с отличием, «ещё N»
+      advice: new ModelAdvice({ rawLines: 1, weakShare: 0.2, weakConfidence: 0.7 }), // когда советовать нейросеть
     },
   );
 }
@@ -162,7 +166,8 @@ const backboneDesk = new BackboneDesk({
   catalogs,
   catalogFile,                                                            // выгрузка 1С / МойСклад / прайс → каталог (О17)
   toolOf,
-  llm,
+  llm,                                                                    // нейросеть — только по кнопке «Распознать нейросетью»
+  autoParse: true,                                                        // механика разбирает заявку сразу при поступлении — бесплатно
   measuresOf: (shop, spec) => new Measures(                               // замеры из журнала (§6.6)
     new WorkingHours({ tz: shop.tz, ...spec.hours }),                     // «час» — рабочий час магазина
     { replyWithin: 60, silence: { inbox: 60, waitingClientDays: 2 }, sessionGap: 10, b2bLines: 5 },

@@ -5,17 +5,32 @@
 // Правка менеджера — тоже здесь, в revise: только инструмент знает, как строка
 // черновика пересчитывается от новой позиции или количества. Шаг 3: выгрузка
 // черновика в xlsx для 1С (exportFile) и чтение итогового счёта из 1С для тени
-// (readInvoice + compare).
+// (readInvoice + compare). 19.10.2026: варианты неоднозначной строки и вопрос клиенту
+// (alternatives) и совет «стоит распознать нейросетью» (advice).
 
-const { compareDraft } = require('./FinalInvoice');
+const { compareDraft, pairLines } = require('./FinalInvoice');
+const { Alternatives } = require('./Alternatives');
+const { ModelAdvice } = require('./ModelAdvice');
 
 class OrderToInvoice {
-  constructor(draft, { maxLines = 200, exporter = null, finalInvoice = null } = {}) {
+  constructor(draft, { maxLines = 200, exporter = null, finalInvoice = null, alternatives = null, advice = null } = {}) {
     this.draft = draft;               // InvoiceDraft
     this.maxLines = maxLines;
     this.exporter = exporter;         // InvoiceExport
     this.finalInvoice = finalInvoice; // FinalInvoice
+    this.choices = alternatives || new Alternatives(draft.matches.match); // варианты строки «выбрать»
+    this.adviser = advice || new ModelAdvice();                          // когда звать нейросеть
     this.accepts = ['text', 'xlsx', 'pdf'];
+  }
+
+  // строка черновика → { top, more, total, question }
+  alternatives(line) {
+    return this.choices.of(line);
+  }
+
+  // строки механического черновика → { advise, reason, … }
+  advice(lines) {
+    return this.adviser.of(lines);
   }
 
   async run(input, ctx = {}) {
@@ -61,6 +76,11 @@ class OrderToInvoice {
 
   compare(lines, finalLines) {
     return compareDraft(lines, finalLines);
+  }
+
+  // по строкам: совпало, расходится количеством, в счёте нет; строки только в счёте
+  pair(lines, finalLines) {
+    return pairLines(lines, finalLines);
   }
 }
 

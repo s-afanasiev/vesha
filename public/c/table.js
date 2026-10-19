@@ -437,8 +437,8 @@
         try { const u = new URL(String(v)); host = u.host + u.pathname.replace(/\/$/, ''); } catch {}
         return `<a href="${escapeHtml(v)}" target="_blank" rel="noopener" class="vt-link">${escapeHtml(host)}</a>`;
       }
-      // путь на этом же сайте — как есть
-      if (v && /^\/(?!\/)/.test(String(v))) return `<a href="${escapeHtml(v)}" class="vt-link">${escapeHtml(v)}</a>`;
+      // путь на этом же сайте — как есть; текст ссылки — из поля label строки, если объявлено
+      if (v && /^\/(?!\/)/.test(String(v))) return `<a href="${escapeHtml(v)}" class="vt-link">${escapeHtml((c.label && row[c.label]) || v)}</a>`;
       const note = c.note ? row[c.note] : null;
       return `<span class="vt-note">${escapeHtml(note || '—')}</span>`;
     }

@@ -74,6 +74,24 @@
   --vs-ok: var(--ok, #2f9e60);
 }
 
+.boot-root v-switch {
+  --vsw-card: var(--surface, #fff);
+  --vsw-inset: var(--surface-inset, #f4f5f7);
+  --vsw-line: var(--border, #d9dde3);
+  --vsw-text: var(--text, #1c2430);
+  --vsw-faint: var(--text-muted, #6b7280);
+  --vsw-accent: var(--accent, #3d6ec9);
+}
+
+.boot-root v-extract {
+  --vx-card: var(--surface, #fff);
+  --vx-inset: var(--surface-inset, #f4f5f7);
+  --vx-line: var(--border, #d9dde3);
+  --vx-text: var(--text, #1c2430);
+  --vx-faint: var(--text-muted, #6b7280);
+  --vx-accent: var(--accent, #3d6ec9);
+}
+
 /* доска в спеке: колонки рядом; узкий экран — сами перестроятся переносом */
 .boot-root v-kanban {
   display: grid;
