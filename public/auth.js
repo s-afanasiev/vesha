@@ -67,6 +67,15 @@
     dispatchAuthChange({ user: null, loggedIn: false });
   }
 
+  // Смена пароля вошедшим: текущий и новый; другие устройства выходят (решает сервер).
+  async function changePassword(current, password) {
+    return api('/api/auth/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current, password }),
+    });
+  }
+
   function createModalDOM() {
     if (modalEl) return modalEl;
 
@@ -123,6 +132,20 @@
           </div>
           <button type="submit" class="vesha-btn vesha-btn--primary vesha-btn--block" id="vesha-reg-submit">
             <span>Создать аккаунт</span>
+          </button>
+        </form>
+
+        <form id="vesha-form-password" class="vesha-auth-form" hidden>
+          <div class="vesha-form-group">
+            <label for="vesha-pass-current">Текущий пароль</label>
+            <input type="password" id="vesha-pass-current" name="current" autocomplete="current-password" placeholder="••••••••" />
+          </div>
+          <div class="vesha-form-group">
+            <label for="vesha-pass-new">Новый пароль</label>
+            <input type="password" id="vesha-pass-new" name="password" required minlength="8" autocomplete="new-password" placeholder="Минимум 8 символов" />
+          </div>
+          <button type="submit" class="vesha-btn vesha-btn--primary vesha-btn--block" id="vesha-pass-submit">
+            <span>Сменить пароль</span>
           </button>
         </form>
 
@@ -203,27 +226,50 @@
       }
     });
 
+    const passForm = overlay.querySelector('#vesha-form-password');
+    passForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = overlay.querySelector('#vesha-pass-submit');
+      setModalBusy(submitBtn, true, 'Меняем…');
+      hideModalAlert();
+
+      try {
+        await changePassword(passForm.current.value, passForm.password.value);
+        passForm.reset();
+        showModalAlert('Пароль сменён. На других устройствах нужно войти заново.', 'ok');
+      } catch (err) {
+        showModalAlert(err.message, 'error');
+      } finally {
+        setModalBusy(submitBtn, false, 'Сменить пароль');
+      }
+    });
+
     return modalEl;
   }
 
+  // Вкладки окна: вход, регистрация (если сайт её не закрыл) и смена пароля вошедшим.
   function setModalTab(tabName) {
     if (!modalEl) createModalDOM();
     const isLogin = tabName === 'login';
+    const isPassword = tabName === 'password';
     const loginTab = modalEl.querySelector('#vesha-tab-login');
     const regTab = modalEl.querySelector('#vesha-tab-register');
     const loginForm = modalEl.querySelector('#vesha-form-login');
     const regForm = modalEl.querySelector('#vesha-form-register');
+    const passForm = modalEl.querySelector('#vesha-form-password');
     const titleEl = modalEl.querySelector('#vesha-auth-modal-title');
 
     loginTab.classList.toggle('is-active', isLogin);
     loginTab.setAttribute('aria-selected', isLogin ? 'true' : 'false');
-    regTab.classList.toggle('is-active', !isLogin);
-    regTab.setAttribute('aria-selected', !isLogin ? 'true' : 'false');
+    regTab.classList.toggle('is-active', tabName === 'register');
+    regTab.setAttribute('aria-selected', tabName === 'register' ? 'true' : 'false');
 
+    modalEl.querySelector('.vesha-auth-tabs').hidden = isPassword;
     loginForm.hidden = !isLogin;
-    regForm.hidden = isLogin;
+    regForm.hidden = tabName !== 'register';
+    passForm.hidden = !isPassword;
 
-    titleEl.textContent = isLogin ? 'Вход в аккаунт' : 'Регистрация';
+    titleEl.textContent = isLogin ? 'Вход в аккаунт' : isPassword ? 'Смена пароля' : 'Регистрация';
     hideModalAlert();
   }
 
@@ -249,12 +295,17 @@
 
   async function openModal(initialTab = 'login') {
     createModalDOM();
-    setModalTab(initialTab);
     const me = await getMe();
+    // регистрацию закрыл сайт (сборка магазина: учётки выдаёт админ) — вкладки нет
+    const regClosed = me.registrationOpen === false;
+    modalEl.querySelector('#vesha-tab-register').hidden = regClosed;
+    setModalTab(regClosed && initialTab === 'register' ? 'login' : initialTab);
 
     const oauthWrap = modalEl.querySelector('#vesha-auth-oauth');
     const googleBtn = modalEl.querySelector('#vesha-google-btn');
-    if (me.googleEnabled) {
+    if (initialTab === 'password') {
+      oauthWrap.hidden = true;
+    } else if (me.googleEnabled) {
       oauthWrap.hidden = false;
       const currentPath = window.location.pathname + window.location.search;
       googleBtn.href = `/api/auth/google?returnTo=${encodeURIComponent(currentPath)}`;
@@ -266,7 +317,7 @@
     modalEl.classList.add('is-open');
     document.body.classList.add('vesha-modal-open');
 
-    const firstInput = modalEl.querySelector(initialTab === 'login' ? '#vesha-login-email' : '#vesha-reg-name');
+    const firstInput = modalEl.querySelector({ login: '#vesha-login-email', password: '#vesha-pass-current' }[initialTab] || '#vesha-reg-name');
     if (firstInput) setTimeout(() => firstInput.focus(), 50);
   }
 
@@ -294,11 +345,17 @@
               <span class="vesha-user-email">${escapeHtml(me.user.email)}</span>
             </div>
           </div>
+          <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="vesha-password-btn">
+            Пароль
+          </button>
           <button type="button" class="vesha-btn vesha-btn--sm vesha-btn--outline" id="vesha-logout-btn">
             Выйти
           </button>
         </div>
       `;
+
+      const passwordBtn = containerEl.querySelector('#vesha-password-btn');
+      if (passwordBtn) passwordBtn.addEventListener('click', () => openModal('password'));
 
       const logoutBtn = containerEl.querySelector('#vesha-logout-btn');
       if (logoutBtn) {
@@ -368,6 +425,7 @@
     login,
     register,
     logout,
+    changePassword,
     openModal,
     closeModal,
     renderAuthWidget,

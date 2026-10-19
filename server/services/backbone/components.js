@@ -64,7 +64,10 @@ function describe(e, titles) {
       : `счёт по заявке №${d.number} отправлен: без правки ${d.right} из ${d.base} строк`;
     case 'shop_opened': return `магазин «${d.name}» заведён: адрес ${d.slug}, ниша «${NICHE_NAMES[d.niche] || d.niche}», ${hoursText(d.hours)}, режим — ${MODES[d.mode] || d.mode}`;
     case 'shop_changed': return `магазин изменён: «${d.name}», ${hoursText(d.hours)}, почта ${d.replyTo || '—'}`;
-    case 'staff_added': return `сотрудник ${d.email} добавлен: входит в кабинет магазина`;
+    case 'staff_added': return d.login === 'password'
+      ? `сотрудник ${d.email} добавлен: учётка заведена, пароль выдан админу`
+      : `сотрудник ${d.email} приглашён: ссылка${d.until ? ` до ${at(d.until)}` : ''}, вход — после того, как он её откроет`;
+    case 'staff_joined': return `сотрудник ${d.email} принял приглашение: входит в кабинет магазина как ${d.account}`;
     case 'staff_removed': return `сотрудник ${d.email} убран: кабинет магазина ему закрыт`;
     case 'catalog_loaded': return `каталог из «${d.file}» загружен: ${d.loaded} позиций${d.rejected ? `, не загружено строк ${d.rejected}` : ''} — версия ${d.version}`;
     case 'catalog_refused': return `каталог не подменён («${d.file}»): ${d.reason}`;
@@ -812,23 +815,36 @@ const cabinet = Components({
       },
       {
         id: 'staff', name: 'Добавить сотрудника', bulk: true, max: 1,
-        fields: [{ key: 'email', label: 'Почта сотрудника — с ней он зарегистрируется сам', required: true, placeholder: 'manager@shop.ru' }],
+        fields: [{ key: 'email', label: 'Почта сотрудника — его логин; пароль сайт покажет здесь один раз', required: true, placeholder: 'manager@shop.ru' }],
         run: async ({ ids, body, user }) => {
-          const { shop, email } = await backboneDesk.addStaff(ids[0], body.email, actorOf(user));
+          const { shop, email, password, token, until } = await backboneDesk.addStaff(ids[0], body.email, actorOf(user));
+          const cabinet = `${config.backbonePublicUrl}${config.backboneCabinetPath}`;
+          if (password) {
+            return {
+              message: `${email} — сотрудник «${shop.name}». Учётка заведена: вход на ${cabinet} — почта ${email}, пароль ${password} `
+                + '(показываем один раз). Передайте сотруднику лично; пароль он сменит кнопкой «Пароль» вверху кабинета.',
+            };
+          }
+          const link = `${cabinet}?invite=${encodeURIComponent(token)}`;
           return {
-            message: `${email} — сотрудник «${shop.name}». Пусть зарегистрируется на сайте с этой почтой и откроет кабинет ${cabinetOf(shop.slug)}`,
+            message: `У почты ${email} уже есть учётка — сайт не знает, чья она, поэтому вход в «${shop.name}» — по ссылке. `
+              + `Передайте сотруднику лично — она одноразовая и действует до ${at(until)}: ${link} — он откроет её и войдёт своей учёткой. `
+              + 'Ссылку больше не покажем; потеряли — «Добавить сотрудника» ещё раз.',
           };
         },
       },
     ],
   }),
 
-  // Сотрудники: почта входит в кабинет только своего магазина; убранный теряет вход сразу.
+  // Сотрудники: аккаунт, принявший приглашение, входит в кабинет только своего магазина;
+  // убранный теряет вход сразу.
   'staff': Table({
     rows: async () => (await backboneDesk.staffList()).map((s) => ({
       id: `${s.slug}:${s.email}`, // в адресе магазина двоеточия нет — граница пары однозначна
       shop: `${s.slug} · ${s.name}`,
       email: s.email,
+      state: s.joined_at ? `входит как ${s.account || '— аккаунт удалён'}`
+        : s.invite_until ? `ссылка до ${at(s.invite_until)}` : 'нет ссылки — «Добавить сотрудника» ещё раз',
       by: s.added_by,
       at: at(s.added_at),
     })),
@@ -836,6 +852,7 @@ const cabinet = Components({
     columns: [
       { key: 'shop', name: 'Магазин', sortable: true },
       { key: 'email', name: 'Почта сотрудника', sortable: true },
+      { key: 'state', name: 'Приглашение' },
       { key: 'by', name: 'Кто добавил' },
       { key: 'at', name: 'Когда' },
     ],

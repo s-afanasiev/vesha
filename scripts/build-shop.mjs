@@ -47,6 +47,8 @@ export const MANIFEST = {
     'server/services/quota.js',
     'server/services/llm.js',
     'server/services/llmGuard.js',
+    'server/services/rateWindow.js',                        // «не больше N за окно»: вход, форма заявки, чат витрины
+    'server/services/accounts.js',                          // учётки: админ из .env, учётка сотрудника, смена пароля
     'server/services/collectors/netGuard.js',               // адреса моделей: без частных сетей
     'server/process-tree/projection.js',                    // проекция для tree@1 каркаса
     'server/services/chat-engine/ChatDesk.js',              // ядро chat-engine — без require (§6.4)
@@ -85,6 +87,8 @@ export const MANIFEST = {
     '024_backbone_shop_notice.sql',
     '025_backbone_shop_staff.sql',
     '026_backbone_assistant.sql',
+    '027_backbone_staff_invite.sql',
+    '028_backbone_chat_channel.sql',
   ],
   // пакеты — версии из корневого package.json и package-lock.json
   dependencies: [

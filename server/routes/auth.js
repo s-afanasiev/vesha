@@ -8,8 +8,19 @@ const {
   destroySession,
 } = require('../middleware/identity');
 const quota = require('../services/quota');
+const { RateWindow } = require('../services/rateWindow');
+const { Accounts } = require('../services/accounts');
 
 const router = express.Router();
+const accounts = new Accounts(db);
+
+// Перебор пароля: неудачные входы считаются на почту и на адрес; окно полно — 429
+// до его конца, даже с верным паролем. Удачный вход обнуляет счёт почты.
+const loginWindowMs = config.loginWindowMin * 60 * 1000;
+const failedLogins = {
+  email: new RateWindow({ max: config.loginFailuresPerEmail, windowMs: loginWindowMs }),
+  ip: new RateWindow({ max: config.loginFailuresPerIp, windowMs: loginWindowMs }),
+};
 const googleClient = config.googleClientId
   ? new OAuth2Client(
       config.googleClientId,
@@ -41,43 +52,30 @@ router.get('/me', async (req, res, next) => {
       guestId: req.guest ? req.guest.id : null,
       usage,
       googleEnabled: Boolean(config.googleClientId),
+      registrationOpen: config.registrationOpen,
     });
   } catch (err) {
     next(err);
   }
 });
 
+// Регистрация почту не подтверждает: почта админа (ADMIN_EMAILS) ею не заводится —
+// её учётка приходит из .env (ADMIN_PASSWORD) или через Google; закрытая регистрация
+// (сборка магазина) — учётки выдаёт админ.
 router.post('/register', async (req, res, next) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
-    const password = String(req.body.password || '');
-    const displayName = String(req.body.displayName || '').trim() || null;
-
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({ error: 'Укажите корректный email' });
+    if (!config.registrationOpen) {
+      return res.status(403).json({ error: 'Регистрация на этом сайте закрыта — учётку выдаёт админ' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Пароль не короче 8 символов' });
+    if (config.adminEmails.includes(email)) {
+      return res.status(403).json({ error: 'Эта почта — админ сайта: учётка заводится из .env (ADMIN_PASSWORD) или входом через Google' });
     }
-
-    const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existing.rows[0]) {
-      return res.status(409).json({ error: 'Email уже зарегистрирован' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const { rows } = await db.query(
-      `INSERT INTO users (email, display_name, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING id, email, display_name`,
-      [email, displayName, passwordHash]
-    );
-    const user = rows[0];
-    await db.query(
-      `INSERT INTO auth_identities (user_id, provider, provider_subject, meta)
-       VALUES ($1, 'password', $2, '{}'::jsonb)`,
-      [user.id, email]
-    );
+    const user = await accounts.create({
+      email,
+      password: String(req.body.password || ''),
+      displayName: String(req.body.displayName || '').trim() || null,
+    });
     await createSession(res, user.id, {
       userAgent: req.get('user-agent'),
       ip: req.ip,
@@ -92,23 +90,55 @@ router.post('/login', async (req, res, next) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
+    const blocked = [[failedLogins.email, email], [failedLogins.ip, req.ip]].find(([w, key]) => w.full(key));
+    if (blocked) {
+      const wait = blocked[0].retryAfterSec(blocked[1]);
+      res.set('Retry-After', String(wait));
+      return res.status(429).json({ error: `Слишком много неудачных попыток входа — попробуйте через ${Math.ceil(wait / 60)} мин.` });
+    }
+    const refuse = () => {
+      failedLogins.email.hit(email);
+      failedLogins.ip.hit(req.ip);
+      return res.status(401).json({ error: 'Неверный email или пароль' });
+    };
     const { rows } = await db.query(
       `SELECT id, email, display_name, password_hash FROM users WHERE email = $1`,
       [email]
     );
     const user = rows[0];
-    if (!user || !user.password_hash) {
-      return res.status(401).json({ error: 'Неверный email или пароль' });
-    }
+    if (!user || !user.password_hash) return refuse();
     const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) {
-      return res.status(401).json({ error: 'Неверный email или пароль' });
-    }
+    if (!ok) return refuse();
+    failedLogins.email.reset(email);
     await createSession(res, user.id, {
       userAgent: req.get('user-agent'),
       ip: req.ip,
     });
     res.json({ user: publicUser(user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Смена пароля: вошедший, с текущим паролем; остальные сессии учётки закрываются.
+// Неверный текущий пароль считается в тот же счёт неудач, что и вход.
+router.post('/password', async (req, res, next) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Войдите, чтобы сменить пароль' });
+    const email = String(req.user.email || '').toLowerCase();
+    if (failedLogins.email.full(email)) {
+      const wait = failedLogins.email.retryAfterSec(email);
+      res.set('Retry-After', String(wait));
+      return res.status(429).json({ error: `Слишком много неудачных попыток — попробуйте через ${Math.ceil(wait / 60)} мин.` });
+    }
+    const body = req.body || {};
+    try {
+      await accounts.changePassword(req.user.id, { current: body.current, next: body.password }, { keepSession: req.sessionId || null });
+    } catch (err) {
+      if (err.status === 401) failedLogins.email.hit(email);
+      throw err;
+    }
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -156,7 +186,8 @@ router.get('/google/callback', async (req, res, next) => {
     });
     const payload = ticket.getPayload();
     const sub = payload.sub;
-    const email = (payload.email || '').toLowerCase() || null;
+    // почта без подтверждения Google — не почта: по ней не связываем учётки и не даём ролей по почте
+    const email = (payload.email_verified !== false && (payload.email || '').toLowerCase()) || null;
     const displayName = payload.name || null;
 
     let userId;

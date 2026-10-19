@@ -124,7 +124,8 @@ function router(decl) {
       const result = await action.run({ ids, body, user: req.user || null });
       res.json({ ok: true, result });
     } catch (e) {
-      res.status(400).json({ error: String(e.message || e) });
+      // отказ домена со статусом (404 — не найдено, 409 — конфликт) — как есть, как у kanban@1
+      res.status(e.status && e.status < 500 ? e.status : 400).json({ error: String(e.message || e) });
     }
   }
 

@@ -19,6 +19,7 @@ const multer = require('multer');
 const config = require('../config');
 const { Components } = require('../components');
 const { Stages } = require('../components/stages');
+const { RateWindow } = require('../services/rateWindow');
 const { backboneDesk, assistant } = require('../services/backbone');
 
 const router = express.Router();
@@ -31,16 +32,12 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 const guestOf = (req) => (req.guest ? String(req.guest.id) : null);
 
 // Не больше N заявок с одного адреса за окно: форма открыта всем (честный простой узел).
+// Сообщения ассистенту — тоже с адреса: счёт гостя (Assistant) без cookie обходится,
+// потому что каждый запрос без cookie — новый гость.
 const windowMs = config.backboneSiteWindowMin * 60 * 1000;
-const hits = new Map();
-function tooMany(ip) {
-  const now = Date.now();
-  const recent = (hits.get(ip) || []).filter((t) => now - t < windowMs);
-  if (recent.length >= config.backboneSitePerIp) { hits.set(ip, recent); return true; }
-  recent.push(now);
-  hits.set(ip, recent);
-  return false;
-}
+const orderHits = new RateWindow({ max: config.backboneSitePerIp, windowMs });
+const chatHits = new RateWindow({ max: config.backboneChatPerIp, windowMs });
+const tooMany = (ip) => !orderHits.take(ip);
 
 // Магазин — из таблицы магазинов (шаг 6): заведённый в кабинете открывается
 // по своему адресу без правки кода; неизвестный — 404.
@@ -107,6 +104,7 @@ router.get('/shops/:slug/assistant', async (req, res, next) => {
 });
 
 router.post('/shops/:slug/assistant/messages', async (req, res, next) => {
+  if (!chatHits.take(req.ip)) return res.status(429).json({ error: 'Слишком много сообщений подряд — подождите несколько минут' });
   try {
     const body = req.body || {};
     res.json({ ok: true, ...(await assistant.hear(req.params.slug, guestOf(req), { text: body.text, externalId: body.externalId })) });

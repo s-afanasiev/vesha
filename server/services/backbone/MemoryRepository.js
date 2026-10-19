@@ -23,7 +23,7 @@ class MemoryRepository {
     this.items = new Map();   // shopId → позиции каталога
     this.loads = [];          // загрузки выгрузок каталога
     this.loadSeq = 0;
-    this.staffRows = [];      // сотрудники магазинов: почта × магазин
+    this.staffRows = [];      // сотрудники магазинов: приглашение на почту → аккаунт
   }
 
   async shopBySlug(slug) {
@@ -110,34 +110,57 @@ class MemoryRepository {
     return { ...shop };
   }
 
-  // ---------- сотрудники магазина (025) ----------
+  // ---------- сотрудники магазина (025, 027): приглашение на почту → аккаунт ----------
 
   async staff() {
-    return this.staffRows.map((r) => {
+    return this.staffRows.map(({ invite_hash: _hidden, user_id: _user, ...r }) => {
       const shop = this.shopRows.find((s) => s.id === r.shop_id);
       return { ...r, slug: shop.slug, name: shop.name };
     });
   }
 
-  async isStaff(shopId, email) {
-    return this.staffRows.some((r) => r.shop_id === shopId && r.email === email);
+  async isStaff(shopId, userId) {
+    return this.staffRows.some((r) => r.shop_id === shopId && r.user_id != null && r.user_id === userId);
   }
 
-  async shopsOfStaff(email) {
-    const ids = new Set(this.staffRows.filter((r) => r.email === email).map((r) => r.shop_id));
+  async shopsOfStaff(userId) {
+    const ids = new Set(this.staffRows.filter((r) => r.user_id != null && r.user_id === userId).map((r) => r.shop_id));
     return this.shopRows.filter((s) => ids.has(s.id)).map((s) => ({ ...s }));
   }
 
-  async addStaff(shopId, { email, addedBy }, events) {
-    if (await this.isStaff(shopId, email)) throw conflict(`${email} уже сотрудник этого магазина`);
-    const row = { shop_id: shopId, email, added_by: addedBy, added_at: this.journal.now() };
-    this.staffRows.push(row);
+  async staffOf(shopId, email) {
+    const row = this.staffRows.find((r) => r.shop_id === shopId && r.email === email);
+    return row ? { ...row } : null;
+  }
+
+  async addStaff(shopId, { email, addedBy, inviteHash = null, inviteUntil = null, userId = null }, events) {
+    const known = this.staffRows.find((r) => r.shop_id === shopId && r.email === email);
+    if (known && known.user_id) throw conflict(`${email} уже сотрудник этого магазина`);
+    const row = known || { shop_id: shopId, email, user_id: null, joined_at: null, account: null };
+    Object.assign(row, {
+      added_by: addedBy, added_at: this.journal.now(), invite_hash: inviteHash, invite_until: inviteUntil,
+      user_id: userId, joined_at: userId ? this.journal.now() : null, account: userId ? email : null,
+    });
+    if (!known) this.staffRows.push(row);
+    await this.journal.appendIn(null, events);
+    return { ...row };
+  }
+
+  async staffByInvite(inviteHash) {
+    const row = this.staffRows.find((r) => r.invite_hash && r.invite_hash === inviteHash);
+    return row ? { ...row } : null;
+  }
+
+  async joinStaff(shopId, email, inviteHash, user, events) {
+    const row = this.staffRows.find((r) => r.shop_id === shopId && r.email === email && r.invite_hash === inviteHash && !r.user_id);
+    if (!row) throw conflict('Приглашение уже принято — попросите админа выслать новое');
+    Object.assign(row, { user_id: user.id, account: user.email || null, joined_at: this.journal.now(), invite_hash: null, invite_until: null });
     await this.journal.appendIn(null, events);
     return { ...row };
   }
 
   async removeStaff(shopId, email, events) {
-    if (!(await this.isStaff(shopId, email))) throw conflict(`У магазина нет сотрудника ${email} — обновите список`);
+    if (!this.staffRows.some((r) => r.shop_id === shopId && r.email === email)) throw conflict(`У магазина нет сотрудника ${email} — обновите список`);
     this.staffRows = this.staffRows.filter((r) => !(r.shop_id === shopId && r.email === email));
     await this.journal.appendIn(null, events);
   }
@@ -244,9 +267,10 @@ class MemoryRepository {
     return true;
   }
 
-  async pendingReceipts(maxAttempts, limit) {
+  async pendingReceipts(maxAttempts, limit, shopId = null) {
     return this.receiptRows
       .filter((r) => r.status === 'pending' || (r.status === 'failed' && r.attempts < maxAttempts))
+      .filter((r) => shopId == null || r.shop_id === shopId)
       .slice(0, limit).map((r) => ({ ...r }));
   }
 

@@ -73,7 +73,24 @@
     // вошёл другой человек — другие магазины: страница собирается заново
     window.addEventListener('auth:change', () => location.reload());
 
-    fetch('/api/backbone/me', { credentials: 'same-origin' })
+    // Ссылка приглашения сотрудника (?invite=): после входа магазин закрепляется за этим
+    // аккаунтом и открывается; без входа — просьба войти (после входа страница
+    // перезагрузится и примет приглашение сама). Решает сервер: POST /api/backbone/invite.
+    function acceptInvite(token) {
+      return fetch('/api/backbone/invite', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+      }).then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 200) location.replace(`?${new URLSearchParams({ shop: body.slug })}`);
+        else say(res.status === 401 ? 'Войдите или зарегистрируйтесь — приглашение в кабинет магазина примется само.' : body.error || `HTTP ${res.status}`);
+        return new Promise(() => {}); // дальше — новая страница или просьба войти
+      });
+    }
+    const invite = params.get('invite');
+
+    (invite ? acceptInvite(invite) : Promise.resolve())
+      .then(() => fetch('/api/backbone/me', { credentials: 'same-origin' }))
       .then(async (res) => ({ status: res.status, body: await res.json().catch(() => ({})) }))
       .then(({ status, body }) => {
         if (status === 401) return say('Войдите: кабинет открыт админу и сотрудникам магазина.');
@@ -82,7 +99,7 @@
         document.querySelector('.boot-pages [data-page="shops"]').hidden = !admin;
         const page = ['draft', 'measures', 'catalog', 'assistant', ...(admin ? ['shops'] : [])].includes(asked) ? asked : 'main';
         const shop = params.get('shop') || (admin ? 'demo-krepezh' : shops[0] && shops[0].slug);
-        if (!shop) return say('Вашей почте пока не открыт ни один магазин — попросите админа добавить её на экране «Магазины».');
+        if (!shop) return say('Вашему аккаунту пока не открыт ни один магазин — попросите у админа ссылку-приглашение.');
         // выбор магазина и вкладки — только тому, кому есть что открыть
         document.querySelector('.boot-shop').hidden = false;
         document.querySelector('.boot-pages').hidden = false;

@@ -88,7 +88,9 @@ class BackboneRepository {
     return rows;
   }
 
+  // id с клиента (карточка, строка таблицы, адрес файла): не UUID — «не найдена», а не ошибка базы.
   async orderById(id) {
+    if (!UUID.test(String(id))) return null;
     const { rows } = await this.db.query('SELECT * FROM backbone_orders WHERE id = $1', [id]);
     return rows[0] || null;
   }
@@ -189,41 +191,76 @@ class BackboneRepository {
     });
   }
 
-  // ---------- сотрудники магазина (025): почта × магазин ----------
+  // ---------- сотрудники магазина (025, 027): приглашение на почту → аккаунт ----------
 
   async staff() {
     const { rows } = await this.db.query(
-      `SELECT st.shop_id, s.slug, s.name, st.email, st.added_by, st.added_at
+      `SELECT st.shop_id, s.slug, s.name, st.email, st.added_by, st.added_at, st.invite_until, st.joined_at, u.email AS account
        FROM backbone_shop_staff st JOIN backbone_shops s ON s.id = st.shop_id
+       LEFT JOIN users u ON u.id = st.user_id
        ORDER BY s.created_at, s.slug, st.added_at, st.email`
     );
     return rows;
   }
 
-  async isStaff(shopId, email) {
+  // Сотрудник — аккаунт, принявший приглашение магазина; совпадение почты входа не даёт.
+  async isStaff(shopId, userId) {
+    if (!UUID.test(String(userId))) return false;
     const { rows } = await this.db.query(
-      'SELECT 1 FROM backbone_shop_staff WHERE shop_id = $1 AND email = $2', [shopId, email]
+      'SELECT 1 FROM backbone_shop_staff WHERE shop_id = $1 AND user_id = $2', [shopId, userId]
     );
     return rows.length > 0;
   }
 
-  async shopsOfStaff(email) {
+  async shopsOfStaff(userId) {
+    if (!UUID.test(String(userId))) return [];
     const { rows } = await this.db.query(
-      `SELECT s.* FROM backbone_shops s JOIN backbone_shop_staff st ON st.shop_id = s.id
-       WHERE st.email = $1 ORDER BY s.created_at, s.slug`,
-      [email]
+      `SELECT DISTINCT s.* FROM backbone_shops s JOIN backbone_shop_staff st ON st.shop_id = s.id
+       WHERE st.user_id = $1 ORDER BY s.created_at, s.slug`,
+      [userId]
     );
     return rows;
   }
 
-  async addStaff(shopId, { email, addedBy }, events) {
+  async staffOf(shopId, email) {
+    const { rows } = await this.db.query('SELECT * FROM backbone_shop_staff WHERE shop_id = $1 AND email = $2', [shopId, email]);
+    return rows[0] || null;
+  }
+
+  // Сотрудник: учётка, заведённая сайтом (userId — входит сразу), или приглашение —
+  // новая строка или новая ссылка взамен прежней, пока его не приняли; принятое — 409.
+  async addStaff(shopId, { email, addedBy, inviteHash = null, inviteUntil = null, userId = null }, events) {
     return this.tx(async (client) => {
       const { rows: [row] } = await client.query(
-        `INSERT INTO backbone_shop_staff (shop_id, email, added_by) VALUES ($1, $2, $3)
-         ON CONFLICT (shop_id, email) DO NOTHING RETURNING *`,
-        [shopId, email, addedBy]
+        `INSERT INTO backbone_shop_staff (shop_id, email, added_by, invite_hash, invite_until, user_id, joined_at)
+         VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6::uuid IS NULL THEN NULL ELSE now() END)
+         ON CONFLICT (shop_id, email) DO UPDATE
+           SET added_by = EXCLUDED.added_by, added_at = now(), invite_hash = EXCLUDED.invite_hash, invite_until = EXCLUDED.invite_until,
+               user_id = EXCLUDED.user_id, joined_at = EXCLUDED.joined_at
+           WHERE backbone_shop_staff.user_id IS NULL
+         RETURNING *`,
+        [shopId, email, addedBy, inviteHash, inviteUntil, userId]
       );
       if (!row) throw conflict(`${email} уже сотрудник этого магазина`);
+      await this.journal.appendIn(client, events);
+      return row;
+    });
+  }
+
+  async staffByInvite(inviteHash) {
+    const { rows } = await this.db.query('SELECT * FROM backbone_shop_staff WHERE invite_hash = $1', [inviteHash]);
+    return rows[0] || null;
+  }
+
+  // Приглашение принято: строка — за аккаунтом, ссылка гаснет (одноразовая).
+  async joinStaff(shopId, email, inviteHash, user, events) {
+    return this.tx(async (client) => {
+      const { rows: [row] } = await client.query(
+        `UPDATE backbone_shop_staff SET user_id = $4, joined_at = now(), invite_hash = NULL, invite_until = NULL
+         WHERE shop_id = $1 AND email = $2 AND invite_hash = $3 AND user_id IS NULL RETURNING *`,
+        [shopId, email, inviteHash, user.id]
+      );
+      if (!row) throw conflict('Приглашение уже принято — попросите админа выслать новое');
       await this.journal.appendIn(client, events);
       return row;
     });
@@ -394,12 +431,13 @@ class BackboneRepository {
     });
   }
 
-  async pendingReceipts(maxAttempts, limit) {
+  // shopId — только письма этого магазина (кнопка в его кабинете); без него — все (после перехода).
+  async pendingReceipts(maxAttempts, limit, shopId = null) {
     const { rows } = await this.db.query(
       `SELECT * FROM backbone_receipts
-       WHERE status = 'pending' OR (status = 'failed' AND attempts < $1)
+       WHERE (status = 'pending' OR (status = 'failed' AND attempts < $1)) AND ($3::uuid IS NULL OR shop_id = $3)
        ORDER BY created_at LIMIT $2`,
-      [maxAttempts, limit]
+      [maxAttempts, limit, shopId]
     );
     return rows;
   }

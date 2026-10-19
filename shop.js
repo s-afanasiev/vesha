@@ -21,7 +21,8 @@ const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const config = require('./server/config');
-const { migrate } = require('./server/db');
+const db = require('./server/db');
+const { Accounts, bootAdmins } = require('./server/services/accounts');
 const { identityMiddleware } = require('./server/middleware/identity');
 const authRoutes = require('./server/routes/auth');
 const backboneRoutes = require('./server/routes/backbone');
@@ -62,13 +63,23 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: err.message || 'Ошибка сервера' });
 });
 
+// Подпись cookie гостя витрины — SESSION_SECRET: в бою со строкой по умолчанию или
+// короткой cookie подделываются (чужой гость — его разговор и заявки у ассистента).
+function refuseWeakSecret(env = process.env) {
+  if (env.NODE_ENV === 'production' && String(env.SESSION_SECRET || '').length < 32) {
+    throw new Error('SESSION_SECRET не задан или короче 32 символов — задайте в .env (openssl rand -hex 32)');
+  }
+}
+
 async function start() {
+  refuseWeakSecret();
   app.listen(config.port, config.host, () => {
     console.log(`Shop running at http://${config.host || 'localhost'}:${config.port} (витрина: ${config.shopHome})`);
   });
 
   try {
-    await migrate();
+    await db.migrate();
+    await bootAdmins(new Accounts(db), config); // админ — из .env: регистрация его почты закрыта
   } catch (err) {
     console.warn('DB migrate failed:', err.message);
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');
@@ -77,4 +88,4 @@ async function start() {
 
 if (require.main === module) start();
 
-module.exports = { app, start, CABINET };
+module.exports = { app, start, refuseWeakSecret, CABINET };

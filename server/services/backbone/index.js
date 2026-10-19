@@ -23,6 +23,7 @@ const { BackboneRepository } = require('./BackboneRepository');
 const { BackboneDesk } = require('./BackboneDesk');
 const { ShopForm } = require('./shops/ShopForm');
 const { ShopAccess } = require('./shops/ShopAccess');
+const { Accounts } = require('../accounts');
 const { Catalogs, CsvFeed } = require('./catalog/Catalog');
 const { CatalogIndex } = require('./catalog/CatalogIndex');
 const { CatalogFile } = require('./catalog/CatalogFile');
@@ -48,7 +49,7 @@ const { ChatDesk } = require('../chat-engine/ChatDesk');
 const { DialogueRepository } = require('../chat-engine/DialogueRepository');
 const { ReplySuggester } = require('../chat-engine/ReplySuggester');
 const { Funnel } = require('../chat-engine/Funnel');
-const { Assistant } = require('./assistant/Assistant');
+const { Assistant, CHANNEL: CHAT_CHANNEL } = require('./assistant/Assistant');
 const { ShopFacts } = require('./assistant/ShopFacts');
 const { AutoAnswers, StatusAnswer, HoursAnswer, StockAnswer } = require('./assistant/AutoAnswers');
 const { ChatIntake } = require('./assistant/ChatIntake');
@@ -159,6 +160,8 @@ const backboneDesk = new BackboneDesk({
   shops: SEEDS,
   shopForm: new ShopForm({ niches: Object.keys(TEMPLATES) }),             // магазин из кабинета, без правки кода
   access: new ShopAccess({ admins: config.adminEmails }),                 // админ — все магазины, сотрудник — свой
+  invites: { days: 7 },                                                   // ссылка приглашения сотрудника действует 7 дней, один раз
+  accounts: new Accounts(db),                                             // сотруднику без учётки сайт заводит её с паролем для админа
   catalogs,
   catalogFile,                                                            // выгрузка 1С / МойСклад / прайс → каталог (О17)
   toolOf,
@@ -179,7 +182,9 @@ const demoRequest = () => fs.readFileSync(path.join(FIXTURES, 'request-20.txt'),
 // Ассистент магазина (шаг 5, §6.4): разговор — ядро chat-engine без правки (ChatDesk,
 // DialogueRepository, ReplySuggester, Funnel — единственная зависимость костяка от
 // chat-engine); ответы — только из фактов магазина (О18); заявки — только собеседника (О20).
-const dialogues = new DialogueRepository(db);
+// Территория магазинов в общих таблицах chat-engine: только канал виджета витрины и своя
+// персона — демо chat-engine Vesha эти разговоры и эту персону не видит и не правит.
+const dialogues = new DialogueRepository(db, { channels: [CHAT_CHANNEL], personaKey: 'backbone.persona' });
 const chatFunnel = new Funnel();
 const statusPath = (token) => `/backbone/status.html?t=${encodeURIComponent(token)}`;
 const assistant = new Assistant({

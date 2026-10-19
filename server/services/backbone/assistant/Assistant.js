@@ -21,7 +21,9 @@ function fail(message, status) {
   return err;
 }
 
-const CHANNEL = 'web'; // канал chat-engine: виджет на сайте
+// Канал chat-engine: виджет витрины магазина — своя территория (DialogueRepository с
+// channels: [CHANNEL]); демо chat-engine Vesha (канал web) разговоры магазинов не видит.
+const CHANNEL = 'shop';
 
 class Assistant {
   constructor({
@@ -49,10 +51,14 @@ class Assistant {
   // ---------- сторона посетителя: виджет витрины ----------
 
   // Сообщение посетителя → ответ ассистента (или ожидание менеджера) → разговор целиком.
+  // Повтор отправки узнаётся по externalId виджета — внутри ключа посетителя: id из
+  // чужого разговора (external_id уникален на всю базу) не глушит и не трогает этот.
   async hear(slug, guest, { text, externalId } = {}) {
     const shop = await this.shopFor(slug, guest);
+    const key = this.keyOf(shop, guest);
     const got = await this.chatDesk.receiveVisitorMessage({
-      channel: CHANNEL, visitorKey: this.keyOf(shop, guest), text, externalId,
+      channel: CHANNEL, visitorKey: key, text,
+      externalId: externalId ? `${key}:${String(externalId).slice(0, 100)}` : undefined,
     });
     if (!got.duplicate) await this.respond(shop, guest, got.dialogue, got.message);
     return this.talk(shop, guest);
@@ -178,12 +184,15 @@ class Assistant {
     return (await this.journal.history(shop.id)).filter((e) => e.stream === 'chat');
   }
 
-  // Разговор — только своего магазина: чужой id — «не найден».
+  // Разговор — только своего магазина: чужой и несуществующий id — один ответ «не найден».
   async own(slug, dialogueId) {
     const shop = await this.desk.shop(slug);
-    const { dialogue, messages } = await this.chatDesk.history(dialogueId);
-    if (!dialogue.visitor_key.startsWith(`${shop.id}:`)) throw fail('Разговор не найден', 404);
-    return { shop, dialogue, messages };
+    const found = await this.chatDesk.history(dialogueId).catch((err) => {
+      if (err.status === 404) return null;
+      throw err;
+    });
+    if (!found || !found.dialogue.visitor_key.startsWith(`${shop.id}:`)) throw fail('Разговор не найден', 404);
+    return { shop, dialogue: found.dialogue, messages: found.messages };
   }
 
   // Черновик модели: персона магазина, квота того, кто нажал; сбой — результат, а не исключение.
@@ -222,4 +231,4 @@ class Assistant {
   }
 }
 
-module.exports = { Assistant };
+module.exports = { Assistant, CHANNEL };

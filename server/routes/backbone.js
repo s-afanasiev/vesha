@@ -5,6 +5,7 @@
 // вкладок в UI — удобство.
 //
 //   /me                              кто вошёл: админ ли, какие магазины ему открыты
+//   POST /invite {token}             сотрудник принимает приглашение: магазин — за его аккаунтом
 //   /c/pages/shops, /c/shops, /c/staff  кабинет: магазины и сотрудники — только админ
 //   /s/<slug>/c/pages/<экран>        экраны магазина: доска, черновики, замеры, каталог
 //   /s/<slug>/c/<экземпляр>          компоненты магазина — админ или сотрудник магазина
@@ -39,6 +40,16 @@ router.get('/me', async (req, res, next) => {
   try {
     const { admin, shops } = await backboneDesk.shopsFor(req.user);
     res.json({ email: req.user.email, admin, shops: shops.map((s) => ({ slug: s.slug, name: s.name })) });
+  } catch (err) {
+    fail(err, res, next);
+  }
+});
+
+// Ссылка приглашения из «Добавить сотрудника»: открыл и вошёл — сотрудник этого магазина.
+router.post('/invite', async (req, res, next) => {
+  try {
+    const shop = await backboneDesk.joinStaff((req.body || {}).token, req.user);
+    res.json({ ok: true, slug: shop.slug, name: shop.name });
   } catch (err) {
     fail(err, res, next);
   }

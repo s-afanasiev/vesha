@@ -4,21 +4,48 @@
 //
 // db — исполнитель с query() / withClient() (server/db.js), инъектируется в
 // конструкторе: репозиторий не импортирует инфраструктуру сам (П7).
+//
+// Территория: таблицы общие у демо chat-engine и ассистента магазинов (костяк), а
+// граница — здесь: репозиторий видит и правит только разговоры своих каналов
+// (channels) и читает свою персону (personaKey). Разговор чужого канала по id —
+// «не найден», как несуществующий; id не в форме UUID — тоже, а не ошибка базы.
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isId = (v) => UUID.test(String(v));
+
+function notFound(message = 'Диалог не найден') {
+  const err = new Error(message);
+  err.status = 404;
+  return err;
+}
 
 class DialogueRepository {
-  constructor(db) {
+  constructor(db, { channels = ['web'], personaKey = 'persona' } = {}) {
     this.db = db;
+    this.channels = channels;     // каналы территории: только их разговоры видны и правятся
+    this.personaKey = personaKey; // ключ персоны территории в chat_engine_settings
+  }
+
+  // Разговоры территории — для условий по dialogue_id; n — номер параметра со списком каналов.
+  own(n) {
+    return `(SELECT id FROM chat_engine_dialogues WHERE channel = ANY($${n}::text[]))`;
   }
 
   async dialogueById(id) {
+    if (!isId(id)) return null;
     const { rows } = await this.db.query(
-      'SELECT * FROM chat_engine_dialogues WHERE id = $1',
-      [id]
+      'SELECT * FROM chat_engine_dialogues WHERE id = $1 AND channel = ANY($2::text[])',
+      [id, this.channels]
     );
     return rows[0] || null;
   }
 
   async ensureDialogue(client, { channel, visitorKey, visitorName }) {
+    if (!this.channels.includes(channel)) {
+      const err = new Error(`Канал «${channel}» не этой территории`);
+      err.status = 400;
+      throw err;
+    }
     const existing = await client.query(
       'SELECT * FROM chat_engine_dialogues WHERE channel = $1 AND visitor_key = $2 FOR UPDATE',
       [channel, visitorKey]
@@ -38,11 +65,16 @@ class DialogueRepository {
   async receiveVisitorMessage({ channel, visitorKey, visitorName, text, externalId }) {
     return this.db.withClient(async (client) => {
       if (externalId) {
+        // external_id уникален на всю базу; разговор чужой территории наружу не называем
         const dup = await client.query(
-          'SELECT dialogue_id FROM chat_engine_messages WHERE external_id = $1',
+          `SELECT m.dialogue_id, d.channel FROM chat_engine_messages m
+           JOIN chat_engine_dialogues d ON d.id = m.dialogue_id WHERE m.external_id = $1`,
           [externalId]
         );
-        if (dup.rows[0]) return { duplicate: true, dialogueId: dup.rows[0].dialogue_id };
+        if (dup.rows[0]) {
+          const { dialogue_id: id, channel } = dup.rows[0];
+          return { duplicate: true, dialogueId: this.channels.includes(channel) ? id : null };
+        }
       }
 
       const dialogue = await this.ensureDialogue(client, { channel, visitorKey, visitorName });
@@ -67,8 +99,9 @@ class DialogueRepository {
   }
 
   async messagesOf(dialogueId, { limit, roles } = {}) {
-    const filters = ['dialogue_id = $1'];
-    const params = [dialogueId];
+    if (!isId(dialogueId)) return [];
+    const filters = ['dialogue_id = $1', `dialogue_id IN ${this.own(2)}`];
+    const params = [dialogueId, this.channels];
     if (roles) {
       params.push(roles);
       filters.push(`role = ANY($${params.length})`);
@@ -95,12 +128,14 @@ class DialogueRepository {
         (SELECT count(*) FROM chat_engine_messages m
           WHERE m.dialogue_id = d.id AND m.role = 'draft' AND m.state = 'open') AS open_drafts
       FROM chat_engine_dialogues d
+      WHERE d.channel = ANY($1::text[])
       ORDER BY d.last_incoming_at DESC NULLS LAST, d.created_at DESC
-    `);
+    `, [this.channels]);
     return rows;
   }
 
   async createDraft(dialogueId, text) {
+    if (!(await this.dialogueById(dialogueId))) throw notFound();
     return this.db.withClient(async (client) => {
       // Инвариант территории: не больше одного открытого черновика на диалог.
       await client.query(
@@ -118,14 +153,15 @@ class DialogueRepository {
   }
 
   async resolveDraft(messageId, { state, text }) {
+    if (!isId(messageId)) throw notFound('Черновик не найден');
     const { rows } = await this.db.query(
       `UPDATE chat_engine_messages
        SET state = $2,
            text = COALESCE($3, text),
            resolved_at = now()
-       WHERE id = $1 AND role = 'draft' AND state = 'open'
+       WHERE id = $1 AND role = 'draft' AND state = 'open' AND dialogue_id IN ${this.own(4)}
        RETURNING *`,
-      [messageId, state, text || null]
+      [messageId, state, text || null, this.channels]
     );
     if (!rows[0]) {
       const err = new Error('Черновик уже обработан или устарел');
@@ -137,17 +173,14 @@ class DialogueRepository {
 
   // Ответ менеджера: запись, «чей мяч», авто-переход new → in_work — одна транзакция.
   async addManagerMessage(dialogueId, text) {
+    if (!isId(dialogueId)) throw notFound();
     return this.db.withClient(async (client) => {
       const locked = await client.query(
-        'SELECT * FROM chat_engine_dialogues WHERE id = $1 FOR UPDATE',
-        [dialogueId]
+        'SELECT * FROM chat_engine_dialogues WHERE id = $1 AND channel = ANY($2::text[]) FOR UPDATE',
+        [dialogueId, this.channels]
       );
       const dialogue = locked.rows[0];
-      if (!dialogue) {
-        const err = new Error('Диалог не найден');
-        err.status = 404;
-        throw err;
-      }
+      if (!dialogue) throw notFound();
 
       const { rows } = await client.query(
         `INSERT INTO chat_engine_messages (dialogue_id, role, state, text)
@@ -179,17 +212,14 @@ class DialogueRepository {
 
   // Единственная дверь смены этапа: переход + журнал одной транзакцией (урок F1).
   async setStage(dialogueId, toStage, { actor, cause }) {
+    if (!isId(dialogueId)) throw notFound();
     return this.db.withClient(async (client) => {
       const locked = await client.query(
-        'SELECT stage FROM chat_engine_dialogues WHERE id = $1 FOR UPDATE',
-        [dialogueId]
+        'SELECT stage FROM chat_engine_dialogues WHERE id = $1 AND channel = ANY($2::text[]) FOR UPDATE',
+        [dialogueId, this.channels]
       );
       const from = locked.rows[0] && locked.rows[0].stage;
-      if (!from) {
-        const err = new Error('Диалог не найден');
-        err.status = 404;
-        throw err;
-      }
+      if (!from) throw notFound();
       if (from === toStage) return { from, to: toStage, changed: false };
 
       await client.query('UPDATE chat_engine_dialogues SET stage = $2 WHERE id = $1', [
@@ -206,26 +236,23 @@ class DialogueRepository {
   }
 
   async updateCard(dialogueId, { notes, visitorName }) {
+    if (!isId(dialogueId)) throw notFound();
     const { rows } = await this.db.query(
       `UPDATE chat_engine_dialogues
        SET notes = COALESCE($2, notes),
            visitor_name = COALESCE($3, visitor_name)
-       WHERE id = $1
+       WHERE id = $1 AND channel = ANY($4::text[])
        RETURNING *`,
-      [dialogueId, notes ?? null, visitorName ?? null]
+      [dialogueId, notes ?? null, visitorName ?? null, this.channels]
     );
-    if (!rows[0]) {
-      const err = new Error('Диалог не найден');
-      err.status = 404;
-      throw err;
-    }
+    if (!rows[0]) throw notFound();
     return rows[0];
   }
 
   async persona() {
     const { rows } = await this.db.query(
       'SELECT value FROM chat_engine_settings WHERE key = $1',
-      ['persona']
+      [this.personaKey]
     );
     return rows[0] ? rows[0].value : '';
   }
@@ -235,7 +262,7 @@ class DialogueRepository {
       `INSERT INTO chat_engine_settings (key, value, updated_at)
        VALUES ($1, $2, now())
        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = now()`,
-      ['persona', value]
+      [this.personaKey, value]
     );
   }
 }

@@ -5,7 +5,7 @@
 // Сбой LLM — результат { ok: false, code, message }, а не исключение (П24):
 // конвейер не падает, менеджер видит честную причину (урок Scout+Anna F3).
 
-const CHANNEL_LABELS = { web: 'сайт', vk: 'ВКонтакте', telegram: 'Telegram' };
+const CHANNEL_LABELS = { web: 'сайт', shop: 'чат на сайте магазина', vk: 'ВКонтакте', telegram: 'Telegram' };
 
 class ReplySuggester {
   constructor({ repository, completeChat, funnel, historyLimit = 30 }) {

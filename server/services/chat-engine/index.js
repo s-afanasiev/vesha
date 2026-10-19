@@ -10,7 +10,7 @@ const { ReplySuggester } = require('./ReplySuggester');
 const { Funnel } = require('./Funnel');
 
 const funnel = new Funnel();
-const repository = new DialogueRepository(db);
+const repository = new DialogueRepository(db, { channels: ['web'], personaKey: 'persona' }); // территория демо: виджет web; разговоры магазинов (канал shop) ему не видны
 
 const chatDesk = new ChatDesk({
   repository,

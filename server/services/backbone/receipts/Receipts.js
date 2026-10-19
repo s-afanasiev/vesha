@@ -97,8 +97,9 @@ class Receipts {
   }
 
   // Доставка ожидающих: письмо ушло — sent; сбой — failed с повтором до maxAttempts.
-  async deliver(shopOf) {
-    const pending = await this.repository.pendingReceipts(this.maxAttempts, this.batch);
+  // shopId — только письма этого магазина (кнопка в его кабинете).
+  async deliver(shopOf, { shopId = null } = {}) {
+    const pending = await this.repository.pendingReceipts(this.maxAttempts, this.batch, shopId);
     let sent = 0;
     for (const r of pending) {
       try {

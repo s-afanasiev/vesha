@@ -19,8 +19,9 @@
 // магазин из кабинета (ShopForm), новый — в тени. Каталог магазина — его выгрузка
 // xlsx (CatalogFile): файл → сопоставление колонок → подмена целиком только при
 // успешном чтении (О17). Инструмент разбора строится на каталоге магазина (toolOf).
-// Сотрудники магазина: админ добавляет почту магазину, сотрудник входит обычной
-// регистрацией и видит только свой магазин; кто куда входит — правило ShopAccess.
+// Сотрудники магазина: админ добавляет почту — сайт заводит учётку с паролем для админа
+// (у почты уже есть учётка — одноразовая ссылка-приглашение); сотрудник видит только
+// свой магазин (доступ — у учётки, а не у почты); кто куда входит — правило ShopAccess.
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
@@ -51,12 +52,15 @@ function refused({ status, reason }) {
   return err;
 }
 
+// Токен приглашения сотрудника хранится только хэшем: утечка базы ссылку не выдаёт.
+const inviteHash = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
 class BackboneDesk {
   constructor({
     repository, journal, board, path, templateOf, shops = {}, tool = null, toolOf = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
     intake = null, statusPage = null, receipts = null, privacy = null,
-    shopForm = null, catalogs = null, catalogFile = null, access = null,
+    shopForm = null, catalogs = null, catalogFile = null, access = null, invites = { days: 7 }, accounts = null,
   }) {
     this.repository = repository;
     this.journal = journal;
@@ -70,6 +74,8 @@ class BackboneDesk {
     this.catalogs = catalogs;       // каталоги магазинов по версии выгрузки
     this.catalogFile = catalogFile; // чтение выгрузки xlsx
     this.access = access;           // кто входит: админ — все магазины, сотрудник — свой
+    this.invites = invites;         // приглашение сотрудника: срок ссылки в днях
+    this.accounts = accounts;       // учётки входа: сотруднику без учётки её заводит сайт с паролем для админа
     this.measuresOf = measuresOf; // (магазин, его описание) → Measures в часах работы магазина
     this.baseline = baseline;     // правило тени и включения помощи
     this.clock = clock;
@@ -80,11 +86,12 @@ class BackboneDesk {
   }
 
   // Магазин по slug — из таблицы; посев из кода (демо) заводится при первом обращении.
+  // Посев — только собственный ключ: адрес «constructor» или «__proto__» с витрины не магазин.
   async shop(slug, actor = 'system') {
     const known = await this.repository.shopBySlug(String(slug));
     if (known) return known;
+    if (!this.isSeed(slug)) throw notFound(`Магазин не найден: ${slug}`);
     const spec = this.shops[slug];
-    if (!spec) throw notFound(`Магазин не найден: ${slug}`);
     return this.open({
       slug, name: spec.name, niche: spec.niche, mode: spec.mode || 'shadow',
       hours: spec.hours || null, replyTo: spec.replyTo || null, shadowDays: spec.shadowDays ?? null,
@@ -118,7 +125,7 @@ class BackboneDesk {
   // Новый магазин — без правки кода: адрес, название, ниша, часы, почта; режим — тень (база «до»).
   async openShop(fields, actor) {
     const form = this.shopForm.create(fields);
-    if (this.shops[form.slug]) throw conflict(`Адрес магазина «${form.slug}» уже занят`);
+    if (this.isSeed(form.slug)) throw conflict(`Адрес магазина «${form.slug}» уже занят`);
     return this.open({ ...form, mode: 'shadow' }, actor, { exists: 'fail', cabinet: true });
   }
 
@@ -140,13 +147,14 @@ class BackboneDesk {
 
   // Вход в магазин — вердикт ShopAccess до чтения данных магазина: без входа — 401,
   // чужой магазин и демо не админу — 403 (существование адреса не выдаём); админу
-  // неизвестный адрес — 404, посев заводится здесь же.
+  // неизвестный адрес — 404, посев заводится здесь же. Сотрудник — аккаунт, принявший
+  // приглашение этого магазина (joinStaff), а не любой, кто зарегистрировал ту же почту.
   async enter(slug, user) {
     const email = this.access.emailOf(user);
     const known = email && !this.access.isAdmin(user) ? await this.repository.shopBySlug(String(slug)) : null;
     const verdict = this.access.shop(user, {
       seed: this.isSeed(slug),
-      staff: Boolean(known && await this.repository.isStaff(known.id, email)),
+      staff: Boolean(known && await this.repository.isStaff(known.id, user.id)),
     });
     if (!verdict.ok) throw refused(verdict);
     return this.shop(slug);
@@ -170,7 +178,7 @@ class BackboneDesk {
   async shopsFor(user) {
     const verdict = this.signedIn(user);
     if (verdict.role === 'admin') return { admin: true, shops: await this.shopList() };
-    const own = await this.repository.shopsOfStaff(this.access.emailOf(user));
+    const own = await this.repository.shopsOfStaff(user.id);
     return { admin: false, shops: own.filter((s) => !this.isSeed(s.slug)) };
   }
 
@@ -178,17 +186,50 @@ class BackboneDesk {
     return this.repository.staff();
   }
 
-  staffEvent(shop, type, email, actor) {
-    return { stream: 'shop', scope: shop.id, subjectId: shop.id, type, data: { email }, actor, cause: 'cabinet' };
+  staffEvent(shop, type, email, actor, data = {}) {
+    return { stream: 'shop', scope: shop.id, subjectId: shop.id, type, data: { email, ...data }, actor, cause: 'cabinet' };
   }
 
-  // Админ добавляет почту сотрудника магазину; сотрудник регистрируется с ней сам.
+  // Админ добавляет сотрудника. Учётки с этой почтой нет — сайт заводит её с паролем,
+  // который видит только админ (передаёт сотруднику, тот сменит его в кабинете), и
+  // сотрудник входит сразу. Учётка уже есть — её мог завести и посторонний (регистрация
+  // почту не подтверждает, совпадение почты входа не даёт), поэтому доступ — только по
+  // одноразовой ссылке-приглашению со сроком; в базе — хэш токена. Повтор для
+  // непринятого приглашения — новая ссылка взамен прежней.
   async addStaff(slug, rawEmail, actor) {
     const shop = await this.shop(slug);
     if (this.isSeed(shop.slug)) throw bad('Демо-магазин — только для админа: сотрудников у него нет');
     const email = this.shopForm.staffEmail(rawEmail);
-    await this.repository.addStaff(shop.id, { email, addedBy: actor }, [this.staffEvent(shop, 'staff_added', email, actor)]);
-    return { shop, email };
+    const known = await this.repository.staffOf(shop.id, email);
+    if (known && known.user_id) throw conflict(`${email} уже сотрудник этого магазина`);
+    if (this.accounts && !(await this.accounts.byEmail(email))) {
+      const { user, password } = await this.accounts.issue({ email });
+      await this.repository.addStaff(shop.id, { email, addedBy: actor, userId: user.id },
+        [this.staffEvent(shop, 'staff_added', email, actor, { login: 'password' })]);
+      return { shop, email, password };
+    }
+    const token = crypto.randomBytes(24).toString('base64url');
+    const until = new Date(this.clock().getTime() + this.invites.days * 24 * 60 * 60 * 1000).toISOString();
+    await this.repository.addStaff(shop.id, { email, addedBy: actor, inviteHash: inviteHash(token), inviteUntil: until },
+      [this.staffEvent(shop, 'staff_added', email, actor, { until })]);
+    return { shop, email, token, until };
+  }
+
+  // Сотрудник открыл ссылку и вошёл: строка приглашения — за его аккаунтом, ссылка гаснет.
+  // Неизвестная, принятая и просроченная ссылка — один ответ.
+  async joinStaff(token, user) {
+    this.signedIn(user);
+    const hash = token ? inviteHash(String(token)) : null;
+    const row = hash ? await this.repository.staffByInvite(hash) : null;
+    if (!row || new Date(row.invite_until).getTime() < this.clock().getTime()) {
+      throw notFound('Приглашение не найдено или устарело — попросите админа выслать новое');
+    }
+    const shop = await this.repository.shopById(row.shop_id);
+    const account = this.access.emailOf(user);
+    await this.repository.joinStaff(row.shop_id, row.email, hash, { id: user.id, email: account }, [
+      { ...this.staffEvent(shop, 'staff_joined', row.email, account, { account }), cause: 'invite' },
+    ]);
+    return shop;
   }
 
   // Убранный сотрудник теряет вход сразу: доступ проверяется на каждом запросе.
@@ -429,20 +470,22 @@ class BackboneDesk {
     return this.repository.receipts(shop.id);
   }
 
-  // Проекция журнала в квитанции и доставка ожидающих; кнопка в кабинете — то же самое.
+  // Проекция журнала в квитанции и доставка ожидающих — кнопка в кабинете магазина:
+  // только его письма и его счёт (чужие очереди и их размер сотруднику не видны).
   async sendReceipts(slug) {
     const shop = await this.shop(slug);
     const made = await this.receipts.project(shop, await this.repository.columns(shop.id));
-    const delivery = await this.receipts.deliver((id) => this.repository.shopById(id));
+    const delivery = await this.receipts.deliver((id) => this.repository.shopById(id), { shopId: shop.id });
     return { made, ...delivery };
   }
 
   // После перехода: квитанции не должны ронять сам переход (П35) — сбой только в лог.
+  // Доставляются письма только этого магазина: действие в магазине чужие не трогает.
   async afterChange(shop) {
     if (!this.receipts) return;
     try {
       await this.receipts.project(shop, await this.repository.columns(shop.id));
-      await this.receipts.deliver((id) => this.repository.shopById(id));
+      await this.receipts.deliver((id) => this.repository.shopById(id), { shopId: shop.id });
     } catch (err) {
       console.error('backbone: квитанции не обработаны', err);
     }

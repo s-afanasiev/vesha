@@ -592,6 +592,13 @@ body.vesha-modal-open {
   gap: 1rem;
 }
 
+/* display: flex выше перебивал hidden — вкладки окна входа показывались разом */
+.vesha-auth-form[hidden],
+.vesha-auth-tabs[hidden],
+.vesha-auth-tab[hidden] {
+  display: none;
+}
+
 .vesha-form-group {
   display: flex;
   flex-direction: column;

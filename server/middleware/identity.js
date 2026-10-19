@@ -27,6 +27,12 @@ function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+// Cookie входа и гостя: недоступны скриптам страницы, не уходят с чужих сайтов POST-ом;
+// пришли по HTTPS (за nginx — при TRUST_PROXY) — только по HTTPS и дальше.
+function cookieFlags(res, maxAge) {
+  return { httpOnly: true, sameSite: 'lax', secure: Boolean(res.req && res.req.secure), maxAge };
+}
+
 async function ensureGuest(req, res) {
   const signed = req.cookies[GUEST_COOKIE];
   const guestId = verifySigned(signed);
@@ -46,11 +52,7 @@ async function ensureGuest(req, res) {
     `INSERT INTO guests DEFAULT VALUES RETURNING *`
   );
   req.guest = rows[0];
-  res.cookie(GUEST_COOKIE, sign(req.guest.id), {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 365 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie(GUEST_COOKIE, sign(req.guest.id), cookieFlags(res, 365 * 24 * 60 * 60 * 1000));
 }
 
 async function loadSession(req) {
@@ -83,11 +85,7 @@ async function createSession(res, userId, meta = {}) {
      VALUES ($1, $2, $3, $4, $5)`,
     [userId, tokenHash, expires, meta.userAgent || null, meta.ip || null]
   );
-  res.cookie(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: config.sessionDays * 24 * 60 * 60 * 1000,
-  });
+  res.cookie(SESSION_COOKIE, token, cookieFlags(res, config.sessionDays * 24 * 60 * 60 * 1000));
 }
 
 async function destroySession(req, res) {

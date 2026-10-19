@@ -71,6 +71,8 @@ async function start() {
 
   try {
     await migrate();
+    const { Accounts, bootAdmins } = require('./server/services/accounts');
+    await bootAdmins(new Accounts(require('./server/db')), config); // админ — из .env: регистрация его почты закрыта
     const {
       backfillImageHashes,
       cleanupDuplicateLooks,

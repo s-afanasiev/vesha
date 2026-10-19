@@ -169,6 +169,11 @@ const config = {
   } : null,
   backboneSitePerIp: intEnv('BACKBONE_SITE_PER_IP', 5),       // заявок с одного адреса за окно
   backboneSiteWindowMin: intEnv('BACKBONE_SITE_WINDOW_MIN', 10),
+  backboneChatPerIp: intEnv('BACKBONE_CHAT_PER_IP', 60),      // сообщений ассистенту с одного адреса за то же окно (без cookie гость каждый раз новый)
+  // Вход паролем: неудачных попыток за окно — на почту и на адрес; дальше 429 до конца окна.
+  loginFailuresPerEmail: intEnv('LOGIN_FAILURES_PER_EMAIL', 10),
+  loginFailuresPerIp: intEnv('LOGIN_FAILURES_PER_IP', 30),
+  loginWindowMin: intEnv('LOGIN_WINDOW_MIN', 15),
   // Адреса, которые задаёт точка входа: кабинет костяка (ссылки в письмах и сообщениях
   // кабинета) и куда вернуть после входа через Google. Vesha (main.js) — плитка и
   // каталог экспериментов, сборка магазина (shop.js) — /cabinet/.
@@ -180,6 +185,11 @@ const config = {
   diskInfoPath: process.env.DISK_INFO_PATH || process.cwd(),
   // Плитки с visibility='admin' видят только залогиненные с этими email (listEnv уже в lower-case).
   adminEmails: listEnv('ADMIN_EMAILS'),
+  // Стартовый пароль админа: почте из ADMIN_EMAILS без учётки она заводится при старте с ним.
+  // Регистрация такой почты закрыта — иначе её занял бы первый встречный.
+  adminPassword: process.env.ADMIN_PASSWORD || '',
+  // Регистрация на сайте: сборка магазина её закрывает (.env.example) — учётки выдаёт админ.
+  registrationOpen: boolEnv('REGISTRATION_OPEN', true),
 };
 
 module.exports = config;
