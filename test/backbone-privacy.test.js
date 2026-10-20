@@ -105,7 +105,7 @@ test('requisites: the shop form takes them on open and change; the policy shows 
   await desk.changeShop('metiz-kursk', OPERATOR, 'admin');
   const full = await desk.privacyOf('metiz-kursk');
   assert.deepEqual(full, {
-    name: 'Метиз', email: 'zakaz@metiz.test', missing: [], keepYears: 3, withdrawDays: 30,
+    name: 'Метиз', email: 'zakaz@metiz.test', missing: [], keepYears: 3, withdrawDays: 30, mail: null,
     operator: { name: 'ООО «Метиз-Центр»', inn: '7707083893', ogrn: '1027700132195', address: '305000, г. Курск, ул. Ленина, д. 1' },
   });
   await desk.changeShop('metiz-kursk', { pdEmail: 'pd@metiz.test' }, 'admin');
@@ -390,7 +390,8 @@ test('postgres: after erasing a buyer no table of the database and no letter fil
   const email = `buyer-${tag}@pdn.test`;
   const [a, b, c] = [crypto.randomInt(100, 999), crypto.randomInt(10, 99), crypto.randomInt(10, 99)];
   const phone = `+7 (999) ${a}-${b}-${c}`;
-  const NEEDLE = `пдн${cyr(tag)}|buyer-${tag}|999\\D{0,3}${a}\\D{0,3}${b}\\D{0,3}${c}`; // регулярка Postgres
+  const ip = `2001:db8::${crypto.randomBytes(2).toString('hex')}:${crypto.randomBytes(2).toString('hex')}`; // IP отправки — след у заявки
+  const NEEDLE = `пдн${cyr(tag)}|buyer-${tag}|999\\D{0,3}${a}\\D{0,3}${b}\\D{0,3}${c}|${ip}`; // регулярка Postgres
   const guest = crypto.randomUUID();
   const app = express();
   app.use(express.json());
@@ -414,11 +415,11 @@ test('postgres: after erasing a buyer no table of the database and no letter fil
 
     // покупатель: заявка с сайта (имя, почта, телефон в тексте, подпись), скан с именем в файле, чат и список из чата
     const text = `Болт М10х50 — 200 шт\nГайка М10 — 100 шт, звонить ${phone}\nШайба М10 для ${name}а — 10 шт\nС уважением, ${name}`;
-    const { order: site } = await backboneDesk.receiveFromSite(slug, { name, contact: email, text, consent: 'on' }, null, { clientKey: guest });
-    await backboneDesk.receiveFromSite(slug, { name, contact: email, text: '', consent: 'on' }, { name: `${name} список.jpg`, data: Buffer.from('jpeg') }, { clientKey: guest });
+    const { order: site } = await backboneDesk.receiveFromSite(slug, { name, contact: email, text, consent: 'on' }, null, { clientKey: guest, ip });
+    await backboneDesk.receiveFromSite(slug, { name, contact: email, text: '', consent: 'on' }, { name: `${name} список.jpg`, data: Buffer.from('jpeg') }, { clientKey: guest, ip });
     await assistant.hear(slug, guest, { text: `Это ${name}, мой телефон ${phone}` });
     const offered = await assistant.hear(slug, guest, { text: 'Болт М10х50 — 30 шт\nГайка М10 — 30 шт' });
-    await assistant.sendList(slug, guest, { message: offered.offer.message, contact: email, name, consent: 'on' });
+    await assistant.sendList(slug, guest, { message: offered.offer.message, contact: email, name, consent: 'on' }, { ip });
     const { order: other } = await backboneDesk.receiveFromSite(slug, { name: 'Ольга Другая', contact: `olga-${tag}@pdn.test`, text: 'Болт М10х50 — 50 шт', consent: 'on' });
     const washer = (await backboneDesk.draftLines(slug)).find((l) => l.order_id === site.id && /Шайба/.test(l.source));
     await backboneDesk.review(slug, [washer.id], { verdict: 'replaced', sku: 'PD-N10' }, 'manager@pdn.test'); // синоним с именем покупателя
@@ -437,6 +438,8 @@ test('postgres: after erasing a buyer no table of the database and no letter fil
     for (const table of ['backbone_orders', 'backbone_order_lines', 'backbone_synonyms', 'backbone_receipts', 'journal_events', 'chat_engine_dialogues', 'chat_engine_messages']) {
       assert.ok(was.some((h) => h.startsWith(`${table}:`)), `до удаления покупатель есть в ${table}: ${was.join(', ')}`);
     }
+    const trace = (await backboneDesk.customers(slug)).find((o) => o.id === site.id).sent;
+    assert.deepEqual(trace.map((s) => s.ip), [ip], 'след отправки: IP у заявки с сайта');
     const mailDir = path.join(config.backboneMailDir, slug);
     const mail = () => fs.readdirSync(mailDir).map((f) => fs.readFileSync(path.join(mailDir, f), 'utf8'));
     assert.ok(mail().some((m) => m.includes(email)), 'письма-файлы с покупателем');

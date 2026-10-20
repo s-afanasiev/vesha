@@ -29,6 +29,10 @@
 // 152-ФЗ (19.10.2026): реквизиты оператора в политике витрины (privacyOf, policyOf — чего не
 // хватает); данные покупателя удаляются по его запросу и по сроку хранения одним узлом
 // (Erasure): заявки, строки, письма, журнал, переписка — событие personal_data_erased.
+// Почта для живых заказчиков (20.10.2026): письма магазина — с общего ящика сервера (наш домен
+// для рассылки) или, по желанию заказчика, с его ящика (mailOf, changeMail, checkMail, dropMail —
+// только админ: дверь спрашивает ShopAccess сама, не полагаясь на маршрут); у заявки с витрины и
+// из чата — IP и время отправки в событии журнала (след для разбора жалоб, удаляется с ПДн).
 
 const { Order } = require('./orders/Order');
 const { Synonyms } = require('./catalog/Synonyms');
@@ -82,7 +86,7 @@ class BackboneDesk {
   constructor({
     repository, journal, board, path, templateOf, shops = {}, tool = null, toolOf = null, llm = null,
     measuresOf = null, baseline = null, clock = () => new Date(),
-    intake = null, statusPage = null, receipts = null, privacy = null, erasure = null,
+    intake = null, statusPage = null, receipts = null, privacy = null, erasure = null, mail = null,
     shopForm = null, catalogs = null, catalogFile = null, access = null, invites = { days: 7 }, accounts = null,
     autoParse = false,
   }) {
@@ -109,6 +113,7 @@ class BackboneDesk {
     this.receipts = receipts;     // квитанции: проекция журнала и доставка
     this.privacy = privacy;       // политика ПДн витрины: { keepYears, withdrawDays }
     this.erasure = erasure;       // удаление данных покупателя: по запросу и по сроку хранения
+    this.mail = mail;             // почта магазинов: общий ящик сервера или свой ящик магазина
   }
 
   // Магазин по slug — из таблицы; посев из кода (демо) заводится при первом обращении.
@@ -418,20 +423,24 @@ class BackboneDesk {
   // Тот же список с того же контакта ещё раз — та же заявка и событие received_again
   // (клиенту — без второй квитанции, менеджеру — письмо: клиент ждёт или заказывает снова).
   // clientKey — гость витрины: по нему ассистент узнаёт заявки собеседника (шаг 5).
-  async receiveFromSite(slug, form, file = null, { clientKey = null } = {}) {
+  // ip — адрес отправителя формы: след для разбора жалоб на письмо (время — у события).
+  async receiveFromSite(slug, form, file = null, { clientKey = null, ip = null } = {}) {
     const read = await this.intake.read(form, file); // форма проверяется до базы: отказ — сразу
-    return this.receive(slug, read, { channel: 'site', clientKey });
+    return this.receive(slug, read, { channel: 'site', clientKey, ip });
   }
 
   // Заявка из разговора с ассистентом (шаг 5): список, согласие и контакт прочитал ChatIntake.
-  async receiveFromChat(slug, read, { clientKey, dialogueId }) {
-    return this.receive(slug, read, { channel: 'chat', clientKey, data: { dialogue: dialogueId } });
+  async receiveFromChat(slug, read, { clientKey, dialogueId, ip = null }) {
+    return this.receive(slug, read, { channel: 'chat', clientKey, ip, data: { dialogue: dialogueId } });
   }
 
   // Приём из канала: заявка во «входящих» со ссылкой на окно статуса. Тот же список
   // с того же контакта ещё раз — из любого канала — та же заявка и событие received_again (П36).
-  async receive(slug, read, { channel, clientKey = null, data = {} }) {
+  // IP отправки — в данных события (received и каждого received_again): кто и когда указал этот
+  // контакт; уходит вместе с данными покупателя (Anonymizer).
+  async receive(slug, read, { channel, clientKey = null, ip = null, data: extra = {} }) {
     const { shop, columns } = await this.board(slug);
+    const data = ip ? { ...extra, ip: String(ip).slice(0, 64) } : extra;
     const again = async (order) => {
       await this.repository.appendEvents([{
         stream: 'order', scope: shop.id, subjectId: order.id, type: 'received_again',
@@ -513,9 +522,11 @@ class BackboneDesk {
 
   // Политика обработки персональных данных витрины (152-ФЗ): оператор с реквизитами,
   // сроки, почта для отзыва согласия — из таблицы магазинов; контактов клиентов здесь нет.
+  // mail — с какого адреса уходят письма покупателю: общий ящик сервера или свой ящик магазина.
   async privacyOf(slug) {
     const shop = await this.shop(slug);
-    return { name: shop.name, ...this.policyOf(shop), ...this.privacy };
+    const mail = this.mail ? await this.mail.senderOf(shop) : null;
+    return { name: shop.name, ...this.policyOf(shop), ...this.privacy, mail: mail && { own: mail.own, from: mail.from } };
   }
 
   // ---------- данные покупателя (152-ФЗ): найти, удалить по запросу и по сроку ----------
@@ -559,6 +570,70 @@ class BackboneDesk {
     } catch (err) {
       console.error('backbone: квитанции не обработаны', err);
     }
+  }
+
+  // ---------- почта магазина: общий ящик сервера или свой ящик магазина (только админ) ----------
+
+  mailEvent(shop, type, data, user) {
+    return { stream: 'shop', scope: shop.id, subjectId: shop.id, type, data, actor: this.access.emailOf(user), cause: 'cabinet' };
+  }
+
+  // Настройки ящика наружу — без пароля и его шифра.
+  mailView(row) {
+    if (!row) return null;
+    const { secret, ...rest } = row;
+    return rest;
+  }
+
+  // С какого ящика уходят письма магазина и почему: свой проверенный — или общий.
+  async mailOf(slug, user) {
+    this.enterCabinet(user);
+    const shop = await this.shop(slug);
+    const row = await this.repository.shopMailbox(shop.id);
+    return { shop, settings: this.mailView(row), route: this.mail.routeOf(shop, row), ownAllowed: this.mail.ownAllowed };
+  }
+
+  // «Свой ящик магазина»: сохранить настройки — новая версия, письма идут с общего ящика,
+  // пока «Проверить отправку» не пройдёт. Пароль — только шифром; в журнал — без пароля.
+  async changeMail(slug, fields, user) {
+    this.enterCabinet(user);
+    if (!this.mail || !this.mail.ownAllowed) throw bad('Свой ящик магазина выключен: на сервере не задан BACKBONE_MAIL_KEY — письма идут с общего ящика сервера');
+    const shop = await this.shop(slug);
+    const row = await this.repository.shopMailbox(shop.id);
+    const form = this.shopForm.mailbox(fields, row);
+    const secret = form.password ? this.mail.seal(form.password, shop.id) : row.secret;
+    const saved = await this.repository.saveShopMailbox(shop.id,
+      { host: form.host, port: form.port, username: form.username, secret, sender: form.sender, changedBy: this.access.emailOf(user) },
+      [this.mailEvent(shop, 'mail_changed', { host: form.host, port: form.port, username: form.username, sender: form.sender, password: form.password ? 'new' : 'kept' }, user)]);
+    return { shop, settings: this.mailView(saved) };
+  }
+
+  // «Проверить отправку»: тестовое письмо на почту магазина с сохранёнными настройками;
+  // ушло — письма магазина идут со своего ящика. Отправка — вне транзакции (П35).
+  async checkMail(slug, user) {
+    this.enterCabinet(user);
+    const shop = await this.shop(slug);
+    const row = await this.repository.shopMailbox(shop.id);
+    if (!row) throw bad('Своего ящика у магазина нет — письма идут с общего ящика сервера');
+    if (!shop.reply_to) throw bad('Тестовое письмо уходит на почту магазина — сначала укажите её: «Магазины» → «Изменить»');
+    let error = null;
+    try {
+      await this.mail.check(shop, row, shop.reply_to);
+    } catch (err) {
+      error = String(err.message || err).slice(0, 500);
+    }
+    const checked = await this.repository.markShopMailbox(shop.id, row.revision, { ok: !error, error },
+      [this.mailEvent(shop, 'mail_checked', { ok: !error, sender: row.sender, to: shop.reply_to, error }, user)]);
+    return { shop, ok: !error, error, to: shop.reply_to, settings: this.mailView(checked) };
+  }
+
+  // «Вернуть общий ящик»: настройки и пароль удаляются, письма — с общего ящика сервера.
+  async dropMail(slug, user) {
+    this.enterCabinet(user);
+    const shop = await this.shop(slug);
+    const removed = await this.repository.removeShopMailbox(shop.id, [this.mailEvent(shop, 'mail_removed', {}, user)]);
+    if (!removed) throw bad('Своего ящика у магазина нет — письма и так идут с общего ящика сервера');
+    return { shop };
   }
 
   // Операция конструктора: правило — Board, атомарность и версия — репозиторий.

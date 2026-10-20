@@ -117,9 +117,10 @@ test('receipts follow type changes only; a phone contact gets a skipped receipt,
   await desk.moveOrder(SHOP, order.id, 'ask', { actor: 'm' });       // waiting → waiting: молчим
   await desk.moveOrder(SHOP, order.id, 'issued', { actor: 'm' });    // → done: пишем
   assert.deepEqual(sent.map((m) => m.subject.replace(/ —.*$/, '')), [
-    'Заявка №1 получена', 'Заявка №1: ждём вашего ответа', 'Заявка №1 готова',
+    'Заявка №1 получена', 'Заявка №1: ждём вашего ответа', 'Заявка №1 выполнена',
   ]);
-  assert.match(sent[1].body, /«Счёт отправлен»/);
+  assert.match(sent[1].body, /ждём вашего ответа или решения/);
+  assert.doesNotMatch(sent[1].body, /Счёт отправлен/, 'название колонки покупателю не пишем — фраза по типу');
 
   const phone = await desk.receiveFromSite(SHOP, { ...FORM, contact: '+7 900 123-45-67', text: 'Шайба М8 — 100 шт' });
   const rows = (await desk.receiptsOf(SHOP)).filter((r) => r.order_id === phone.order.id);

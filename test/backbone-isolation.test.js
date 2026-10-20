@@ -265,6 +265,37 @@ test('postgres: shops are isolated — staff of A, visitors and anonymous users 
       clean(me, '/me');
     });
 
+    // Почта магазинов (20.10.2026): свой ящик магазина — только админ; пароль в ответах не появляется.
+    const [{ n: mailMigrated }] = await sql("SELECT count(*)::int AS n FROM schema_migrations WHERE id = '031_backbone_shop_mail.sql'");
+    await t.test('почта магазинов — только админ: аноним 401, сотрудник 403 на ящик и проверку; у адреса магазина такого экрана нет', async (st) => {
+      if (!mailMigrated) return st.skip('миграция 031 не накатана');
+      const attack = { host: '127.0.0.1', port: '25', username: `x-${tag}@iso.test`, password: `взлом-${tag}`, sender: `x-${tag}@iso.test` };
+      for (const p of ['/api/backbone/c/mail/rows', '/api/backbone/c/mail/meta', '/api/backbone/c/mail/ids']) {
+        assert.equal((await anon.get(p)).status, 401, p);
+        const r = await staffA.get(p);
+        assert.equal(r.status, 403, p);
+        clean(r, p);
+      }
+      for (const [a, ids] of [['own', [A]], ['own', [B]], ['check', [A]], ['check', [B]], ['shared', [B]]]) {
+        assert.equal((await anon.post(`/api/backbone/c/mail/actions/${a}`, { ids, ...attack })).status, 401, a);
+        assert.equal((await staffA.post(`/api/backbone/c/mail/actions/${a}`, { ids, ...attack })).status, 403, `${a} ${ids}`);
+        assert.equal((await staffA.post(`/api/backbone/s/${A}/c/mail/actions/${a}`, { ids, ...attack })).status, 404, `свой магазин: ${a}`);
+        assert.equal((await staffA.post(`/api/backbone/s/${B}/c/mail/actions/${a}`, { ids, ...attack })).status, 403, `чужой магазин: ${a}`);
+      }
+      assert.deepEqual(await sql('SELECT shop_id FROM backbone_shop_mail WHERE shop_id = ANY($1::uuid[])', [[shopA.id, shopB.id]]), [], 'ящик не заведён');
+      const rows = await admin.get('/api/backbone/c/mail/rows');
+      assert.equal(rows.status, 200, rows.error);
+      const row = rows.rows.find((r) => r.id === B);
+      assert.equal(row.way, 'общий ящик сервера', 'по умолчанию — общий ящик');
+      assert.equal(row.from, `«${shopB.name}» <${config.backboneMailFrom}>`);
+      assert.equal(row.reply, shopMailB, 'ответ покупателя — на почту магазина');
+    });
+
+    await t.test('след отправки: у заявки с витрины по HTTP — IP отправителя в событии журнала', async () => {
+      const [received] = await sql("SELECT data FROM journal_events WHERE scope = $1 AND subject_id = $2 AND type = 'received'", [String(shopB.id), String(orderB.id)]);
+      assert.equal(received.data.ip, '127.0.0.1');
+    });
+
     await t.test('сотрудник A подставляет id заявки B в адреса своего магазина — «не найдена»', async () => {
       const moved = await staffA.post(`/api/backbone/s/${A}/c/board/move`, { cardId: orderB.id, to: 'issued' });
       assert.equal(moved.status, 404);

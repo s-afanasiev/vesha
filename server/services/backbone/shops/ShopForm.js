@@ -2,6 +2,7 @@
 // заводится без правки кода. Форма — слова человека («пн–сб», «9–19»), выход —
 // описание, которое понимают WorkingHours и квитанции. Ошибка — отказ с именем
 // поля до базы. Реквизиты оператора ПДн для политики витрины — privacy/Requisites.
+// Свой ящик магазина для писем (вариант А, 20.10.2026) — mailbox: настройки SMTP.
 
 const { operatorOf } = require('../privacy/Requisites');
 
@@ -9,6 +10,7 @@ const DAYS = { пн: 1, вт: 2, ср: 3, чт: 4, пт: 5, сб: 6, вс: 7 };
 const DAY_NAMES = Object.keys(DAYS);
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,38})[a-z0-9]$/;
 const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
+const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/; // имя сервера или IPv4
 
 function bad(message) {
   return Object.assign(new Error(message), { status: 400 });
@@ -111,6 +113,25 @@ class ShopForm {
     const email = String(raw ?? '').trim().toLowerCase();
     if (!EMAIL.test(email) || email.length > 200) throw bad(`Почта сотрудника: «${String(raw ?? '').trim()}» не похоже на адрес`);
     return email;
+  }
+
+  // Свой ящик магазина (вариант А): SMTP-сервер, порт, логин, пароль приложения, адрес
+  // отправителя. Пустое поле правки — прежнее значение; пустой пароль — прежний (в форму
+  // он не возвращается, поэтому и не обязателен), при первой настройке — обязателен.
+  mailbox(fields = {}, current = null) {
+    const text = (key) => String(fields[key] ?? '').trim();
+    const host = (text('host') || (current && current.host) || '').toLowerCase();
+    if (!HOST.test(host)) throw bad(`SMTP-сервер: «${host}» не похоже на имя сервера — например, smtp.yandex.ru`);
+    const port = text('port') ? Number(text('port')) : current ? current.port : 465;
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw bad('Порт: число — обычно 465 (TLS сразу) или 587 (STARTTLS)');
+    const username = text('username') || (current && current.username) || '';
+    if (!username || username.length > 200 || /\s/.test(username)) throw bad('Логин ящика: обычно полный адрес, например zakaz@shop.ru');
+    const sender = text('sender') || (current && current.sender) || (EMAIL.test(username) ? username : '');
+    if (!EMAIL.test(sender) || sender.length > 200) throw bad('Адрес отправителя: почта, с которой ящик разрешает слать, — обычно та же, что логин');
+    const password = text('password') || null;
+    if (password && (password.length > 200 || /[\r\n]/.test(password))) throw bad('Пароль приложения: одна строка до 200 знаков');
+    if (!password && !current) throw bad('Пароль приложения: обязателен при первой настройке ящика');
+    return { host, port, username, password, sender };
   }
 }
 

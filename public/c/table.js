@@ -9,7 +9,8 @@
 // max — кнопка гаснет, если выбрано больше. После успешного действия строки
 // перечитываются, result.message — в ноге, result.download (путь на этом
 // сайте) — браузер скачивает файл. Поле type: 'file' — выбор файла, тело
-// уходит multipart; options — выпадающий список.
+// уходит multipart; options — выпадающий список; type: 'password' — поле со
+// звёздочками без автозаполнения (пароль приложения ящика).
 // data-poll="3000" — тихий опрос как у v-kanban: перерисовка, только если
 // строки изменились; в фоне вкладки сервер не дёргается.
 (() => {
@@ -405,11 +406,12 @@
     a.remove();
   }
 
-  // Поле формы действия: файл, выбор из списка, многострочное или строка.
+  // Поле формы действия: файл, выбор из списка, многострочное, секрет или строка.
   function fieldInput(f) {
     const name = ` name="${escapeHtml(f.key)}"${f.required ? ' required' : ''}`;
     const hint = f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : '';
     if (f.type === 'file') return `<input type="file" class="vt-file"${name}${f.accept ? ` accept="${escapeHtml(f.accept)}"` : ''}>`;
+    if (f.type === 'password') return `<input type="password" class="vt-search" autocomplete="new-password"${name}${hint}>`;
     if (f.options) {
       return `<select class="vt-search"${name}>${f.required ? '' : '<option value="">—</option>'}${f.options
         .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.name)}</option>`).join('')}</select>`;

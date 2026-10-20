@@ -30,6 +30,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 // Клиент витрины — гость платформы (подписанная cookie): тот же браузер, что прислал
 // заявку с сайта, видит её статус в чате ассистента (шаг 5, О20).
 const guestOf = (req) => (req.guest ? String(req.guest.id) : null);
+// Адрес отправителя заявки — след для разбора жалоб на письмо (за nginx — TRUST_PROXY=true).
+const ipOf = (req) => String(req.ip || '').replace(/^::ffff:/, '') || null;
 
 // Не больше N заявок с одного адреса за окно: форма открыта всем (честный простой узел).
 // Сообщения ассистенту — тоже с адреса: счёт гостя (Assistant) без cookie обходится,
@@ -83,7 +85,7 @@ router.post('/shops/:slug/orders', (req, res, next) => {
         throw Object.assign(new Error(tooBig ? 'Файл больше 5 МБ' : 'Файл не принят'), { status: 400 });
       }
       const file = req.file ? { name: Buffer.from(req.file.originalname, 'latin1').toString('utf8'), data: req.file.buffer } : null;
-      const { order, duplicate, refusal } = await backboneDesk.receiveFromSite(req.params.slug, req.body || {}, file, { clientKey: guestOf(req) });
+      const { order, duplicate, refusal } = await backboneDesk.receiveFromSite(req.params.slug, req.body || {}, file, { clientKey: guestOf(req), ip: ipOf(req) });
       res.json({
         ok: true,
         number: order.number,
@@ -114,7 +116,7 @@ router.post('/shops/:slug/assistant/messages', async (req, res, next) => {
 router.post('/shops/:slug/assistant/orders', async (req, res, next) => {
   if (tooMany(req.ip)) return res.status(429).json({ error: 'Слишком много заявок подряд — попробуйте через несколько минут' }); // тот же счёт заявок с адреса, что у формы
   try {
-    res.json({ ok: true, ...(await assistant.sendList(req.params.slug, guestOf(req), req.body || {})) });
+    res.json({ ok: true, ...(await assistant.sendList(req.params.slug, guestOf(req), req.body || {}, { ip: ipOf(req) })) });
   } catch (err) { next(err); }
 });
 

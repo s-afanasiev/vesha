@@ -138,7 +138,7 @@ test('privacy: the shop name, its e-mail and the terms from the assembly point �
   const p = await desk.privacyOf(SHOP);
   assert.deepEqual(p, {
     name: 'Крепёж', email: 'zakaz@shop.test', operator: null, missing: ['наименование', 'ИНН', 'ОГРН или ОГРНИП', 'адрес'],
-    keepYears: 3, withdrawDays: 30,
+    keepYears: 3, withdrawDays: 30, mail: null,
   }, 'реквизитов нет — политика неполная; почта для обращений — почта магазина');
   await assert.rejects(desk.privacyOf('nope'), /не найден/);
 

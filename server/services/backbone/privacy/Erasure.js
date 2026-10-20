@@ -2,7 +2,7 @@
 // на два повода: запрос покупателя (кабинет: найти заявки по контакту → «Удалить данные
 // покупателя») и срок хранения (раз в сутки по таймеру — Retention — и кнопкой в кабинете).
 // Что считать ПДн и чем заменить — Anonymizer. Где они лежат и кто их стирает:
-//   заявки, строки черновика, синонимы, письма (адрес, тема, тело) и журнал — репозиторий,
+//   заявки, строки черновика, синонимы, письма (адрес, тема, тело) и журнал (с IP отправки) — репозиторий,
 //     одной транзакцией вместе с событием personal_data_erased (кто, когда, сколько — без
 //     самих данных);
 //   переписка ассистента — территория chat-engine: разговоры гостя этих заявок и те, из
@@ -47,12 +47,23 @@ class Erasure {
     return at.toISOString();
   }
 
-  // Заявки магазина для экрана «Данные покупателей»: с днём, до которого хранятся данные.
+  // Заявки магазина для экрана «Данные покупателей»: с днём, до которого хранятся данные, и
+  // следом отправки — когда и с какого IP пришла заявка и каждый её повтор (разбор жалоб).
   async ledger(shop) {
     const again = new Map(); // заявка → последняя повторная отправка
-    for (const e of await this.journal.history(shop.id)) if (e.type === 'received_again') again.set(String(e.subject_id), e.at);
+    const sent = new Map();  // заявка → [{ at, ip }] по received и received_again
+    for (const e of await this.journal.history(shop.id)) {
+      if (e.stream !== 'order' || (e.type !== 'received' && e.type !== 'received_again')) continue;
+      const id = String(e.subject_id);
+      if (e.type === 'received_again') again.set(id, e.at);
+      sent.set(id, [...(sent.get(id) || []), { at: e.at, ip: (e.data && e.data.ip) || null }]);
+    }
     return (await this.repository.orders(shop.id))
-      .map((o) => ({ ...o, keep_until: o.erased_at ? null : this.keepUntil(again.get(String(o.id)) || o.created_at) }))
+      .map((o) => ({
+        ...o,
+        keep_until: o.erased_at ? null : this.keepUntil(again.get(String(o.id)) || o.created_at),
+        sent: sent.get(String(o.id)) || [],
+      }))
       .reverse();
   }
 

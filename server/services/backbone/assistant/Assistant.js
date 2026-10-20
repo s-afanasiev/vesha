@@ -73,14 +73,14 @@ class Assistant {
     return this.talk(await this.desk.shop(slug), guest);
   }
 
-  // Согласие → заявка из списка, который посетитель написал в этом разговоре.
-  async sendList(slug, guest, form = {}) {
+  // Согласие → заявка из списка, который посетитель написал в этом разговоре; ip — след отправки у заявки.
+  async sendList(slug, guest, form = {}, { ip = null } = {}) {
     const shop = await this.shopFor(slug, guest);
     const { dialogue, messages } = await this.chatDesk.visitorDialogue({ channel: CHANNEL, visitorKey: this.keyOf(shop, guest) });
     const message = dialogue && messages.find((m) => m.id === String(form.message || '') && m.role === 'visitor');
     if (!message) throw fail('Сообщение со списком не найдено в этом разговоре', 404);
     const read = this.intake.read(form, message.text);
-    const { order, duplicate } = await this.desk.receiveFromChat(shop.slug, read, { clientKey: String(guest), dialogueId: dialogue.id });
+    const { order, duplicate } = await this.desk.receiveFromChat(shop.slug, read, { clientKey: String(guest), dialogueId: dialogue.id, ip });
     const link = this.statusPath(order.status_token);
     const reply = await this.say(dialogue, duplicate
       ? `Этот список с этого контакта уже у нас — заявка №${order.number}, второй раз не заводим. Путь заявки: ${link}`

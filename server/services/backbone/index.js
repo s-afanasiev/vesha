@@ -6,7 +6,8 @@
 // инструмент слота «разбор заявки в счёт» на каталоге магазина с выгрузкой в 1С,
 // замеры из журнала и теневой режим; витрина: заявка с сайта, окно статуса по
 // ссылке, квитанции клиенту и письмо менеджеру о новой заявке — письмом (SMTP) или
-// файлами .eml, политика обработки персональных данных. Ассистент (шаг 5) — виджет
+// файлами .eml (с общего ящика сервера или со своего ящика магазина), политика обработки
+// персональных данных. Ассистент (шаг 5) — виджет
 // витрины на ядре chat-engine: наличие и цена, статус своей заявки, часы — сам;
 // список из разговора — заявка тем же ключом, что с сайта; остальное — менеджеру.
 // Вход в кабинет — ShopAccess: админ экземпляра — все магазины, сотрудник — свой.
@@ -49,6 +50,8 @@ const { StatusPage } = require('./site/StatusPage');
 const { Receipts } = require('./receipts/Receipts');
 const { FileMailbox } = require('./receipts/FileMailbox');
 const { SmtpMailbox } = require('./receipts/SmtpMailbox');
+const { ShopMailboxes } = require('./receipts/ShopMailboxes');
+const { MailSecret } = require('./receipts/MailSecret');
 const { ChatDesk } = require('../chat-engine/ChatDesk');
 const { DialogueRepository } = require('../chat-engine/DialogueRepository');
 const { ReplySuggester } = require('../chat-engine/ReplySuggester');
@@ -131,10 +134,19 @@ const siteIntake = new SiteIntake(
 );
 
 // Квитанции клиенту и письмо менеджеру о новой заявке: одна проекция журнала в
-// исходящие. Почта — SMTP, если он задан в .env, иначе файлы .eml (О6); контракт send один.
-const mailbox = config.backboneSmtp
-  ? new SmtpMailbox({ ...config.backboneSmtp, from: config.backboneMailFrom })
-  : new FileMailbox({ dir: config.backboneMailDir, from: config.backboneMailFrom });
+// исходящие. Почта магазинов (решение пользователя 20.10.2026) — по умолчанию общий ящик
+// сервера: наш домен для рассылки из .env («Магазин X» <noreply@…>, Reply-To — почта
+// магазина), без SMTP — файлы .eml (О6); заказчику, который захочет, — свой ящик магазина
+// (настройки — админ в кабинете, пароль — шифром ключа BACKBONE_MAIL_KEY; без ключа выключено).
+// Контракт send один у всех почтальонов.
+const mailbox = new ShopMailboxes({
+  shared: config.backboneSmtp
+    ? new SmtpMailbox({ ...config.backboneSmtp, from: config.backboneMailFrom })
+    : new FileMailbox({ dir: config.backboneMailDir, from: config.backboneMailFrom }),
+  settingsOf: (shopId) => repository.shopMailbox(shopId),
+  secret: config.backboneMailKey ? new MailSecret({ key: config.backboneMailKey }) : null,
+  open: (settings) => new SmtpMailbox(settings),                        // свой ящик: 465 — TLS сразу, иначе STARTTLS
+});
 const hoursOf = (shop) => new WorkingHours({ tz: shop.tz, ...(shop.hours || {}) });
 const deadlineOf = (shop, ms) => {                                        // «ответим в течение часа» — рабочего часа
   const until = hoursOf(shop).deadline(ms, 60);
@@ -153,6 +165,7 @@ const receipts = new Receipts({
     deadlineOf,                                                           // тот же срок, что обещан клиенту
     lines: 5,                                                             // начало списка в письме
   }),
+  perAddress: { letters: 10, hours: 24 },                                 // писем покупателю на один адрес за сутки в магазине — форма не рассыльщик
 });
 
 // Разговоры ассистента магазинов — территория в общих таблицах chat-engine: только канал
@@ -210,6 +223,7 @@ const backboneDesk = new BackboneDesk({
   receipts,                                                               // квитанции и письмо менеджеру после переходов (§6.1)
   privacy: PRIVACY,                                                       // политика ПДн витрины: оператор, сроки, почта для отзыва
   erasure,                                                                // удаление данных покупателя: по запросу и по сроку
+  mail: mailbox,                                                          // с какого ящика письма магазина: общий или свой (только админ)
 });
 
 const demoRequest = () => fs.readFileSync(path.join(FIXTURES, 'request-20.txt'), 'utf8');

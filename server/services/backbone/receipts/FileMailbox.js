@@ -21,7 +21,7 @@ class FileMailbox {
     const file = path.join(folder, `${stamp}-${Math.random().toString(36).slice(2, 8)}.eml`);
     const letter = letterOf({ from: this.from, to, subject, body, shop, replyTo });
     await fs.promises.writeFile(file, letter.text, 'utf8');
-    return { file, messageId: letter.messageId };
+    return { file, messageId: letter.messageId, from: this.from };
   }
 
   // Удаление данных покупателя: файлы писем магазина, где есть его контакт и номер его

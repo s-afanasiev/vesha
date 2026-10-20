@@ -27,6 +27,9 @@
 // 152-ФЗ: экран «Данные покупателей» — политика ПДн магазина (чего не хватает) и заявки
 // с поиском по контакту: «Удалить данные покупателя» (desk.eraseCustomer) и «Удалить старше
 // срока хранения» (desk.eraseExpired); в кабинете — реквизиты оператора у магазина.
+// Почта для живых заказчиков (20.10.2026): в кабинете — «Почта магазинов» (только админ): общий
+// ящик сервера или свой ящик магазина с «Проверить отправку»; у писем — с какого адреса ушли, у
+// заявок на «Данных покупателей» — когда и с какого IP отправлены (след для разбора жалоб).
 // Монтируется в server/routes/backbone.js (за границей ShopAccess: кабинет — админ,
 // магазин — админ или его сотрудник).
 
@@ -80,6 +83,11 @@ function describe(e, titles) {
       : `счёт по заявке №${d.number} отправлен: без правки ${d.right} из ${d.base} строк`;
     case 'shop_opened': return `магазин «${d.name}» заведён: адрес ${d.slug}, ниша «${NICHE_NAMES[d.niche] || d.niche}», ${hoursText(d.hours)}, режим — ${MODES[d.mode] || d.mode}${'operator' in d ? `, реквизиты оператора ПДн — ${missingOf(d.operator, d.replyTo).length ? 'неполные' : 'заполнены'}` : ''}`;
     case 'shop_changed': return `магазин изменён: «${d.name}», ${hoursText(d.hours)}, почта ${d.replyTo || '—'}${'operator' in d ? `, реквизиты оператора ПДн — ${missingOf(d.operator, d.replyTo).length ? 'неполные' : 'заполнены'}` : ''}`;
+    case 'mail_changed': return `почта магазина: свой ящик ${d.sender} через ${d.host}:${d.port}${d.password === 'new' ? ', пароль новый' : ''} — письма с общего ящика, пока не пройдёт «Проверить отправку»`;
+    case 'mail_checked': return d.ok
+      ? `почта магазина: тестовое письмо ушло с ${d.sender} на ${d.to} — письма идут со своего ящика`
+      : `почта магазина: тестовое письмо с ${d.sender} не ушло — ${d.error}; письма с общего ящика`;
+    case 'mail_removed': return 'почта магазина: свой ящик убран — письма с общего ящика сервера';
     case 'personal_data_erased': return `данные покупателя удалены ${d.reason === 'retention' ? 'по сроку хранения' : 'по запросу'}: заявок ${d.orders}${(d.numbers || []).length ? ` (№${d.numbers.join(', №')})` : ''}, писем ${d.letters}, разговоров в чате ${d.dialogues}${d.files ? `, файлов писем ${d.files}` : ''}`;
     case 'staff_added': return d.login === 'password'
       ? `сотрудник ${d.email} добавлен: учётка заведена, пароль выдан админу`
@@ -153,6 +161,8 @@ const CONFIRM_ERASE = {
   options: [{ value: 'yes', name: 'Да, удалить' }],
 };
 const LOAD_STATUS = { pending: 'ждёт «Загрузить каталог»', loaded: 'загружен', refused: 'отказ' };
+// След отправки заявки: каждая отправка того же списка — время и IP (вручную — без IP).
+const sentText = (sent) => (sent.length ? sent.map((s) => `${at(s.at)} · ${s.ip || 'IP нет'}`).join('; ') : '—');
 
 // Последний исход разбора заявки — словами; черновик виден только в «Помощи» и после счёта менеджера.
 function statusOf(d, mode) {
@@ -460,6 +470,7 @@ function shopComponents(slug) {
         subject: r.subject,
         status: { pending: 'ждёт', sent: 'отправлена', failed: `сбой ×${r.attempts}`, skipped: 'пропущена' }[r.status] || r.status,
         why: r.last_error || '',
+        from: r.sent_from || '',
         at: new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }),
       })),
       idKey: 'id',
@@ -471,6 +482,7 @@ function shopComponents(slug) {
         { key: 'subject', name: 'Тема' },
         { key: 'status', name: 'Статус', sortable: true },
         { key: 'why', name: 'Почему не ушла' },
+        { key: 'from', name: 'С адреса' },
         { key: 'at', name: 'Когда' },
       ],
       search: ['subject', 'to', 'status', 'who'],
@@ -497,6 +509,7 @@ function shopComponents(slug) {
           { id: 'ogrn', what: ogrnName(op.ogrn), value: op.ogrn || none },
           { id: 'address', what: 'Адрес оператора', value: op.address || none },
           { id: 'email', what: 'Почта для обращений по ПДн', value: p.email || none },
+          { id: 'mail', what: 'Письма покупателю уходят', value: !p.mail ? '—' : p.mail.own ? `со своего ящика магазина ${p.mail.from}` : `с общего ящика сервера ${p.mail.from} — ответ покупателя приходит на почту магазина` },
           { id: 'keep', what: 'Срок хранения', value: `${years(p.keepYears)} с даты последней заявки покупателя — потом данные обезличиваются сами, проверка раз в сутки` },
           { id: 'withdraw', what: 'Отзыв согласия', value: `не позже ${p.withdrawDays} дней с письма покупателя: ниже найдите его заявки по почте или телефону → «Удалить данные покупателя»` },
         ];
@@ -519,6 +532,7 @@ function shopComponents(slug) {
         client: o.erased_at ? '—' : o.client,
         contact: o.contact || '—',
         channel: CHANNELS[o.channel] || o.channel,
+        sent: o.erased_at ? '—' : sentText(o.sent),
         data: o.erased_at ? `удалены ${at(o.erased_at)}` : `хранятся до ${day(o.keep_until)}`,
       })),
       idKey: 'id',
@@ -528,6 +542,7 @@ function shopComponents(slug) {
         { key: 'client', name: 'Клиент', sortable: true },
         { key: 'contact', name: 'Контакт' },
         { key: 'channel', name: 'Откуда' },
+        { key: 'sent', name: 'Отправлена: время и IP' },
         { key: 'data', name: 'Данные покупателя' },
       ],
       search: (row, q) => findsOrder(row, q),
@@ -1196,6 +1211,21 @@ const SHOP_FIELDS = [
   { key: 'time', label: 'Часы', placeholder: '09:00–19:00' },
   { key: 'email', label: 'Почта магазина для квитанций (ответ клиента)', placeholder: 'zakaz@shop.ru' },
 ];
+// Свой ящик магазина (вариант А): настройки SMTP — только админ; пароль в форму не возвращается.
+const MAIL_FIELDS = [
+  { key: 'host', label: 'SMTP-сервер ящика', placeholder: 'smtp.yandex.ru' },
+  { key: 'port', label: 'Порт: 465 — TLS сразу, 587 — STARTTLS; пусто — 465', placeholder: '465' },
+  { key: 'username', label: 'Логин ящика — обычно полный адрес', placeholder: 'zakaz@shop.ru' },
+  { key: 'password', label: 'Пароль приложения ящика (не основной пароль почты)', type: 'password' },
+  { key: 'sender', label: 'Адрес отправителя — пусто: логин', placeholder: 'zakaz@shop.ru' },
+];
+// С какого ящика уходят письма магазина — словами для админа.
+function mailState({ settings, route, ownAllowed }) {
+  if (route.own) return `проверен ${at(settings.checked_at)}`;
+  if (settings) return `письма с общего ящика: ${route.reason}`;
+  return ownAllowed ? 'своего ящика нет' : 'своего ящика нет; свой ящик выключен — на сервере не задан BACKBONE_MAIL_KEY';
+}
+
 // Реквизиты оператора ПДн для политики витрины: ИНН и ОГРН проверяются до базы.
 const OPERATOR_FIELDS = [
   { key: 'operator', label: 'Оператор ПДн — как в ЕГРЮЛ / ЕГРИП', placeholder: 'ООО «Крепёж на Ленина» или ИП Иванов Иван Иванович' },
@@ -1290,6 +1320,67 @@ const cabinet = Components({
               + `Передайте сотруднику лично — она одноразовая и действует до ${at(until)}: ${link} — он откроет её и войдёт своей учёткой. `
               + 'Ссылку больше не покажем; потеряли — «Добавить сотрудника» ещё раз.',
           };
+        },
+      },
+    ],
+  }),
+
+  // Почта магазинов: по умолчанию — общий ящик сервера (наш домен для рассылки: «Магазин» <noreply@…>,
+  // ответ покупателя — на почту магазина); по желанию заказчика — свой ящик магазина. Свой ящик
+  // включается только после «Проверить отправку»: тестовое письмо ушло на почту магазина.
+  'mail': Table({
+    rows: async ({ user }) => {
+      const out = [];
+      for (const s of await backboneDesk.shopList()) {
+        const view = await backboneDesk.mailOf(s.slug, user);
+        const { shop, settings, route } = view;
+        out.push({
+          id: shop.slug,
+          shop: `${shop.slug} · ${shop.name}`,
+          way: route.own ? 'свой ящик магазина' : 'общий ящик сервера',
+          from: `«${shop.name}» <${route.from}>`,
+          reply: shop.reply_to || '— ответ покупателя не дойдёт: укажите почту магазина',
+          own: settings ? `${settings.sender} через ${settings.host}:${settings.port}, логин ${settings.username}` : '—',
+          state: mailState(view),
+        });
+      }
+      return out;
+    },
+    idKey: 'id',
+    columns: [
+      { key: 'shop', name: 'Магазин', sortable: true },
+      { key: 'way', name: 'Письма уходят', sortable: true },
+      { key: 'from', name: 'Отправитель (From)' },
+      { key: 'reply', name: 'Ответ покупателя — на почту (Reply-To)' },
+      { key: 'own', name: 'Свой ящик' },
+      { key: 'state', name: 'Состояние' },
+    ],
+    search: ['shop', 'from', 'own'],
+    actions: [
+      {
+        id: 'own', name: 'Свой ящик магазина', bulk: true, max: 1,
+        fields: MAIL_FIELDS,
+        run: async ({ ids, body, user }) => {
+          const { shop, settings } = await backboneDesk.changeMail(ids[0], body, user);
+          return {
+            message: `«${shop.name}»: ящик ${settings.sender} через ${settings.host}:${settings.port} сохранён. Письма пока идут с общего ящика — `
+              + `«Проверить отправку»: тестовое письмо уйдёт на ${shop.reply_to || 'почту магазина (сначала укажите её)'}.`,
+          };
+        },
+      },
+      {
+        id: 'check', name: 'Проверить отправку', bulk: true, max: 1,
+        run: async ({ ids, user }) => {
+          const r = await backboneDesk.checkMail(ids[0], user);
+          if (!r.ok) throw new Error(`Тестовое письмо не ушло: ${r.error}. Письма «${r.shop.name}» по-прежнему идут с общего ящика.`);
+          return { message: `Тестовое письмо ушло с ${r.settings.sender} на ${r.to} — проверьте, что оно пришло (и не в «Спаме»). Письма «${r.shop.name}» теперь идут с этого ящика.` };
+        },
+      },
+      {
+        id: 'shared', name: 'Вернуть общий ящик', bulk: true, max: 1,
+        run: async ({ ids, user }) => {
+          const { shop } = await backboneDesk.dropMail(ids[0], user);
+          return { message: `«${shop.name}»: свой ящик убран вместе с паролем — письма идут с общего ящика сервера.` };
         },
       },
     ],

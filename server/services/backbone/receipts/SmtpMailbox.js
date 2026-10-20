@@ -140,7 +140,7 @@ class SmtpMailbox {
       const data = letter.text.replace(/(^|\r\n)\./g, '$1..');
       const accepted = await session.command(`${data}\r\n.`, [250], 'письмо');
       await session.command('QUIT', [221]).catch(() => {});
-      return { messageId: letter.messageId, reply: accepted.lines.join(' ') };
+      return { messageId: letter.messageId, reply: accepted.lines.join(' '), from: this.from };
     } finally {
       session.socket.destroy();
     }
