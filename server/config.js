@@ -167,6 +167,8 @@ const config = {
     user: envStr('BACKBONE_SMTP_USER'),
     pass: process.env.BACKBONE_SMTP_PASS || '',
   } : null,
+  // Свой ящик магазина (вариант А): ключ шифра паролей ящиков в базе; без него — только общий ящик.
+  backboneMailKey: process.env.BACKBONE_MAIL_KEY || '',
   backboneSitePerIp: intEnv('BACKBONE_SITE_PER_IP', 5),       // заявок с одного адреса за окно
   backboneSiteWindowMin: intEnv('BACKBONE_SITE_WINDOW_MIN', 10),
   backboneChatPerIp: intEnv('BACKBONE_CHAT_PER_IP', 60),      // сообщений ассистенту с одного адреса за то же окно (без cookie гость каждый раз новый)

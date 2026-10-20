@@ -8,7 +8,8 @@
 //
 // Поле действия type: 'file' — тело приходит multipart (в памяти, не больше
 // maxBytes), файл ложится в body[key] как { name, size, data }; options —
-// выбор из списка, чужое значение — 400.
+// выбор из списка, чужое значение — 400; type: 'password' — секрет (поле со
+// звёздочками, браузер его не подставляет), значение — строкой, как у обычного поля.
 // search — ключи строки (подстрока в любом) или функция (строка, запрос) → да/нет:
 // домен сам приводит запрос к своей записи (телефон любым видом, почта любым регистром).
 
@@ -58,6 +59,7 @@ function router(decl) {
             ...(f.placeholder ? { placeholder: f.placeholder } : {}),
             ...(f.options ? { options: f.options.map((o) => (typeof o === 'string' ? { value: o, name: o } : o)) } : {}),
             ...(f.type === 'file' ? { type: 'file', ...(f.accept ? { accept: f.accept } : {}), maxBytes: f.maxBytes || limits.maxFileBytes } : {}),
+            ...(f.type === 'password' ? { type: 'password' } : {}), // секрет: поле со звёздочками, без автозаполнения
           })),
         } : {}),
       })),

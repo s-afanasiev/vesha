@@ -91,6 +91,7 @@ export const MANIFEST = {
     '028_backbone_chat_channel.sql',
     '029_backbone_mode_off.sql',
     '030_backbone_personal_data.sql',
+    '031_backbone_shop_mail.sql',
   ],
   // пакеты — версии из корневого package.json и package-lock.json
   dependencies: [

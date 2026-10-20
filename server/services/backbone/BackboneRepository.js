@@ -461,14 +461,72 @@ class BackboneRepository {
     return rows;
   }
 
-  async markReceipt(id, { status, error = null }) {
+  // from — с какого адреса ушло письмо (свой ящик магазина или общий): след для разбора жалоб.
+  async markReceipt(id, { status, error = null, from = null }) {
     await this.db.query(
       `UPDATE backbone_receipts
        SET status = $2, attempts = attempts + 1, last_error = $3,
-           sent_at = CASE WHEN $2 = 'sent' THEN now() ELSE sent_at END
+           sent_at = CASE WHEN $2 = 'sent' THEN now() ELSE sent_at END,
+           sent_from = CASE WHEN $2 = 'sent' THEN $4 ELSE sent_from END
        WHERE id = $1`,
-      [id, status, error]
+      [id, status, error, from]
     );
+  }
+
+  // Писем покупателю магазина на этот адрес с момента since — ушедших и ждущих (пропущенные не в счёт).
+  async lettersTo(shopId, address, since) {
+    const { rows: [{ n }] } = await this.db.query(
+      `SELECT count(*)::int AS n FROM backbone_receipts
+       WHERE shop_id = $1 AND audience = 'client' AND address = $2 AND created_at >= $3 AND status <> 'skipped'`,
+      [shopId, address, since]
+    );
+    return n;
+  }
+
+  // ---------- свой ящик магазина (031): настройки SMTP, пароль — шифром ----------
+
+  async shopMailbox(shopId) {
+    const { rows } = await this.db.query('SELECT * FROM backbone_shop_mail WHERE shop_id = $1', [shopId]);
+    return rows[0] || null;
+  }
+
+  // Сохранение — новая версия настроек: прежняя проверка не в счёт, письма — с общего ящика до новой.
+  async saveShopMailbox(shopId, { host, port, username, secret, sender, changedBy }, events) {
+    return this.tx(async (client) => {
+      const { rows: [row] } = await client.query(
+        `INSERT INTO backbone_shop_mail (shop_id, host, port, username, secret, sender, changed_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (shop_id) DO UPDATE SET host = EXCLUDED.host, port = EXCLUDED.port, username = EXCLUDED.username,
+           secret = EXCLUDED.secret, sender = EXCLUDED.sender, changed_by = EXCLUDED.changed_by, changed_at = now(),
+           checked_at = NULL, check_error = NULL, revision = backbone_shop_mail.revision + 1
+         RETURNING *`,
+        [shopId, host, port, username, secret, sender, changedBy]
+      );
+      await this.journal.appendIn(client, events);
+      return row;
+    });
+  }
+
+  // Итог проверки — той версии настроек, которую проверяли; админ успел их сменить — отказ.
+  async markShopMailbox(shopId, revision, { ok, error = null }, events) {
+    return this.tx(async (client) => {
+      const { rows: [row] } = await client.query(
+        `UPDATE backbone_shop_mail SET checked_at = CASE WHEN $3 THEN now() ELSE NULL END, check_error = $4
+         WHERE shop_id = $1 AND revision = $2 RETURNING *`,
+        [shopId, revision, ok, error]
+      );
+      if (!row) throw conflict('Настройки ящика изменились во время проверки — проверьте ещё раз');
+      await this.journal.appendIn(client, events);
+      return row;
+    });
+  }
+
+  async removeShopMailbox(shopId, events) {
+    return this.tx(async (client) => {
+      const { rowCount } = await client.query('DELETE FROM backbone_shop_mail WHERE shop_id = $1', [shopId]);
+      if (rowCount) await this.journal.appendIn(client, events);
+      return rowCount > 0;
+    });
   }
 
   async receipts(shopId, { limit = 200 } = {}) {

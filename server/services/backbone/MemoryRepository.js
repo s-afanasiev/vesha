@@ -24,6 +24,7 @@ class MemoryRepository {
     this.loads = [];          // загрузки выгрузок каталога
     this.loadSeq = 0;
     this.staffRows = [];      // сотрудники магазинов: приглашение на почту → аккаунт
+    this.mailRows = new Map(); // shopId → свой ящик магазина (пароль — шифром)
   }
 
   async shopBySlug(slug) {
@@ -270,7 +271,7 @@ class MemoryRepository {
       this.receiptRows.push({
         id: crypto.randomUUID(), shop_id: shopId, order_id: r.orderId, event_id: r.eventId, kind: r.kind, audience: r.audience,
         channel: r.channel, address: r.address, reply_to: r.replyTo, subject: r.subject, body: r.body, status: r.status,
-        attempts: 0, last_error: r.lastError, created_at: now, sent_at: null,
+        attempts: 0, last_error: r.lastError, created_at: now, sent_at: null, sent_from: null,
       });
     }
     shop.receipts_cursor = toCursor;
@@ -284,10 +285,48 @@ class MemoryRepository {
       .slice(0, limit).map((r) => ({ ...r }));
   }
 
-  async markReceipt(id, { status, error = null }) {
+  async markReceipt(id, { status, error = null, from = null }) {
     const r = this.receiptRows.find((x) => x.id === id);
     if (!r) return;
-    Object.assign(r, { status, attempts: r.attempts + 1, last_error: error, sent_at: status === 'sent' ? this.journal.now() : r.sent_at });
+    const sent = status === 'sent';
+    Object.assign(r, { status, attempts: r.attempts + 1, last_error: error, sent_at: sent ? this.journal.now() : r.sent_at, sent_from: sent ? from : r.sent_from });
+  }
+
+  async lettersTo(shopId, address, since) {
+    return this.receiptRows.filter((r) => r.shop_id === shopId && r.audience === 'client' && r.address === address
+      && new Date(r.created_at) >= since && r.status !== 'skipped').length;
+  }
+
+  // ---------- свой ящик магазина (031): те же версии настроек, что у Postgres ----------
+
+  async shopMailbox(shopId) {
+    const row = this.mailRows.get(shopId);
+    return row ? { ...row } : null;
+  }
+
+  async saveShopMailbox(shopId, { host, port, username, secret, sender, changedBy }, events) {
+    const prev = this.mailRows.get(shopId);
+    const row = {
+      shop_id: shopId, host, port, username, secret, sender, checked_at: null, check_error: null,
+      revision: prev ? prev.revision + 1 : 1, changed_by: changedBy, changed_at: this.journal.now(),
+    };
+    this.mailRows.set(shopId, row);
+    await this.journal.appendIn(null, events);
+    return { ...row };
+  }
+
+  async markShopMailbox(shopId, revision, { ok, error = null }, events) {
+    const row = this.mailRows.get(shopId);
+    if (!row || row.revision !== revision) throw conflict('Настройки ящика изменились во время проверки — проверьте ещё раз');
+    Object.assign(row, { checked_at: ok ? this.journal.now() : null, check_error: error });
+    await this.journal.appendIn(null, events);
+    return { ...row };
+  }
+
+  async removeShopMailbox(shopId, events) {
+    if (!this.mailRows.delete(shopId)) return false;
+    await this.journal.appendIn(null, events);
+    return true;
   }
 
   async receipts(shopId) {
