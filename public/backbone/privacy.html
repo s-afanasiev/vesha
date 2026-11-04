@@ -11,6 +11,14 @@
        согласия в форме витрины. Оператор с реквизитами (наименование, ИНН, ОГРН, адрес),
        почта и сроки — из публичного API витрины (/api/backbone-public/shops/<slug>/privacy);
        контактов клиентов там нет. Чего магазин не указал — так и сказано. */
+    /* Тема магазина (docs/shop-theme-plan.md) — та же пара «нейтраль + акцент»,
+       что на витрине и в окне статуса. */
+    :root {
+      --accent: #2f4fb3;
+      --accent-soft: rgba(47, 79, 179, 0.12);
+      --link: #2f4fb3;
+      --link-hover: #26469f;
+    }
     body { display: block; background: var(--bg); color: var(--text); }
     .policy { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 28px 16px 48px; text-align: left; overflow-wrap: anywhere; }
     .policy__card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; }

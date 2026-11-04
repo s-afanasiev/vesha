@@ -9,6 +9,21 @@
   <style>
     /* Витрина костяка (docs/backbone-architecture.md §6.3): каталог, «заявка списком»,
        ссылка на окно статуса. Корзины нет: целевой клиент присылает список. */
+    /* Тема магазина (docs/shop-theme-plan.md): slate-нейтраль Vesha + синий акцент
+       доверия, три ступени кнопки. Когда тема станет настройкой магазина, сервер
+       подставит значения в этот блок — классы и HTML не меняются. */
+    :root {
+      --accent: #2f4fb3;
+      --accent-soft: rgba(47, 79, 179, 0.12);
+      --link: #2f4fb3;
+      --link-hover: #26469f;
+      --btn-primary-bg: #2f4fb3;
+      --btn-primary-text: #ffffff;
+      --btn-primary-hover: #26469f;
+      --btn-primary-active: #1f3a88;
+      --btn-primary-shadow: rgba(31, 58, 136, 0.25);
+      --input-border: #7a8390;
+    }
     body { display: block; background: var(--bg); color: var(--text); }
     .shop { box-sizing: border-box; width: 100%; max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; text-align: left; }
     .shop__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; margin-bottom: 20px; }
@@ -21,7 +36,7 @@
     .card .lead { margin: 0 0 14px; color: var(--text-muted); font-size: 0.92rem; }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 0.9rem; color: var(--text-muted); }
     .field input, .field textarea, .field select, .search input, .search select {
-      font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--border);
+      font: inherit; color: var(--text); background: var(--input-bg); border: 1px solid var(--input-border, var(--border));
       border-radius: 8px; padding: 8px 10px; min-width: 0;
     }
     .field textarea { resize: vertical; min-height: 150px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88rem; }
@@ -33,6 +48,7 @@
     .btn { font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px; padding: 10px 18px;
       background: var(--btn-primary-bg); color: var(--btn-primary-text); }
     .btn:hover { background: var(--btn-primary-hover); }
+    .btn:active { background: var(--btn-primary-active, var(--btn-primary-hover)); }
     .btn[disabled] { opacity: 0.6; cursor: progress; }
     .done { border-color: var(--ok-border); background: var(--ok-bg); }
     .done h2 { color: var(--ok-text); }

@@ -19,7 +19,7 @@ html[data-theme="light"] {
   --text: #2c3138;
   --text-heading: #1c1f24;
   --text-muted: #5c6570;
-  --text-faint: #7a8390;
+  --text-faint: #626b77;
   --link: #3d4553;
   --link-hover: #1c1f24;
   --accent: #5b6478;
@@ -35,6 +35,8 @@ html[data-theme="light"] {
   --btn-primary-hover: #1c1f24;
   --btn-primary-shadow: rgba(28, 32, 40, 0.18);
   --input-bg: #f7f8fa;
+  /* граница поля ввода: не-текстовый элемент, WCAG ≥ 3:1 (docs/shop-theme-plan.md) */
+  --input-border: #7a8390;
   --danger-bg: rgba(185, 28, 28, 0.1);
   --danger-border: rgba(185, 28, 28, 0.28);
   --danger-text: #b91c1c;
@@ -619,7 +621,7 @@ body.vesha-modal-open {
 
 .vesha-form-group input {
   background: var(--input-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border, var(--border));
   color: var(--text-heading);
   padding: 0.7rem 0.9rem;
   border-radius: 8px;

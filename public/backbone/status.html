@@ -11,6 +11,14 @@
   <style>
     /* Окно статуса заявки (docs/backbone-architecture.md §6.3): stages@1 по токену
        ссылки — номер, шаги и даты; ни контактов, ни текста заявки. */
+    /* Тема магазина (docs/shop-theme-plan.md) — та же пара «нейтраль + акцент»,
+       что на витрине и в политике; шаги «ждём» — нейтральные, зелёный — только «готово». */
+    :root {
+      --accent: #2f4fb3;
+      --accent-soft: rgba(47, 79, 179, 0.12);
+      --link: #2f4fb3;
+      --link-hover: #26469f;
+    }
     body { display: block; background: var(--bg); color: var(--text); }
     .status { box-sizing: border-box; width: 100%; max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; text-align: left; }
     .status__card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
