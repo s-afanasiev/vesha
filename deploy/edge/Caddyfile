@@ -21,8 +21,13 @@ __DOMAIN__ {
 	respond /healthz "ok" 200
 
 	root * /srv/vesha/www/landing
-	try_files {path} {path}/ /404.html
 	file_server
+
+	# Своя 404-страница; статус ответа сохраняется.
+	handle_errors {
+		rewrite * /404.html
+		file_server
+	}
 
 	# Хэшированные ассеты кэшируются навсегда, HTML — никогда.
 	@immutable path /assets/* *.js *.css *.woff2 *.png *.svg *.webp

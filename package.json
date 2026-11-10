@@ -11,6 +11,7 @@
     "catalog:build": "node scripts/build-registry.mjs",
     "catalog:check": "node scripts/build-registry.mjs --check",
     "build:shop": "node scripts/build-shop.mjs",
+    "build:landing": "node scripts/build-landing.mjs",
     "media-bins": "node scripts/install-media-bins.js"
   },
   "keywords": [],

@@ -319,12 +319,32 @@ Docker **не обязателен**. Это инструмент, а не ар�
 
 ## 8. Что делать по шагам
 
+### 8.1 Лендинг edge
+
+Исходник — `deploy/edge/landing/`, сборка — `npm run build:landing`.
+Скрипт собирает `dist/landing`:
+
+- `index.html` — три раздела: портфолио, заказы, эксперименты;
+- `portfolio/<id>/` — витрины `kind=showcase` и их зависимости;
+- ссылки `/experiments/<id>/` внутри витрин переписываются в
+  `/portfolio/<id>/`, каталог `/experiments/` — на главную.
+
+Публикация:
+
+```bash
+HOST=194.5.79.153 SSH_KEY=~/.ssh/id_ed25519 \
+  deploy/edge/publish.sh dist/landing
+```
+
+Caddy отдаёт `dist/landing` из `/srv/vesha/www/landing`; своя 404-страница
+работает через `handle_errors`.
+
 1. ~~Утвердить таблицу §1.~~ Сделано: `backbone` → client, `showcases` и
    `ocenka-site` → showcase, `scene-builder` → showcase (доводим).
 2. ~~Перенести решения в манифесты.~~ Сделано: `kind` в
    `projects/<id>/project.json`, `npm run catalog:build`, каталог — 11 записей.
-3. **Edge:** лендинг с тремя разделами и ссылками на GitHub-демо. Пока это
-   единственное, что видит публика.
+3. ~~**Edge:** лендинг с тремя разделами и ссылками на GitHub-демо.~~ Сделано:
+   `npm run build:landing`, витрины на `/portfolio/<id>/`.
 4. **Lab:** вторая машина, `PROFILE=lab`, `vesha_lab`, basic auth, `noindex`.
 5. **Showcase:** не поднимаем, пока нет реального проекта с бэкендом. Внешние
    демо живут на GitHub Pages.

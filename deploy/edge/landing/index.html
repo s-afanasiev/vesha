@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vesha — интерактивные веб-приложения</title>
+<meta name="description" content="Портфолио: 3D-демо в браузере, бэкенд на Node.js, магазины под ключ. Эксперименты и индивидуальные заказы.">
+<meta property="og:title" content="Vesha — интерактивные веб-приложения">
+<meta property="og:description" content="3D в браузере, бэкенд на Node.js, магазины под ключ.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://vesha.pro/">
+<meta property="og:image" content="https://vesha.pro/assets/mech-arena.jpg">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c9f26b'/><path d='M8 9l8 14 8-14' stroke='%230b0d0c' stroke-width='3' fill='none'/></svg>">
+<style>
+:root{
+  --bg:#0b0d0c; --surface:#121513; --surface2:#171b18;
+  --text:#f1f2ec; --muted:#9ba39a; --line:rgba(255,255,255,.09);
+  --accent:#c9f26b; --accent-ink:#0b0d0c;
+  --radius:18px; --max:1120px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+a{color:inherit;text-decoration:none}
+img{max-width:100%}
+.wrap{width:min(var(--max),calc(100% - 2.5rem));margin-inline:auto;position:relative;z-index:1}
+
+.top{position:sticky;top:0;z-index:50;background:rgba(11,13,12,.72);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+.brand{font-weight:700;letter-spacing:-.03em;font-size:1.05rem;display:flex;align-items:center;gap:.55rem}
+.brand i{width:9px;height:9px;border-radius:3px;background:var(--accent);display:inline-block}
+nav{display:flex;gap:1.5rem;font-size:.9rem;color:var(--muted)}
+nav a{transition:color .2s}
+nav a:hover{color:var(--text)}
+
+.hero{position:relative;padding:clamp(3.5rem,9vw,7rem) 0 4rem;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:-25% -10% auto;height:640px;pointer-events:none;
+  background:
+    radial-gradient(620px 320px at 18% 18%,rgba(201,242,107,.13),transparent 70%),
+    radial-gradient(520px 300px at 82% 0%,rgba(107,196,242,.09),transparent 70%);}
+.hero::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.32;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:64px 64px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 0%,#000 15%,transparent 68%);
+  mask-image:radial-gradient(ellipse at 50% 0%,#000 15%,transparent 68%);}
+.eyebrow{display:inline-flex;align-items:center;gap:.6rem;font-size:.76rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0}
+.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(201,242,107,.12)}
+h1{font-size:clamp(2.3rem,6.2vw,4.7rem);line-height:1.02;letter-spacing:-.045em;margin:1.1rem 0 1.4rem;max-width:20ch;font-weight:680;text-wrap:balance}
+h1 em{font-style:normal;color:var(--accent)}
+.nowrap{white-space:nowrap}
+.lead{max-width:62ch;color:var(--muted);font-size:clamp(1rem,1.6vw,1.18rem);margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:.75rem;margin:2rem 0 3.2rem}
+.btn{display:inline-flex;align-items:center;gap:.5rem;padding:.72rem 1.15rem;border-radius:10px;font-size:.92rem;font-weight:600;transition:transform .2s,background .2s,border-color .2s}
+.btn:hover{transform:translateY(-1px)}
+.btn--primary{background:var(--accent);color:var(--accent-ink)}
+.btn--primary:hover{background:#d7ff7d}
+.btn--ghost{border:1px solid var(--line);color:var(--text)}
+.btn--ghost:hover{border-color:rgba(255,255,255,.25)}
+
+.stats{display:flex;flex-wrap:wrap;gap:2.6rem;border-top:1px solid var(--line);padding:1.5rem 0 0;margin:0}
+.stats dt{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+.stats dd{margin:.2rem 0 0;font-size:1.55rem;font-weight:650;letter-spacing:-.03em}
+
+section{padding:clamp(3.5rem,8vw,5.5rem) 0;border-top:1px solid var(--line);scroll-margin-top:64px}
+.section-head{display:grid;grid-template-columns:auto 1fr;gap:.4rem 1.1rem;align-items:baseline;margin-bottom:2.2rem}
+.num{font:600 .78rem/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent);letter-spacing:.1em}
+h2{font-size:clamp(1.8rem,3.6vw,2.6rem);letter-spacing:-.035em;margin:0;font-weight:660}
+.section-head p{grid-column:2;margin:.35rem 0 0;color:var(--muted);max-width:64ch}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:1rem}
+.card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;transition:transform .25s,border-color .25s,box-shadow .25s}
+.card:hover{transform:translateY(-4px);border-color:rgba(201,242,107,.34);box-shadow:0 20px 44px rgba(0,0,0,.38)}
+.cover{aspect-ratio:16/10;background:var(--surface2);overflow:hidden;position:relative}
+.cover img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s}
+.card:hover .cover img{transform:scale(1.045)}
+.cover--themes,.cover--ocenka,.cover--scene{display:grid;place-items:center;text-align:center;padding:1.2rem}
+.cover--themes{background:radial-gradient(120% 120% at 20% 10%,#24331f,#111611 62%)}
+.cover--ocenka{background:radial-gradient(120% 120% at 80% 10%,#1d2a33,#101517 62%)}
+.cover--scene{background:
+  linear-gradient(135deg,rgba(201,242,107,.10),transparent 55%),
+  repeating-linear-gradient(30deg,rgba(255,255,255,.05) 0 1px,transparent 1px 26px),
+  repeating-linear-gradient(-30deg,rgba(255,255,255,.05) 0 1px,transparent 1px 26px),
+  #101512}
+.cover span{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);max-width:22ch;line-height:1.7}
+.card-body{padding:1.05rem 1.15rem 1.2rem;display:flex;flex-direction:column;gap:.5rem;flex:1}
+.card-top{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+.badge{font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:.22rem .55rem;white-space:nowrap}
+.badge--wip{color:var(--accent);border-color:rgba(201,242,107,.34)}
+.card h3{margin:0;font-size:1.1rem;letter-spacing:-.02em;font-weight:640}
+.card p{margin:0;color:var(--muted);font-size:.91rem;flex:1}
+.tags{display:flex;flex-wrap:wrap;gap:.32rem;list-style:none;padding:0;margin:.15rem 0 0}
+.tags li{font-size:.71rem;color:var(--muted);background:rgba(255,255,255,.04);border-radius:6px;padding:.17rem .45rem}
+
+.order{display:grid;grid-template-columns:1.05fr .95fr;gap:2rem;padding:clamp(1.4rem,4vw,2.6rem);border-radius:calc(var(--radius) + 4px);border:1px solid rgba(201,242,107,.24);
+  background:linear-gradient(135deg,rgba(201,242,107,.075),transparent 58%),var(--surface)}
+.order h3{font-size:clamp(1.5rem,3vw,2.1rem);letter-spacing:-.035em;margin:.2rem 0 .8rem;font-weight:660}
+.order p{color:var(--muted);margin:0 0 1.3rem;max-width:52ch}
+.features{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:.65rem 1.1rem;align-content:start}
+.features li{font-size:.87rem;color:var(--muted);padding-left:1.15rem;position:relative}
+.features li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+.lab-list{display:flex;flex-wrap:wrap;gap:.5rem;list-style:none;padding:0;margin:1.3rem 0 0}
+.lab-list li{border:1px solid var(--line);border-radius:999px;padding:.38rem .8rem;font-size:.84rem;color:var(--muted)}
+.lab-list li b{color:var(--text);font-weight:550}
+.note{margin:1.2rem 0 0;color:var(--muted);font-size:.9rem;max-width:62ch}
+
+.contact{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:2rem}
+.contact h2{max-width:22ch}
+.contact p{color:var(--muted);margin:.8rem 0 0;max-width:48ch}
+
+footer{border-top:1px solid var(--line);padding:1.5rem 0 2.4rem;color:var(--muted);font-size:.84rem}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem}
+footer a:hover{color:var(--text)}
+
+a:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+
+@media (max-width:860px){
+  .order{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  nav{display:none}
+}
+@media (max-width:560px){
+  .features{grid-template-columns:1fr}
+  .stats{gap:1.5rem 2rem}
+  .stats dd{font-size:1.35rem}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/"><i></i>Vesha</a>
+    <nav>
+      <a href="#portfolio">Портфолио</a>
+      <a href="#orders">Заказы</a>
+      <a href="#lab">Эксперименты</a>
+      <a href="#contact">Контакт</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow"><i></i>Node.js · three.js · PixiJS</p>
+      <h1>Интерактивные <span class="nowrap">веб-приложения</span> — от 3D-демо до <em>магазина под ключ</em>.</h1>
+      <p class="lead">
+        Пишу фронтенд и бэкенд: сцены в браузере, API на Node.js, базы и интеграции.
+        Портфолио, эксперименты и индивидуальные заказы — в одном месте.
+      </p>
+      <div class="actions">
+        <a class="btn btn--primary" href="#portfolio">Смотреть портфолио</a>
+        <a class="btn btn--ghost" href="#contact">Обсудить проект</a>
+      </div>
+      <dl class="stats">
+        <div><dt>Демо на GitHub</dt><dd>4</dd></div>
+        <div><dt>Проектов на сервере</dt><dd>3</dd></div>
+        <div><dt>Экспериментов в лаборатории</dt><dd>11</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="portfolio">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="num">01</span>
+        <h2>Портфолио</h2>
+        <p>Проекты, которые можно открыть и потрогать. Часть живёт на GitHub Pages, часть — на этом сервере.</p>
+      </div>
+
+      <div class="grid">
+        <a class="card" href="https://s-afanasiev.github.io/mech-arena-playable/" target="_blank" rel="noopener">
+          <div class="cover"><img src="/assets/mech-arena.jpg" alt="Mech Arena — 3D playable ad в рамке телефона" loading="lazy"></div>
+          <div class="card-body">
+            <div class="card-top"><span class="badge">GitHub Pages</span></div>
+            <h3>Mech Arena</h3>
+            <p>3D playable ad для рекламных сетей: один HTML без ассетов, 60 FPS, бюджет на размер.</p>
+            <ul class="tags"><li>three.js</li><li>WebGL</li><li>MRAID</li></ul>
+          </div>
+        </a>
+
+        <a class="card" href="https://s-afanasiev.github.io/merge-guard-playable/" target="_blank" rel="noopener">
+          <div class="cover"><img src="/assets/merge-guard.jpg" alt="Merge Guard — 2D playable ad" loading="lazy"></div>
+          <div class="card-body">
+            <div class="card-top"><span class="badge">GitHub Pages</span></div>
+            <h3>Merge Guard</h3>
+            <p>2D playable ad: слияние героев, волны врагов и босс. Векторная графика запечена в текстуры.</p>
+            <ul class="tags"><li>PixiJS</li><li>drag &amp; drop</li><li>MRAID</li></ul>
+          </div>
+        </a>
+
+        <a class="card" href="https://s-afanasiev.github.io/bastion-td-playable/" target="_blank" rel="noopener">
+          <div class="cover"><img src="/assets/bastion.jpg" alt="Bastion — tower defense playable ad" loading="lazy"></div>
+          <div class="card-body">
+            <div class="card-top"><span class="badge">GitHub Pages</span></div>
+            <h3>Bastion</h3>
+            <p>Tower defense: башни, апгрейды, три волны и босс. Ядро без рендеринга, тесты в Node.</p>
+            <ul class="tags"><li>PixiJS</li><li>tower defense</li><li>MRAID</li></ul>
+          </div>
+        </a>
+
+        <a class="card" href="https://s-afanasiev.github.io/region-selector-3d/" target="_blank" rel="noopener">
+          <div class="cover"><img src="/assets/region-selector.jpg" alt="Region Selector 3D — план квартиры и 3D-комнаты" loading="lazy"></div>
+          <div class="card-body">
+            <div class="card-top"><span class="badge">GitHub Pages</span></div>
+            <h3>Region Selector 3D</h3>
+            <p>Обводка зон на плане и 360°-панораме: комнаты становятся 3D-стенами, зоны — хотспотами.</p>
+            <ul class="tags"><li>three.js</li><li>geometry</li><li>glTF</li></ul>
+          </div>
+        </a>
+
+        <a class="card" href="/portfolio/showcases/">
+          <div class="cover cover--themes"><span>Пространство · Брутализм · Bento · 3D-дорога</span></div>
+          <div class="card-body">
+            <div class="card-top"><span class="badge">vesha.pro</span></div>
+            <h3>Виды витрин</h3>
+            <p>Дизайн-темы магазинов и UI-паттерны: конверсия, доверие, кабинет. Каждый открывается вживую.</p>
+            <ul class="tags"><li>HTML/CSS</li><li>three.js</li><li>UI-паттерны</li></ul>
+          </div>
+        </a>
+
+        <a class="card" href="/portfolio/ocenka-site/">
+          <div class="cover cover--ocenka"><span>Страхование и оценка · Курск</span></div>
+          <div class="card-body">
+            <div class="card-top"><span class="badge">vesha.pro</span></div>
+            <h3>Сайт оценочной компании</h3>
+            <p>Демо корпоративного сайта: услуги, доверие, заявка. Статика без бэкенда.</p>
+            <ul class="tags"><li>HTML/CSS</li><li>лендинг</li><li>демо</li></ul>
+          </div>
+        </a>
+
+        <a class="card" href="/portfolio/scene-builder/">
+          <div class="cover cover--scene"><span>3D-песочница · плитки · дороги</span></div>
+          <div class="card-body">
+            <div class="card-top"><span class="badge badge--wip">в разработке</span></div>
+            <h3>Конструктор сцены</h3>
+            <p>3D-песочница: строй ландшафт из плиток — дороги с автоповоротами, деревья, скамейки.</p>
+            <ul class="tags"><li>three.js</li><li>WebGL</li><li>песочница</li></ul>
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section id="orders">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="num">02</span>
+        <h2>Индивидуальные заказы</h2>
+        <p>Закрытые проекты под задачу: от витрины до внутреннего инструмента.</p>
+      </div>
+
+      <div class="order">
+        <div>
+          <h3>Магазин под ключ</h3>
+          <p>
+            Витрина, каталог, заявки, канбан-воронка, черновики счетов и ассистент,
+            который разбирает заявку. Отдельный сервер и база, передача по договору.
+          </p>
+          <a class="btn btn--primary" href="#contact">Запросить демо</a>
+        </div>
+        <ul class="features">
+          <li>Витрина и кабинет</li>
+          <li>Заявки и воронка</li>
+          <li>Ассистент на LLM</li>
+          <li>Счета и позиции</li>
+          <li>ПДн и 152-ФЗ</li>
+          <li>Свой сервер</li>
+          <li>Уведомления и почта</li>
+          <li>Передача и поддержка</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="lab">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="num">03</span>
+        <h2>Эксперименты</h2>
+        <p>Лаборатория: недоделанное, спорное и платные API. Публично не открыта.</p>
+      </div>
+      <ul class="lab-list">
+        <li><b>Суммаризация видео</b></li>
+        <li><b>Извлечение аудио</b></li>
+        <li><b>Радар спроса</b></li>
+        <li><b>Радар идей</b></li>
+        <li><b>Суперсправочник</b></li>
+        <li><b>Чат-движок</b></li>
+        <li><b>Подборка одежды</b></li>
+        <li><b>Автоматизация лидов</b></li>
+        <li><b>Playwright MCP</b></li>
+        <li><b>ROC</b></li>
+        <li><b>Заметки и экспорт</b></li>
+      </ul>
+      <p class="note">
+        Доступ — по запросу. Здесь же живут будущие проекты портфолио:
+        сначала эксперимент, потом витрина.
+      </p>
+    </div>
+  </section>
+
+  <section id="contact">
+    <div class="wrap contact">
+      <div>
+        <span class="num">04</span>
+        <h2>Обсудить проект</h2>
+        <p>Расскажите задачу — отвечу, что реально сделать, за сколько и с какими рисками.</p>
+      </div>
+      <div class="actions" style="margin:0">
+        <a class="btn btn--primary" href="https://github.com/s-afanasiev" target="_blank" rel="noopener">Написать на GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Vesha · vesha.pro</span>
+    <span>Node.js · Caddy · <a href="https://github.com/s-afanasiev" target="_blank" rel="noopener">github.com/s-afanasiev</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
