@@ -87,6 +87,8 @@ function main() {
   fs.mkdirSync(OUT, { recursive: true });
   fs.cpSync(SRC, OUT, { recursive: true });
 
+  // Лендинг показывает и wip: карточка помечена «в разработке».
+  // build:profile для showcase будет исключать status=wip из публикации.
   const queue = projects.select(projects.load(), 'showcase').map((p) => p.id);
   const done = new Set();
 
