@@ -1,0 +1,6 @@
+* text=auto
+
+# Скрипты и конфиги, которые выполняются на Linux: всегда LF,
+# иначе CRLF из Windows ломает shebang и Caddyfile.
+*.sh text eol=lf
+Caddyfile text eol=lf

@@ -1,0 +1,79 @@
+# Edge-зона: статика и TLS
+
+Первый из двух серверов режима «Эконом». На нём нет Node и Postgres — только
+Caddy и файлы. Это значит, что зона не может упасть из-за приложения и её можно
+пересоздать из этого каталога за пару минут.
+
+## Что делает
+
+- ставит Caddy из официального репозитория;
+- настраивает `/srv/vesha/www` и заглушку `landing/index.html`;
+- пишет `/etc/caddy/Caddyfile` из шаблона (домен и email подставляются);
+- открывает 22 / 80 / 443 в UFW, включает fail2ban;
+- включает и перезапускает `caddy`.
+
+Чего **не** делает: не трогает `sshd_config`, не меняет пароли, не создаёт
+пользователей. Это осознанно — ошибка в SSH-конфиге запирает снаружи.
+
+## Требования
+
+- Ubuntu 22.04 / 24.04, свежая, доступ по SSH от root или sudo-пользователя.
+- A-запись домена уже указывает на этот сервер (иначе Let's Encrypt не выпустит
+  сертификат; Caddy будет ретраить, но сайт не поднимется).
+- Открыты 80 и 443 на стороне провайдера.
+
+## Первый запуск
+
+Из Git Bash (в Windows — `C:\Program Files\Git\bin\bash.exe`):
+
+```bash
+cd /c/CODE/vesha/deploy/edge
+
+HOST=203.0.113.10 \
+SSH_KEY=/c/CODE/.secrets/vesha-edge.key \
+DOMAIN=xn--80adj0f.xn--p1ai \
+EMAIL=admin@example.com \
+./bootstrap.sh
+```
+
+Проверка:
+
+```bash
+curl -sS https://xn--80adj0f.xn--p1ai/healthz   # ok
+curl -sSI https://xn--80adj0f.xn--p1ai/         # 200 + Strict-Transport-Security
+```
+
+## Публикация статики
+
+```bash
+cd /c/CODE/vesha/deploy/edge
+
+HOST=203.0.113.10 SSH_KEY=/c/CODE/.secrets/vesha-edge.key \
+./publish.sh /c/CODE/vesha/dist/showcase
+```
+
+Публикация атомарна в пределах разумного: каталог пересоздаётся целиком
+(`rm -rf` + распаковка архива). Окно в несколько миллисекунд, когда файлов нет.
+
+Второй аргумент — удалённый каталог, по умолчанию `/srv/vesha/www/landing`:
+
+```bash
+./publish.sh ./dist/lab /srv/vesha/www/projects/lab
+```
+
+## Раскладка на сервере
+
+```
+/srv/vesha/www/
+  landing/            # веша.рф
+  projects/<id>/      # статические showcase-проекты (появятся позже)
+```
+
+## Что дальше
+
+- Когда появится `dist/showcase` из `npm run build:profile -- showcase`,
+  `publish.sh` заменит заглушку настоящей витриной.
+- Динамические проекты на этот сервер не ставятся: у них будет своя зона
+  со своим Caddy и своим субдоменом (см. `docs/portfolio-structure.md`, §8).
+- Если понадобится проксировать приложение через edge — это отдельное решение
+  и отдельный конфиг; сейчас edge намеренно ничего не проксирует.

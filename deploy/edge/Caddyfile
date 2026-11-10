@@ -1,0 +1,33 @@
+{
+	email __EMAIL__
+}
+
+# Заголовки безопасности и сжатие — общие для всех сайтов зоны.
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	encode zstd gzip
+}
+
+__DOMAIN__ {
+	import security
+
+	# Аптайм-чек: отвечает до file_server, не зависит от содержимого.
+	respond /healthz "ok" 200
+
+	root * /srv/vesha/www/landing
+	try_files {path} {path}/ /404.html
+	file_server
+
+	# Хэшированные ассеты кэшируются навсегда, HTML — никогда.
+	@immutable path /assets/* *.js *.css *.woff2 *.png *.svg *.webp
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+	@html path / /index.html /404.html
+	header @html Cache-Control "no-cache"
+}

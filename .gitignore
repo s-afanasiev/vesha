@@ -8,4 +8,9 @@ dist/
 !docs/economic-strength/data/
 .playwright-mcp/
 
+# приватные ключи и локальные секреты деплоя
+.secrets/
+*.key
+*.pem
+
 __pycache__/
