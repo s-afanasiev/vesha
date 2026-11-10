@@ -13,7 +13,7 @@ SSH_USER=${SSH_USER:-root}
 SSH_PORT=${SSH_PORT:-22}
 SSH_KEY=${SSH_KEY:-$HOME/.ssh/vesha-edge}
 DOMAIN=${DOMAIN:-xn--80adj0f.xn--p1ai}
-EMAIL=${EMAIL:-admin@example.com}
+EMAIL=${EMAIL:-}
 
 SSH_OPTS=(-p "$SSH_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
 [ -f "$SSH_KEY" ] && SSH_OPTS+=(-i "$SSH_KEY")

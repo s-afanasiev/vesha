@@ -3,12 +3,13 @@
 # Запускается на сервере от root. Идемпотентен: повторный запуск не ломает
 # уже настроенное и не перезаписывает существующий index.html.
 #
-#   DOMAIN=xn--80adj0f.xn--p1ai EMAIL=admin@example.com bash setup.sh
+#   DOMAIN=xn--80adj0f.xn--p1ai bash setup.sh
+#   DOMAIN=... EMAIL=you@example.ru bash setup.sh   # email — по желанию
 #
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-xn--80adj0f.xn--p1ai}"
-EMAIL="${EMAIL:-admin@example.com}"
+EMAIL="${EMAIL:-}"
 ROOT="${ROOT:-/srv/vesha/www}"
 SSH_PORT="${SSH_PORT:-22}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,8 +64,11 @@ fi
 chmod -R a+rX "$ROOT"
 
 echo "==> Caddyfile"
-sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__EMAIL__|$EMAIL|g" \
-  "$HERE/Caddyfile" > /etc/caddy/Caddyfile
+: > /etc/caddy/Caddyfile
+if [ -n "$EMAIL" ]; then
+  printf '{\n\temail %s\n}\n\n' "$EMAIL" >> /etc/caddy/Caddyfile
+fi
+sed -e "s|__DOMAIN__|$DOMAIN|g" "$HERE/Caddyfile" >> /etc/caddy/Caddyfile
 
 caddy validate --config /etc/caddy/Caddyfile
 systemctl enable caddy

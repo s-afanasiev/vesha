@@ -31,10 +31,17 @@ cd /c/CODE/vesha/deploy/edge
 
 HOST=203.0.113.10 \
 SSH_KEY=/c/CODE/.secrets/vesha-edge.key \
-DOMAIN=xn--80adj0f.xn--p1ai \
-EMAIL=admin@example.com \
+DOMAIN=edge.xn--80adj0f.xn--p1ai \
 ./bootstrap.sh
 ```
+
+`EMAIL` необязателен. Если задать — Caddy будет отправлять туда уведомления
+Let's Encrypt. Домен `example.com` и подобные Let's Encrypt отклоняет с
+`invalidContact`, поэтому по умолчанию email не задаётся вовсе.
+
+Не запускайте на apex-домене, который уже указывает на другой сервер: смена
+A-записи уронит текущий сайт на время выпуска сертификата. Сначала тестовый
+субдомен, потом переключение.
 
 Проверка:
 
