@@ -1,0 +1,20 @@
+{
+  "id": "super-notes",
+  "order": 8,
+  "title": "Суперсправочник",
+  "description": "Заметки, полезные ссылки, иерархические подборки и семантический поиск",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "postgres",
+    "pgvector"
+  ],
+  "static": "public/experiments/super-notes",
+  "routes": [
+    {
+      "mount": "/api/super-notes",
+      "module": "server/routes/superNotes"
+    }
+  ]
+}

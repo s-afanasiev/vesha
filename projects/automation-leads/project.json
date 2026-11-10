@@ -1,0 +1,20 @@
+{
+  "id": "automation-leads",
+  "order": 14,
+  "title": "Кому автоматизировать",
+  "description": "Места ниши → карточка, сайт, отзывы → кому предложить сайт, ассистента или воронку и почему",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "process-tree",
+    "2гис"
+  ],
+  "static": "public/experiments/automation-leads",
+  "routes": [
+    {
+      "mount": "/api/automation-leads",
+      "module": "server/routes/automationLeads"
+    }
+  ],
+  "admin": true
+}

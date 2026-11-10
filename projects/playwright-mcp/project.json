@@ -1,0 +1,20 @@
+{
+  "id": "playwright-mcp",
+  "order": 13,
+  "title": "Playwright MCP: песочница",
+  "description": "Текстовый запрос → видимый браузер через @playwright/mcp; все промежуточные результаты — сырым логом",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "mcp",
+    "playwright"
+  ],
+  "static": "public/experiments/playwright-mcp",
+  "routes": [
+    {
+      "mount": "/api/playwright-mcp",
+      "module": "server/routes/playwright-mcp"
+    }
+  ],
+  "admin": true
+}

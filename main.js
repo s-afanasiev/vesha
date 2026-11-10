@@ -5,22 +5,8 @@ const fs = require('fs');
 const config = require('./server/config');
 const { migrate } = require('./server/db');
 const { identityMiddleware } = require('./server/middleware/identity');
-const authRoutes = require('./server/routes/auth');
-const looksRoutes = require('./server/routes/looks');
-const summarizeRoutes = require('./server/routes/summarize');
-const extractAudioRoutes = require('./server/routes/extractAudio');
-const notesExportRoutes = require('./server/routes/notesExport');
-const llmRoutes = require('./server/routes/llm');
-const ideaRadarRoutes = require('./server/routes/ideaRadar');
-const superNotesRoutes = require('./server/routes/superNotes');
-const chatEngineRoutes = require('./server/routes/chat-engine');
-const painRadarRoutes = require('./server/routes/pain-radar');
-const experimentsRoutes = require('./server/routes/experiments');
-const playwrightMcpRoutes = require('./server/routes/playwright-mcp');
-const automationLeadsRoutes = require('./server/routes/automationLeads');
-const backboneRoutes = require('./server/routes/backbone');
-const backbonePublicRoutes = require('./server/routes/backbonePublic');
 const experimentsService = require('./server/services/experiments');
+const projects = require('./server/projects');
 const { startIdeaRadarSchedule } = require('./server/services/idea-radar/schedule');
 
 const app = express();
@@ -36,21 +22,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use('/api', identityMiddleware);
-app.use('/api/summarize', summarizeRoutes);
-app.use('/api/extract-audio', extractAudioRoutes);
-app.use('/api/notes-export', notesExportRoutes);
-app.use('/api/llm', llmRoutes);
-app.use('/api/idea-radar', ideaRadarRoutes);
-app.use('/api/super-notes', superNotesRoutes);
-app.use('/api/chat-engine', chatEngineRoutes);
-app.use('/api/pain-radar', painRadarRoutes);
-app.use('/api/experiments', experimentsRoutes);
-app.use('/api/playwright-mcp', playwrightMcpRoutes);
-app.use('/api/automation-leads', automationLeadsRoutes);
-app.use('/api/backbone', backboneRoutes);
-app.use('/api/backbone-public', backbonePublicRoutes); // витрина магазина: без границы админа
-app.use('/api/auth', authRoutes);
-app.use('/api/looks', looksRoutes);
+
+// Состав API — из projects/<id>/project.json и профиля, а не списком здесь.
+const active = projects.mount(app, { profile: config.profile });
+console.log(
+  `profile=${active.profile.name} projects=${active.projects.length} mounts=${active.mounts.length}`
+);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -89,9 +66,11 @@ async function start() {
     } catch (histErr) {
       console.warn('summarize_jobs table missing/unavailable:', histErr.message);
     }
-    startIdeaRadarSchedule();
-    await experimentsService.syncRegistry();
-    console.log('experiment_tiles synced');
+    if (active.projects.some((p) => p.id === 'idea-radar')) startIdeaRadarSchedule();
+    if (projects.hasCatalog(config.profile)) {
+      await experimentsService.syncRegistry();
+      console.log('experiment_tiles synced');
+    }
   } catch (err) {
     console.warn('DB migrate skipped/failed:', err.message);
     console.warn('API that needs Postgres will fail until DATABASE_URL is ready.');

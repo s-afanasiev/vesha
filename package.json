@@ -8,6 +8,8 @@
     "dev": "node --watch main.js",
     "test": "node --test",
     "migrate": "node scripts/migrate.js",
+    "catalog:build": "node scripts/build-registry.mjs",
+    "catalog:check": "node scripts/build-registry.mjs --check",
     "build:shop": "node scripts/build-shop.mjs",
     "media-bins": "node scripts/install-media-bins.js"
   },

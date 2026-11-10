@@ -1,0 +1,27 @@
+{
+  "id": "idea-radar",
+  "order": 7,
+  "title": "Радар идей",
+  "description": "Новости, госакты и вакансии региона → сдвиги и идеи",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "rss",
+    "postgres"
+  ],
+  "static": "public/experiments/idea-radar",
+  "routes": [
+    {
+      "mount": "/api/idea-radar",
+      "module": "server/routes/ideaRadar"
+    }
+  ],
+  "parts": [
+    {
+      "key": "ops",
+      "title": "Опрос и разметка",
+      "admin": true
+    }
+  ]
+}

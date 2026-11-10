@@ -1,0 +1,19 @@
+{
+  "id": "extract-audio",
+  "order": 4,
+  "title": "Извлечение аудио",
+  "description": "Достаём звук из видео или переводим MP3 в WAV",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "ffmpeg"
+  ],
+  "static": "public/experiments/extract-audio",
+  "routes": [
+    {
+      "mount": "/api/extract-audio",
+      "module": "server/routes/extractAudio"
+    }
+  ]
+}

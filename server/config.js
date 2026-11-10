@@ -56,6 +56,8 @@ const llmOpenaiEnv = ['LLM_OPENAI_API_KEY', 'LLM_OPENAI_BASE_URL', 'LLM_OPENAI_M
 const config = {
   isProduction: process.env.NODE_ENV === 'production',
   port: intEnv('PORT', 3000),
+  // Профиль монтирования: full | lab | showcase | client:<id> (server/projects.js).
+  profile: envStr('PROFILE') || 'full',
   host: envStr('HOST') || undefined,     // пусто — все адреса; за nginx — 127.0.0.1 (сборка магазина)
   trustProxy: boolEnv('TRUST_PROXY', false),
   dbMode,

@@ -1,0 +1,27 @@
+{
+  "id": "pain-radar",
+  "order": 6,
+  "title": "Радар спроса",
+  "description": "Отзывы с карт → чего не хватает клиентам ниши и чего уже много",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "parsing",
+    "llm"
+  ],
+  "static": "public/experiments/pain-radar",
+  "routes": [
+    {
+      "mount": "/api/pain-radar",
+      "module": "server/routes/pain-radar"
+    }
+  ],
+  "parts": [
+    {
+      "key": "scrape",
+      "title": "Пульт сбора 2ГИС",
+      "admin": true
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "scene-builder",
+  "order": 12,
+  "title": "Конструктор сцены",
+  "description": "3D-песочница: строй ландшафт из плиток — дороги с авто-поворотами, деревья, скамейки, магазинчик",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "three",
+    "webgl"
+  ],
+  "static": "public/experiments/scene-builder",
+  "routes": []
+}

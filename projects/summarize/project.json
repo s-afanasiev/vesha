@@ -1,0 +1,20 @@
+{
+  "id": "summarize",
+  "order": 3,
+  "title": "Суммаризация видео или аудио",
+  "description": "Краткое содержание из ролика или записи",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "yt-dlp",
+    "ffmpeg"
+  ],
+  "static": "public/experiments/summarize",
+  "routes": [
+    {
+      "mount": "/api/summarize",
+      "module": "server/routes/summarize"
+    }
+  ]
+}

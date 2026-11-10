@@ -1,0 +1,25 @@
+{
+  "id": "backbone",
+  "order": 15,
+  "title": "Костяк: доска заявок и черновики счетов",
+  "description": "Заявка → колонки со смысловыми типами → журнал событий; разбор заявки в черновик счёта с уверенностью по строке, правка менеджера рождает синоним",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "kanban@1",
+    "table@1",
+    "журнал"
+  ],
+  "static": "public/experiments/backbone",
+  "routes": [
+    {
+      "mount": "/api/backbone",
+      "module": "server/routes/backbone"
+    },
+    {
+      "mount": "/api/backbone-public",
+      "module": "server/routes/backbonePublic"
+    }
+  ],
+  "admin": true
+}

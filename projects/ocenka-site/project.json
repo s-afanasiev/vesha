@@ -1,0 +1,14 @@
+{
+  "id": "ocenka-site",
+  "order": 11,
+  "title": "Сайт оценочной компании",
+  "description": "Демо: как мог бы выглядеть сайт «Страхование и оценка» (Курск)",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "html",
+    "css"
+  ],
+  "static": "public/experiments/ocenka-site",
+  "routes": []
+}

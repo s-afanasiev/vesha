@@ -1,0 +1,20 @@
+{
+  "id": "podborka",
+  "order": 2,
+  "title": "Подборка одежды",
+  "description": "Загрузи фото вещи — найдём где купить (WB, Ozon, Яндекс)",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "vision",
+    "postgres"
+  ],
+  "static": "public/experiments/podborka",
+  "routes": [
+    {
+      "mount": "/api/looks",
+      "module": "server/routes/looks"
+    }
+  ]
+}

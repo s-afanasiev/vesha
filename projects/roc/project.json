@@ -1,0 +1,13 @@
+{
+  "id": "roc",
+  "order": 1,
+  "title": "ROC",
+  "description": "Canvas / matrix experiment",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "canvas"
+  ],
+  "static": "public/experiments/roc",
+  "routes": []
+}

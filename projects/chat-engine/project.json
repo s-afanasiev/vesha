@@ -1,0 +1,20 @@
+{
+  "id": "chat-engine",
+  "order": 9,
+  "title": "Чат-движок",
+  "description": "Виджет на сайте → диалог → LLM предлагает ответ, менеджер согласовывает",
+  "kind": "experiment",
+  "status": "wip",
+  "tech": [
+    "js",
+    "postgres",
+    "llm"
+  ],
+  "static": "public/experiments/chat-engine",
+  "routes": [
+    {
+      "mount": "/api/chat-engine",
+      "module": "server/routes/chat-engine"
+    }
+  ]
+}

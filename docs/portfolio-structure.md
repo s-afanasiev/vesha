@@ -148,64 +148,60 @@ projects/
 ```json
 {
   "id": "summarize",
+  "order": 3,
+  "title": "Суммаризация видео или аудио",
+  "description": "Краткое содержание из ролика или записи",
   "kind": "experiment",
-  "title": "Суммаризация видео",
-  "description": "Ссылка → расшифровка → конспект",
   "status": "wip",
-
-  "web": "public/experiments/summarize",
-  "routes": "server/routes/summarize.js",
-  "apiPrefix": "/api/summarize",
-  "service": "server/services/summarizeQueue.js",
-
-  "migrations": ["009_summarize.sql"],
-  "bins": ["yt-dlp", "ffmpeg"],
   "tech": ["js", "yt-dlp", "ffmpeg"],
 
-  "guestMode": false,
-  "quota": null,
-
-  "promotedAt": null,
-  "lastVerified": "2026-11-01"
+  "static": "public/experiments/summarize",
+  "routes": [
+    { "mount": "/api/summarize", "module": "server/routes/summarize" }
+  ]
 }
 ```
+
+`routes` — массив, потому что у одного проекта бывает несколько API: у `backbone`
+это `/api/backbone` и `/api/backbone-public`.
 
 ### 4.3 Поля
 
 | Поле | Обязательно | Смысл |
 |---|---|---|
-| `id` | да | стабильный идентификатор, никогда не переиспользуется |
+| `id` | да | стабильный идентификатор, совпадает с папкой |
+| `order` | да | порядок в каталоге и профилях |
+| `title`, `description`, `status`, `tech` | да | карточка каталога |
 | `kind` | да | `experiment` / `showcase` / `client` |
-| `status` | да | `wip` / `demo` / `live` / `archived` |
-| `web` | да | каталог статики |
-| `routes` | нет | Express-роутер |
-| `apiPrefix` | нет | куда монтировать роутер |
-| `service` | нет | фоновый сервис, `start()` при загрузке |
-| `migrations` | нет | список SQL-файлов |
-| `bins` | нет | внешние бинарники |
-| `guestMode` | нет | работает ли без входа |
-| `quota` | нет | имя квоты для платных вызовов |
-| `promotedAt` | нет | дата попадания на витрину |
-| `lastVerified` | нет | когда последний раз проверяли |
+| `static` | да | каталог статики |
+| `routes` | нет | массив `{ mount, module }` |
+| `client` | для `kind: client` | id заказчика для `PROFILE=client:<id>` |
+| `admin` | нет | плитка принудительно только для админа |
+| `parts` | нет | части плитки (пульты, админские вкладки) |
+| `service` | нет | пока не используется: фоновые сервисы включаются в `main.js` по `id` |
 
 ### 4.4 Пример витрины
 
 ```json
 {
   "id": "backbone",
+  "order": 15,
+  "title": "Костяк: доска заявок и черновики счетов",
+  "description": "Заявка → колонки со смысловыми типами → журнал событий",
   "kind": "showcase",
-  "title": "Магазин под ключ",
-  "description": "Каталог, канбан-воронка, заявки, ассистент",
   "status": "demo",
-  "web": "public/experiments/backbone",
-  "routes": "server/routes/backbonePublic.js",
-  "apiPrefix": "/api/backbone-public",
-  "guestMode": true,
-  "quota": "llm-guest",
-  "promotedAt": "2026-11-08",
-  "lastVerified": "2026-11-08"
+  "tech": ["kanban@1", "table@1", "журнал"],
+  "static": "public/experiments/backbone",
+  "routes": [
+    { "mount": "/api/backbone", "module": "server/routes/backbone" },
+    { "mount": "/api/backbone-public", "module": "server/routes/backbonePublic" }
+  ],
+  "admin": true
 }
 ```
+
+Чтобы перевести проект на витрину, достаточно поменять `kind` на `showcase` и
+пересобрать профиль — код и папки не переезжают.
 
 ### 4.5 Реестр
 
@@ -238,59 +234,44 @@ app.use('/api/notes-export', notesExportRoutes);
 ### 5.2 Решение
 
 ```js
-// server/projects.js
-const fs = require('node:fs');
-const path = require('node:path');
+// server/projects.js — фактическая реализация
+const PROFILES = {
+  full: { kinds: ['experiment', 'showcase', 'client'], platform: ['auth', 'llm', 'catalog'] },
+  lab: { kinds: ['experiment'], platform: ['auth', 'llm', 'catalog'] },
+  showcase: { kinds: ['showcase'], platform: ['auth', 'llm'] },
+};
 
-const DIR = path.join(__dirname, '..', 'projects');
-
-function load() {
-  return fs.readdirSync(DIR)
-    .map((name) => path.join(DIR, name, 'project.json'))
-    .filter((file) => fs.existsSync(file))
-    .map((file) => JSON.parse(fs.readFileSync(file, 'utf8')));
+function select(projects, profile) {
+  const p = parseProfile(profile);           // 'client:<id>' → kinds ['client'] + client
+  return projects
+    .filter((project) => p.kinds.includes(project.kind))
+    .filter((project) => p.name !== 'client' || project.client === p.client)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 }
 
-function forProfile(profile) {
-  return load().filter((p) => {
-    if (p.status === 'archived' && profile !== 'full') return false;
-    if (profile === 'full') return true;
-    if (profile === 'lab') return p.kind === 'experiment';
-    if (profile === 'showcase') return p.kind === 'showcase';
-    if (profile.startsWith('client:')) return p.id === profile.slice(7);
-    return false;
-  });
-}
-
-function mount(app, profile) {
-  for (const p of forProfile(profile)) {
-    if (p.routes) {
-      app.use(p.apiPrefix || `/api/${p.id}`, require(path.join('..', p.routes)));
+function mount(app, { profile = 'full', projects = load() } = {}) {
+  const parsed = parseProfile(profile);
+  for (const key of parsed.platform) {
+    app.use(PLATFORM[key].mount, require(path.join(ROOT, PLATFORM[key].module)));
+  }
+  for (const project of select(projects, profile)) {
+    for (const route of project.routes) {
+      app.use(route.mount, require(path.join(ROOT, route.module)));
     }
   }
 }
-
-function startServices(profile) {
-  for (const p of forProfile(profile)) {
-    if (!p.service) continue;
-    const svc = require(path.join('..', p.service));
-    if (typeof svc.start === 'function') svc.start();
-  }
-}
-
-module.exports = { load, forProfile, mount, startServices };
 ```
 
 `main.js`:
 
 ```js
-const profile = process.env.PROFILE || 'full';
 const projects = require('./server/projects');
 
-projects.mount(app, profile);
-// ... статика, обработчик ошибок
-projects.startServices(profile);
+app.use('/api', identityMiddleware);
+const active = projects.mount(app, { profile: config.profile });
 ```
+
+Платформенные маршруты (`auth`, `llm`, `catalog`) перечислены в `PLATFORM` и не принадлежат проектам. Профиль решает, какие из них монтировать.
 
 ### 5.3 Совместимость
 
@@ -299,13 +280,15 @@ projects.startServices(profile);
 ```js
 // test/projects.test.js
 test('full монтирует те же роуты, что и до рефакторинга', () => {
-  const expected = ['/api/summarize', '/api/extract-audio', /* ... */];
-  const actual = projects.forProfile('full').map((p) => p.apiPrefix);
-  assert.deepEqual(new Set(actual), new Set(expected));
+  const expected = ['/api/summarize /server/routes/summarize', /* ... 15 пар */];
+  const active = projects.mount(express(), { profile: 'full' });
+  assert.deepEqual(active.mounts.map((m) => `${m.mount} ${m.module}`).sort(), expected);
 });
 ```
 
 Рефакторинг без изменения поведения — обязательное условие. Иначе потом не отличить «сломал профиль» от «сломал проект».
+
+Статика на этом шаге **не фильтруется**: `PROFILE=showcase node main.js` всё ещё отдаёт `public/experiments/*`. Это закрывается в неделе 2 сборкой `dist/showcase` (§6), а не рантаймом.
 
 ---
 
@@ -675,13 +658,15 @@ npm run demote -- summarize
 
 Цель: внедрить манифесты, не меняя поведения.
 
-1. `projects/<id>/project.json` для всех 22 экспериментов.
-2. `server/projects.js` + `mount(app, profile)`.
-3. `main.js` = `PROFILE=full`.
-4. Тест: `full` монтирует ровно те же роуты, что и раньше.
-5. `catalog:build` собирает `public/experiments/registry.json` из манифестов (обратная совместимость).
+1. `projects/<id>/project.json` для всех записей каталога — **15**, а не 22: папки `ui-*` и `ocenka-site-v2` — подстраницы `showcases` и `ocenka-site`, отдельных записей у них нет.
+2. `server/projects.js` + `mount(app, { profile })`.
+3. `main.js` = `PROFILE=full` (по умолчанию).
+4. Тест: `full` монтирует ровно те же 15 API, что и раньше.
+5. `npm run catalog:build` собирает `public/experiments/registry.json` из манифестов; `catalog:check` ловит расхождение.
 
-Критерий готовности: `npm test` зелёный, поведение не изменилось.
+Сделано: манифесты, `server/projects.js`, `scripts/build-registry.mjs`, `test/projects.test.js`; `main.js` больше не содержит `app.use('/api/...')`.
+
+Критерий готовности: `npm test` зелёный (единственный красный — `superNotes` без локального Postgres), поведение не изменилось.
 
 ### Неделя 2 — showcase-профиль
 
