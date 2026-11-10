@@ -3,8 +3,8 @@
   "order": 10,
   "title": "Виды витрин",
   "description": "Дизайн-темы витрин (Пространство, Брутализм, Bento+стекло, 3D-дорога) и UI-паттерны (Конверсия, Доверие, Кабинет)",
-  "kind": "experiment",
-  "status": "wip",
+  "kind": "showcase",
+  "status": "demo",
   "tech": [
     "html",
     "css",

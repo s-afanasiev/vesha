@@ -36,9 +36,9 @@
 | `chat-engine` | experiment | ✅ | `/api/chat-engine` | 012 | LLM | wip | A | lab |
 | `automation-leads` | experiment | ✅ | `/api/automation-leads` | 021 | парсеры, LLM | wip, admin | A | lab |
 | `playwright-mcp` | experiment | ✅ | `/api/playwright-mcp` | — | Playwright, браузер | wip, admin | B | lab (отдельно) |
-| `scene-builder` | experiment | ✅ | — | — | three.js | wip | S | edge/lab |
-| `showcases` | experiment → ? | ✅ | — | — | — | wip | S | edge |
-| `ocenka-site` | experiment → ? | ✅ | — | — | — | wip/demo | S | edge |
+| `scene-builder` | showcase | ✅ | — | — | three.js | wip | S | edge |
+| `showcases` | showcase | ✅ | — | — | — | demo | S | edge |
+| `ocenka-site` | showcase | ✅ | — | — | — | demo | S | edge |
 | `backbone` | **client** | ✅ | `/api/backbone`, `/api/backbone-public` | 018–020, 022–031 | LLM, bcrypt, pdf-parse | demo | C | VDS заказчика |
 
 Читается так:
@@ -59,9 +59,14 @@
 радаров, поэтому стоит в обеих строках. `008` добавляет `excludes` в ниши и
 нужна только `idea-radar`.
 
-Статус таблицы: **проект решения**. В манифестах `projects/*/project.json` пока
-у всех `kind: experiment`; после утверждения переносим решения туда одним
-коммитом (§8, шаг 2).
+Решения перенесены в манифесты (`projects/*/project.json`):
+
+- `backbone` → `kind: client`, `client: backbone`;
+- `showcases`, `ocenka-site` → `kind: showcase`, `status: demo`;
+- `scene-builder` → `kind: showcase`, `status: wip` (доводим).
+
+`npm run catalog:build` после этого оставил в каталоге экспериментов 11 записей:
+витринные и заказной проекты из него ушли.
 
 ### Внешнее портфолио (`s-afanasiev.github.io`)
 
@@ -314,11 +319,10 @@ Docker **не обязателен**. Это инструмент, а не ар�
 
 ## 8. Что делать по шагам
 
-1. **Утвердить таблицу §1.** Спорные — `showcases` и `ocenka-site`: это
-   эксперименты или уже витрина? `scene-builder` — после доработки витрина?
-2. **Перенести решения в манифесты:** `kind` в `projects/<id>/project.json`,
-   затем `npm run catalog:build`. `backbone` → `client`, пять недоделанных →
-   `experiment`.
+1. ~~Утвердить таблицу §1.~~ Сделано: `backbone` → client, `showcases` и
+   `ocenka-site` → showcase, `scene-builder` → showcase (доводим).
+2. ~~Перенести решения в манифесты.~~ Сделано: `kind` в
+   `projects/<id>/project.json`, `npm run catalog:build`, каталог — 11 записей.
 3. **Edge:** лендинг с тремя разделами и ссылками на GitHub-демо. Пока это
    единственное, что видит публика.
 4. **Lab:** вторая машина, `PROFILE=lab`, `vesha_lab`, basic auth, `noindex`.
@@ -328,11 +332,8 @@ Docker **не обязателен**. Это инструмент, а не ар�
 
 ---
 
-## 9. Открытые вопросы
+## 9. Открытый вопрос
 
-1. `showcases` — это витрина («смотрите, какие бывают магазины») или склад
-   дизайн-экспериментов?
-2. `ocenka-site` — демо для портфолио или заготовка заказчику?
-3. `scene-builder` — доводим до витрины или оставляем песочницей?
-4. Сколько реальных проектов с бэкендом ожидается в портфолио в ближайшие
-   полгода? От этого зависит, нужна ли отдельная машина `showcase` вообще.
+Сколько реальных проектов с бэкендом ожидается в портфолио в ближайшие полгода?
+От этого зависит, нужна ли отдельная машина `showcase` вообще: три статических
+демо (`showcases`, `ocenka-site`, `scene-builder`) спокойно живут на `edge`.

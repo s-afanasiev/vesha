@@ -87,11 +87,24 @@ test('проекты: full монтирует ровно те же 15 API, чт�
   assert.equal(stack.length, 15, 'каждый mount — слой Express');
 });
 
-test('проекты: showcase не монтирует ни одного эксперимента, только платформу', () => {
-  const app = express();
-  const active = projects.mount(app, { profile: 'showcase' });
-  assert.deepEqual(active.projects, []);
-  assert.deepEqual(active.mounts.map((m) => m.mount), ['/api/auth', '/api/llm']);
+test('проекты: showcase — только витрина, lab — только эксперименты, client:<id> — заказ', () => {
+  const show = projects.mount(express(), { profile: 'showcase' });
+  assert.deepEqual(show.projects.map((p) => p.id), ['showcases', 'ocenka-site', 'scene-builder']);
+  assert.ok(show.projects.every((p) => p.kind === 'showcase'));
+  assert.deepEqual(show.mounts.map((m) => m.mount), ['/api/auth', '/api/llm']);
+
+  const lab = projects.mount(express(), { profile: 'lab' });
+  assert.ok(lab.projects.every((p) => p.kind === 'experiment'));
+  for (const id of ['backbone', 'showcases', 'ocenka-site', 'scene-builder']) {
+    assert.ok(!lab.projects.some((p) => p.id === id), `${id} не в lab`);
+  }
+
+  const client = projects.mount(express(), { profile: 'client:backbone' });
+  assert.deepEqual(client.projects.map((p) => p.id), ['backbone']);
+  assert.deepEqual(client.mounts.map((m) => m.mount), [
+    '/api/auth', '/api/llm', '/api/backbone', '/api/backbone-public',
+  ]);
+
   assert.equal(projects.hasCatalog('showcase'), false);
   assert.equal(projects.hasCatalog('lab'), true);
   assert.equal(projects.hasCatalog('full'), true);

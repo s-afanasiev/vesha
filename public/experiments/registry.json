@@ -120,48 +120,6 @@
       ]
     },
     {
-      "id": "showcases",
-      "title": "Виды витрин",
-      "description": "Дизайн-темы витрин (Пространство, Брутализм, Bento+стекло, 3D-дорога) и UI-паттерны (Конверсия, Доверие, Кабинет)",
-      "href": "/experiments/showcases/",
-      "status": "wip",
-      "tech": [
-        "html",
-        "css",
-        "three"
-      ],
-      "parts": [
-        {
-          "key": "patterns",
-          "title": "Паттерны",
-          "admin": true
-        }
-      ]
-    },
-    {
-      "id": "ocenka-site",
-      "title": "Сайт оценочной компании",
-      "description": "Демо: как мог бы выглядеть сайт «Страхование и оценка» (Курск)",
-      "href": "/experiments/ocenka-site/",
-      "status": "wip",
-      "tech": [
-        "html",
-        "css"
-      ]
-    },
-    {
-      "id": "scene-builder",
-      "title": "Конструктор сцены",
-      "description": "3D-песочница: строй ландшафт из плиток — дороги с авто-поворотами, деревья, скамейки, магазинчик",
-      "href": "/experiments/scene-builder/",
-      "status": "wip",
-      "tech": [
-        "js",
-        "three",
-        "webgl"
-      ]
-    },
-    {
       "id": "playwright-mcp",
       "title": "Playwright MCP: песочница",
       "description": "Текстовый запрос → видимый браузер через @playwright/mcp; все промежуточные результаты — сырым логом",
@@ -182,19 +140,6 @@
       "tech": [
         "process-tree",
         "2гис"
-      ],
-      "admin": true
-    },
-    {
-      "id": "backbone",
-      "title": "Костяк: доска заявок и черновики счетов",
-      "description": "Заявка → колонки со смысловыми типами → журнал событий; разбор заявки в черновик счёта с уверенностью по строке, правка менеджера рождает синоним",
-      "href": "/experiments/backbone/",
-      "status": "wip",
-      "tech": [
-        "kanban@1",
-        "table@1",
-        "журнал"
       ],
       "admin": true
     }

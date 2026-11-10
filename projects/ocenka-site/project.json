@@ -3,8 +3,8 @@
   "order": 11,
   "title": "Сайт оценочной компании",
   "description": "Демо: как мог бы выглядеть сайт «Страхование и оценка» (Курск)",
-  "kind": "experiment",
-  "status": "wip",
+  "kind": "showcase",
+  "status": "demo",
   "tech": [
     "html",
     "css"
