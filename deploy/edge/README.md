@@ -9,6 +9,7 @@ Caddy и файлы. Это значит, что зона не может упа
 - ставит Caddy из официального репозитория;
 - настраивает `/srv/vesha/www` и заглушку `landing/index.html`;
 - пишет `/etc/caddy/Caddyfile` из шаблона (домен и email подставляются);
+- для домена второго уровня добавляет `www` → apex (301);
 - открывает 22 / 80 / 443 в UFW, включает fail2ban;
 - включает и перезапускает `caddy`.
 
@@ -31,7 +32,7 @@ cd /c/CODE/vesha/deploy/edge
 
 HOST=203.0.113.10 \
 SSH_KEY=/c/CODE/.secrets/vesha-edge.key \
-DOMAIN=edge.xn--80adj0f.xn--p1ai \
+DOMAIN=vesha.pro \
 ./bootstrap.sh
 ```
 
@@ -46,8 +47,9 @@ A-записи уронит текущий сайт на время выпуск
 Проверка:
 
 ```bash
-curl -sS https://xn--80adj0f.xn--p1ai/healthz   # ok
-curl -sSI https://xn--80adj0f.xn--p1ai/         # 200 + Strict-Transport-Security
+curl -sS https://vesha.pro/healthz   # ok
+curl -sSI https://vesha.pro/         # 200 + Strict-Transport-Security
+curl -sSI https://www.vesha.pro/     # 301 → https://vesha.pro/
 ```
 
 ## Публикация статики
@@ -72,9 +74,21 @@ HOST=203.0.113.10 SSH_KEY=/c/CODE/.secrets/vesha-edge.key \
 
 ```
 /srv/vesha/www/
-  landing/            # веша.рф
+  landing/            # vesha.pro
   projects/<id>/      # статические showcase-проекты (появятся позже)
 ```
+
+## Текущий сервер
+
+| | |
+|---|---|
+| IP | `194.5.79.153` |
+| Домен | `vesha.pro`, `www.vesha.pro` → 301 |
+| Пользователь | `root`, ключ `~/.ssh/id_ed25519` |
+| Состояние | Caddy + заглушка, HTTPS от Let's Encrypt |
+
+На машине уже жил `/opt/insight-telegram-bot` (пользователь `bot`) — его не
+трогаем, порты 80/443 ему не нужны.
 
 ## Что дальше
 

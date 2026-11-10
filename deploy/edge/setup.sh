@@ -3,12 +3,12 @@
 # Запускается на сервере от root. Идемпотентен: повторный запуск не ломает
 # уже настроенное и не перезаписывает существующий index.html.
 #
-#   DOMAIN=xn--80adj0f.xn--p1ai bash setup.sh
+#   DOMAIN=vesha.pro bash setup.sh
 #   DOMAIN=... EMAIL=you@example.ru bash setup.sh   # email — по желанию
 #
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-xn--80adj0f.xn--p1ai}"
+DOMAIN="${DOMAIN:-vesha.pro}"
 EMAIL="${EMAIL:-}"
 ROOT="${ROOT:-/srv/vesha/www}"
 SSH_PORT="${SSH_PORT:-22}"
@@ -69,6 +69,12 @@ if [ -n "$EMAIL" ]; then
   printf '{\n\temail %s\n}\n\n' "$EMAIL" >> /etc/caddy/Caddyfile
 fi
 sed -e "s|__DOMAIN__|$DOMAIN|g" "$HERE/Caddyfile" >> /etc/caddy/Caddyfile
+
+# www → apex, только для домена второго уровня: www.edge.example.com не нужен.
+if [ "$(printf '%s' "$DOMAIN" | awk -F. '{print NF}')" -eq 2 ]; then
+  printf '\nwww.%s {\n\tredir https://%s{uri} 301\n}\n' "$DOMAIN" "$DOMAIN" \
+    >> /etc/caddy/Caddyfile
+fi
 
 caddy validate --config /etc/caddy/Caddyfile
 systemctl enable caddy
