@@ -25,14 +25,19 @@ __DOMAIN__ {
 
 	# Своя 404-страница; статус ответа сохраняется.
 	handle_errors {
+		header Cache-Control "no-cache"
 		rewrite * /404.html
 		file_server
 	}
 
-	# Хэшированные ассеты кэшируются навсегда, HTML — никогда.
-	@immutable path /assets/* *.js *.css *.woff2 *.png *.svg *.webp
-	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	# Картинки и шрифты — надолго; JS/CSS — с ревалидацией, чтобы правки
+	# витрин не залипали в кэше; HTML — никогда.
+	@assets path /assets/* *.woff2 *.png *.svg *.webp *.jpg *.jpeg *.gif *.ico
+	header @assets Cache-Control "public, max-age=2592000"
 
-	@html path / /index.html /404.html
+	@code path *.js *.css
+	header @code Cache-Control "public, max-age=3600"
+
+	@html path / *.html */
 	header @html Cache-Control "no-cache"
 }
